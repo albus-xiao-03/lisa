@@ -60,3 +60,10 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Lisa
+#
+# Temporary files created by Claude while working (CONSTRICTION.md, "Temporary Files").
+.tmp/
+# Local SwiftPM/Xcode package state (e.g. .swiftpm/xcode/ created when Xcode opens Package.swift).
+.swiftpm/
