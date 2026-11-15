@@ -10,6 +10,9 @@ private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 public final class SQLiteDatabase: @unchecked Sendable {
     private let handle: OpaquePointer
     private let lock = NSLock()
+    /// Guards `owner`, the thread currently inside `perform`.
+    private let ownerLock = NSLock()
+    private var owner: ObjectIdentifier?
     public let path: String
 
     /// Opens (and with `create`, creates) the database at `path`.
@@ -37,11 +40,23 @@ public final class SQLiteDatabase: @unchecked Sendable {
     /// The SQLite library version, such as `3.46.1`.
     public static var libraryVersion: String { String(cString: sqlite3_libversion()) }
 
-    /// Runs `body` with exclusive use of the connection.
+    /// Runs `body` with exclusive use of the connection. Using the connection again from inside `body` on the same
+    /// thread is a programming error: it fails immediately instead of deadlocking.
     @discardableResult
     public func perform<T>(_ body: (SQLiteSession) throws -> T) throws -> T {
+        let current = ObjectIdentifier(Thread.current)
+        let reentrant = ownerLock.withLock { owner == current }
+        guard !reentrant else {
+            throw SQLiteError(
+                code: SQLITE_MISUSE, extendedCode: SQLITE_MISUSE,
+                message: "the database was used again from inside one of its own transactions")
+        }
         lock.lock()
-        defer { lock.unlock() }
+        ownerLock.withLock { owner = current }
+        defer {
+            ownerLock.withLock { owner = nil }
+            lock.unlock()
+        }
         return try body(SQLiteSession(handle: handle))
     }
 
