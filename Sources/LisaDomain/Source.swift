@@ -107,10 +107,11 @@ public struct Source: Entity {
         return now.timeIntervalSince(lastSuccessAt) > TimeInterval(staleAfterSeconds) ? .stale : .fresh
     }
 
-    /// Whether the most recent attempt failed after the last success.
+    /// Whether the most recent attempt failed. A success clears the recorded failure, so a failure at or after the
+    /// last success (even within the same millisecond) is current.
     public var isFailing: Bool {
         guard let lastFailure else { return false }
         guard let lastSuccessAt else { return true }
-        return lastFailure.occurredAt > lastSuccessAt
+        return lastFailure.occurredAt >= lastSuccessAt
     }
 }
