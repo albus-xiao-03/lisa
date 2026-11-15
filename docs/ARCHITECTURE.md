@@ -9,7 +9,7 @@
 |---|---|---|
 | Domain | `LisaRedaction`, `LisaTime`, `LisaDomain` | Implemented (Phase 1) |
 | Secrets and logging | `LisaSecrets`, `LisaLogging` | Implemented (Phase 1) |
-| Format and decision engines | `LisaICalendar`, `LisaMIME`, `LisaXML`, `LisaFeeds`, `LisaHTMLText`, `LisaPlanning`, `LisaPolicy`, `LisaMatching`, `LisaRanking`, `LisaBriefComposer`, `LisaInference` | Phase 2 |
+| Format and decision engines | `LisaICalendar`, `LisaMIME`, `LisaXML`, `LisaFeeds`, `LisaHTMLText`, `LisaPlanning`, `LisaPolicy`, `LisaMatching`, `LisaRanking`, `LisaBriefComposer`, `LisaInference` | Implemented (Phase 2) |
 | Persistence | `LisaPorts`, `CSQLite`, `LisaSQLite`, `LisaStore` | Phase 3 |
 | Application services | `LisaIngestion`, `LisaReview`, `LisaDelivery`, `LisaAgenda`, `LisaDevices`, `LisaOwnerData`, `LisaApplication`, `LisaCrypto` | Phase 4 |
 | Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaDemo`, `LisaFixtures`, `lisa` | Phase 5 |
@@ -30,4 +30,5 @@ Planning and briefing use one IANA zone from the owner settings. `ZoneRules` con
 
 - **Secrets:** resolved only through `SecretStore`. Configuration and the database hold references, never values (D-08).
 - **Logs:** carry only classified metadata (D-09).
+- **Untrusted content:** XML and HTML are read by libxml2 with network access and external entities disabled and entity declarations refused (D-12); HTML becomes text with active content removed and links never fetched (D-14). Model prompts wrap source text as untrusted data, and every model result is validated before use (D-19).
 - **Model suggestions:** the domain treats a model suggestion as the `model` principal. That principal, like any paired device, can never change consequential settings: recipients, call and email enablement, model routing, or the Time Sensitive opt-in.
