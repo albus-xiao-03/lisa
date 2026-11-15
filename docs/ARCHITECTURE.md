@@ -10,7 +10,7 @@
 | Domain | `LisaRedaction`, `LisaTime`, `LisaDomain` | Implemented (Phase 1) |
 | Secrets and logging | `LisaSecrets`, `LisaLogging` | Implemented (Phase 1) |
 | Format and decision engines | `LisaICalendar`, `LisaMIME`, `LisaXML`, `LisaFeeds`, `LisaHTMLText`, `LisaPlanning`, `LisaPolicy`, `LisaMatching`, `LisaRanking`, `LisaBriefComposer`, `LisaInference` | Implemented (Phase 2) |
-| Persistence | `LisaPorts`, `CSQLite`, `LisaSQLite`, `LisaStore` | Phase 3 |
+| Persistence | `LisaPorts`, `CSQLite`, `LisaSQLite`, `LisaStore` | Implemented (Phase 3) |
 | Application services | `LisaIngestion`, `LisaReview`, `LisaDelivery`, `LisaAgenda`, `LisaDevices`, `LisaOwnerData`, `LisaApplication`, `LisaCrypto` | Phase 4 |
 | Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaDemo`, `LisaFixtures`, `lisa` | Phase 5 |
 | Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Phase 6 |
@@ -25,6 +25,10 @@ All instants are stored as whole milliseconds since 1970 in UTC (D-02). Source t
 - **Deadlines** are either an instant (with its source zone) or a local date (D-05).
 
 Planning and briefing use one IANA zone from the owner settings. `ZoneRules` converts with explicit gap and overlap handling (D-03).
+
+## Persistence
+
+Services depend only on `RecordStore` (in `LisaPorts`); `LisaStore` implements it on SQLite (D-22, D-23). Raw content is stored separately (D-24).
 
 ## Trust boundaries (so far)
 
