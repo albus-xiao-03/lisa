@@ -73,3 +73,115 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 
 - **Decision:** macOS 15 and iOS/iPadOS 18, which provide Observation, Synchronization (`Mutex`) and mature App Intents. Language mode is Swift 6, and the toolchain is pinned to 6.4.2 (`.swift-version`).
 - **Requirements:** ARCH-01, APPLE-01.
+
+## D-11 — Supported iCalendar subset (CAL-01 documented subset)
+
+- **Components:** `VCALENDAR`, `VEVENT` and `VTIMEZONE` (with `STANDARD`/`DAYLIGHT` observances). `VTODO`, `VJOURNAL`, `VFREEBUSY` and `VALARM` are ignored.
+- **Properties:** `UID`, `DTSTART`, `DTEND`, `DURATION`, `SUMMARY`, `LOCATION`, `DESCRIPTION`, `STATUS` (`CANCELLED`, `TENTATIVE`, otherwise confirmed), `TRANSP` (`TRANSPARENT` makes the time free), `SEQUENCE`, `LAST-MODIFIED`, `RRULE`, `RDATE` (DATE or DATE-TIME values), `EXDATE`, `RECURRENCE-ID` (overrides and cancelled instances) and `X-WR-CALNAME`.
+- **Time semantics:**
+  - UTC (`Z`), IANA `TZID`s, and embedded `VTIMEZONE` definitions, including Windows-style names such as "Eastern Standard Time", evaluated from their own rules.
+  - Floating times are interpreted in the zone configured for the subscription.
+  - All-day values use `VALUE=DATE`.
+  - Day-based durations keep the local time across daylight-saving changes.
+- **RRULE:**
+  - `FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, with `INTERVAL`, `COUNT` and `UNTIL`.
+  - `BYDAY`, with ordinals for `MONTHLY`/`YEARLY` (relative to the month when `BYMONTH` is present, otherwise to the year).
+  - `BYMONTHDAY`, including negative values, plus `BYMONTH`, `BYSETPOS` and `WKST`.
+- **Outside the subset:** `FREQ=SECONDLY|MINUTELY|HOURLY`; `BYHOUR`, `BYMINUTE`, `BYSECOND`, `BYYEARDAY` and `BYWEEKNO`; `BYDAY` ordinals with `DAILY`/`WEEKLY`; `BYMONTHDAY` with `WEEKLY`; `RDATE;VALUE=PERIOD`; `RECURRENCE-ID;RANGE=THISANDFUTURE`.
+  - These produce a visible warning and mark the calendar's availability uncertain. Only the first occurrence is shown; a series is never silently turned into a one-off event.
+  - An unknown `TZID` is interpreted in the floating zone, with a warning and uncertainty.
+- **Bounds (`ICalendarLimits`):** input bytes, line length, line count, nesting depth, events, occurrences per event (1,000), total occurrences (20,000) and recurrence iterations (50,000). Hitting one produces a warning and uncertainty.
+- **Export:** `.ics` writes UTC `DATE-TIME` or `VALUE=DATE`, with escaped text and 75-octet folding. Importing it into a calendar stays an owner action (EVENT-01).
+
+## D-12 — XML and HTML parsing hardening (SEC-02)
+
+- **libxml2 options:** `XML_PARSE_NONET`, never `NOENT`/`DTDLOAD`/`DTDATTR`/`HUGE`. A process-wide external-entity loader refuses every load.
+- **DOCTYPE handling:**
+  - Documents whose internal subset declares entities are refused, which covers entity-expansion attacks.
+  - A `DOCTYPE` that only names an external DTD is accepted, but the DTD is never fetched or used.
+- **Undefined entity references:** before parsing, these are rewritten outside CDATA and comments. Common HTML names become numeric character references; other names stay visible as literal text.
+  - **Evidence:** in Phase 2 verification, libxml2's recovery mode dropped `&nbsp;` together with the following text, the same loss seen with FoundationXML during setup. With the rewrite, the text is kept, and the feed warns how many references were rewritten.
+- **Malformed feeds:** read with recovery and labeled "not well-formed", never treated as complete.
+
+## D-13 — Character sets (REC-SYS-04 used)
+
+- **Decoding:** Foundation for UTF-8/16, US-ASCII, ISO-8859-1/2, Windows-1250–1254, Shift_JIS and ISO-2022-JP; platform `iconv` for others, such as EUC-JP, GBK/GB18030, Big5, EUC-KR, KOI8-R, ISO-8859-3…16 and Windows-1255–1258.
+- **Unsupported or invalid text:** becomes a visible marker, never silently garbled.
+- **Linking:** `iconv` comes from glibc on Linux; on Apple platforms the target links `libiconv`. The macOS link is not verified (`NOT_RUN_ENVIRONMENT`).
+- **Evidence:** a sandbox probe showed that Foundation on Linux decodes Windows-1252, ISO-8859-2, Shift_JIS, ISO-2022-JP, UTF-16LE and Windows-1251, but not EUC-JP; `iconv_open("UTF-8", "GBK")` succeeded.
+
+## D-14 — HTML to text
+
+- **Dropped:** scripts, styles, frames, objects, media, forms and images. Images become `[image: alt]` when they have alt text.
+- **Links:** collected and never fetched.
+- **Layout:** block elements become line breaks, and the output is collapsed and bounded.
+- **Fallback:** if libxml2 cannot parse a document at all, the visible tag-stripped text is used, never an empty result.
+
+## D-15 — Deterministic planner details (PLAN-02, PLAN-03)
+
+- **Defaults:**
+  - maximum allocation 75% of free time;
+  - idea exploration budget 60 minutes a day;
+  - default durations 30 minutes;
+  - buffer 0 minutes, applied around busy events only when configured; travel time is never invented.
+- **Today:** time before `now`, rounded up to five minutes, is unavailable.
+- **Reason precedence:** an item that fits nowhere is reported as having no free interval (before its deadline, when it has one) rather than as hitting the allocation cap.
+- **Preserved blocks:** locked and completed blocks are kept exactly. Accepted blocks are kept unless they now conflict, in which case they are re-placed with a warning.
+- **Rejections:** a rejected suggestion is remembered by subject plus a fingerprint of duration, deadline, priority and date.
+- **Evidence:** the §16.2 fixture produced task 09:00–09:30 and idea 09:30–10:00. After the 09:00–09:30 event was added, it produced task 09:30–10:00 and idea 11:00–11:30.
+
+## D-16 — Reminder rules (REM-01, REM-02)
+
+- **Occurrence keys:** include the subject's change sequence, so changing a deadline yields new reminders and makes the old ones obsolete.
+- **Newly discovered commitments:** only receive reminders still in the future. If every offset has passed but the deadline has not, a single "soon" reminder is created instead.
+- **Date-only deadlines:** reminded only at a configured local time.
+- **Once-per-day rules:** overdue reminders at most once per local day (default 09:00), and proposal follow-ups at most once per day.
+- **Plan blocks:** reminders 10 minutes before an accepted or locked block.
+
+## D-17 — Urgency, Time Sensitive and calls (CALL-01, NOTIFY-06)
+
+- **Urgent deadline:** confirmed, high or urgent priority, a timed deadline within the window (15 minutes), and the task still active. Model wording never counts.
+- **Time Sensitive:**
+  - Used only for the reminder category and only with the owner's opt-in.
+  - A device can opt out, which downgrades the notification to `active`.
+  - It never affects quiet hours, recipients or limits.
+- **Calls:**
+  - A call requires every CALL-01 condition: enabled, the approved number, confirmed, high priority, the urgency window, still active, an outstanding earlier reminder, outside quiet hours, within daily limits, and not provisional.
+  - The decision lists each unmet condition.
+  - An earlier reminder counts only if it reached a provider or was presented locally.
+
+## D-18 — Brief composition (BRIEF-01, BRIEF-02, BRIEF-04)
+
+- **Construction:** a deterministic template. Both versions are rendered from the same items, so material items (commitments, deadlines, unresolved events, changes, source failures, uncertainty) always appear in both.
+- **Spoken version:** no URLs or identifiers.
+- **Source honesty:** "Could not check …" for failing or stale sources is distinct from "Checked, nothing new to report: …".
+- **Length:** optional items are dropped by priority to meet the target length (default 220 words); omitted items stay in the full view.
+- **Spoken duration:** an estimate, words ÷ words-per-minute (default 150).
+
+## D-19 — Extraction validation (MODEL-02, MODEL-03, MAIL-02)
+
+- **Evidence quotes:** must occur in the content that was sent, ignoring case and whitespace; otherwise the item is rejected.
+- **Confirmation:**
+  - "confirmed" survives only when the quote comes from the owner's own text, such as the note above a forward.
+  - For CC'd or unknown-sender mail, items are never confirmed and never addressed to the owner.
+- **Dates:** resolved against the message time and the planning zone; ambiguity stays unresolved with its candidates. Dates outside −1 year … +5 years are rejected.
+- **Bounds:** durations 1–1,440 minutes; response at most 64 KiB and 25 items.
+- **Repair:** an invalid payload gets one repair request, then the extraction fails.
+- **Data sharing:** checked before anything is sent. Remote providers receive minimized text, with email addresses, links and phone numbers replaced.
+- **Deterministic provider:** labeled `deterministic-rules`, so its output is never presented as live inference.
+
+## D-20 — Event matching thresholds (EVENT-01)
+
+- **Title similarity:** Jaccard similarity of folded title tokens, with filler words removed.
+- **States:**
+  - `matched`: the same UID, or similarity ≥ 0.8 with a start within five minutes.
+  - `possibleMatch`: similarity ≥ 0.5 on the same local day, or the same start with similarity ≥ 0.3.
+  - `notFound`: otherwise.
+- **Owner decisions:** dismissed and matched are kept. "Owner reports added" stays until a matching occurrence appears.
+
+## D-21 — News ranking (NEWS-01)
+
+- **Selection:** an item needs an interest match or positive feedback. Muted sources and topics are excluded, and "less like this" items are dropped.
+- **Duplicates:** removed by canonical URL (lower-cased host, no `www.`, no fragment, no tracking parameters) and by 80% title-word overlap.
+- **Score:** interest matches × recency (24-hour half-life) × source weight × 0.8 for title-only items.
+- **Reasons:** each selected item carries a short reason, and title-only items are labeled.
