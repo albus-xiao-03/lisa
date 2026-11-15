@@ -27,6 +27,18 @@ let package = Package(
         .library(name: "LisaPorts", targets: ["LisaPorts"]),
         .library(name: "LisaSQLite", targets: ["LisaSQLite"]),
         .library(name: "LisaStore", targets: ["LisaStore"]),
+        .library(name: "LisaCrypto", targets: ["LisaCrypto"]),
+        .library(name: "LisaDelivery", targets: ["LisaDelivery"]),
+        .library(name: "LisaDevices", targets: ["LisaDevices"]),
+        .library(name: "LisaOwnerData", targets: ["LisaOwnerData"]),
+        .library(name: "LisaIngestion", targets: ["LisaIngestion"]),
+        .library(name: "LisaReview", targets: ["LisaReview"]),
+        .library(name: "LisaAgenda", targets: ["LisaAgenda"]),
+        .library(name: "LisaApplication", targets: ["LisaApplication"]),
+    ],
+    dependencies: [
+        // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-06).
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1")
     ],
     targets: [
         .target(name: "LisaRedaction"),
@@ -50,11 +62,41 @@ let package = Package(
         .target(name: "LisaRanking", dependencies: ["LisaDomain", "LisaTime"]),
         .target(name: "LisaBriefComposer", dependencies: ["LisaDomain", "LisaTime"]),
         .target(name: "LisaInference", dependencies: ["LisaDomain", "LisaTime"]),
-        .target(name: "LisaPorts", dependencies: ["LisaDomain", "LisaTime"]),
+        .target(name: "LisaPorts", dependencies: ["LisaDomain", "LisaTime", "LisaRedaction"]),
         .systemLibrary(
             name: "CSQLite", path: "Sources/CSQLite", pkgConfig: "sqlite3", providers: [.apt(["libsqlite3-dev"])]),
         .target(name: "LisaSQLite", dependencies: ["CSQLite"]),
         .target(name: "LisaStore", dependencies: ["LisaSQLite", "LisaPorts", "LisaDomain", "LisaTime"]),
+        .target(name: "LisaCrypto", dependencies: [.product(name: "Crypto", package: "swift-crypto")]),
+        .target(
+            name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
+        .target(
+            name: "LisaDevices", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaCrypto", "LisaPorts"]),
+        .target(name: "LisaOwnerData", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPorts"]),
+        .target(
+            name: "LisaIngestion",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaICalendar", "LisaMIME", "LisaFeeds", "LisaHTMLText",
+                "LisaPorts",
+            ]),
+        .target(
+            name: "LisaReview",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaICalendar", "LisaMatching", "LisaInference", "LisaPorts",
+            ]),
+        .target(
+            name: "LisaAgenda",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaPlanning", "LisaPolicy", "LisaRanking",
+                "LisaBriefComposer",
+                "LisaPorts", "LisaDelivery",
+            ]),
+        .target(
+            name: "LisaApplication",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaPorts", "LisaIngestion", "LisaReview", "LisaDelivery",
+                "LisaAgenda", "LisaDevices", "LisaOwnerData",
+            ]),
     ],
     swiftLanguageModes: [.v6]
 )
