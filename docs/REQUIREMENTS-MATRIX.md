@@ -17,10 +17,10 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 | ARCH-03 | `LisaRuntime` lock, `LisaHost` | — | — | Planned (P5, P7) |
 | ARCH-04 | Approved dependencies only, plan §11 | — | — | Ongoing |
 | DATA-01 | `Sources/LisaDomain/*` | Temporary checks: lifecycles, identities | — | Implemented (P1); persistence in P3 |
-| DATA-02 | `LisaStore` | — | — | Planned (P3) |
+| DATA-02 | `LisaStore` (D-22, D-23), `LisaSQLite` | Temporary checks PASS (Linux): restart persistence, revision conflicts, rollback on failure, v1→v3 migration with backfill, failed migration, newer schema refused | — | Implemented (P3) |
 | DATA-03 | `Sources/LisaTime/*` | Temporary checks: DST gap/overlap, day lengths, date-only, ambiguous dates — PASS | — | Implemented (P1) |
-| DATA-04 | `LisaReview`, `LisaStore` | — | — | Planned (P3, P4) |
-| DATA-05 | `LisaStore`, `LisaOwnerData` | — | — | Planned (P3, P4) |
+| DATA-04 | `LisaStore` (corrections stored on records), `LisaReview` (P4) | — | — | Partial: storage (P3) |
+| DATA-05 | `LisaStore` (backup/restore, raw-content purge), `LisaOwnerData` (P4) | Temporary checks PASS (Linux): backup manifest, restore keeps replaced file, raw-content purge | — | Partial: storage (P3) |
 | INGEST-01 | `LisaIngestion` | — | — | Planned (P4) |
 | MAIL-01 | `LisaMIME` (MIME, charsets, forwards, attachments), `LisaHTMLText`; IMAP in P6 | Temporary checks PASS (Linux): plain, HTML-only, forwarded (inline and attached), multipart, malformed, charsets | Live mailbox | Partial: parsing implemented (P2); IMAP P6 |
 | MAIL-02 | `LisaMIME` (Message-ID, references), `LisaInference` (addressing, confirmation) | Temporary checks PASS (Linux): identity headers; CC never confirms | — | Partial (P2); dedup and storage P3/P4 |
@@ -68,7 +68,10 @@ L01–L33 are verified first by temporary checks in the phases shown in plan §9
 | L01 | Partial: Phase 1–2 modules build in debug and release on Linux (aarch64, Swift 6.4.2) |
 | L04, L06, L11, L14 | Temporary checks PASS (engine level); persistent tests in Phase T |
 | L22 | Partial: recurrence, message, document and model-output limits checked (temporary) |
-| L02, L03, L05, L07–L10, L12, L13, L15–L21, L23–L33 | Planned |
+| L03 | Temporary checks PASS (store level; restart across reopen) |
+| L23 | Temporary checks PASS (v1→v3 migration, failed migration, restore) |
+| L28 | Partial: transactional lease claims checked (storage) |
+| L02, L05, L07–L10, L12, L13, L15–L21, L24–L27, L29–L33 | Planned |
 
 ## Apple acceptance (R1 §16.4)
 
