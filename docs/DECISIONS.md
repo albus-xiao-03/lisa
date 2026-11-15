@@ -92,6 +92,10 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - An unknown `TZID` is interpreted in the floating zone, with a warning and uncertainty.
 - **Bounds (`ICalendarLimits`):** input bytes, line length, line count, nesting depth, events, occurrences per event (1,000), total occurrences (20,000) and recurrence iterations (50,000). Hitting one produces a warning and uncertainty.
 - **Export:** `.ics` writes UTC `DATE-TIME` or `VALUE=DATE`, with escaped text and 75-octet folding. Importing it into a calendar stays an owner action (EVENT-01).
+- **Occurrence identity (amended in Phase 4):**
+  - a one-off event (no `RRULE` or `RDATE`) has the stable key `single`, so moving it is reconciled as a change to the same occurrence, not as a removal plus an addition;
+  - instances of a series are keyed by their original start, which an override carries as its `RECURRENCE-ID`, so moving one instance keeps its key;
+  - an override whose series is not in the feed keeps its `RECURRENCE-ID` key.
 
 ## D-12 — XML and HTML parsing hardening (SEC-02)
 
@@ -222,3 +226,124 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 
 - **Storage:** raw source bytes (messages, feed documents) live in a separate `raw_content` table, referenced from evidence by `RawContentRef`.
 - **Retention:** purging by storage time never touches records, so retention of raw content and of generated records can differ. The settings are documented in `docs/OPERATIONS.md` (Phase 5).
+
+## D-25 — Additional direct dependencies (ARCH-02)
+
+- **Decision:** a few modules declare one more direct dependency than plan §5.1 lists. Each new edge points to an earlier row, so the graph stays acyclic:
+  - `LisaMatching` and `LisaInference` → `LisaTime`, for local dates and date resolution;
+  - `LisaPorts` → `LisaRedaction`, because a push message carries the device token as `Sensitive<String>`;
+  - `LisaReview` → `LisaTime`, and `LisaApplication` → `LisaTime` and `LisaLogging`, for the injected clock and logger.
+- **Why:** declaring every imported module keeps the dependency graph explicit; nothing relies on a transitive import.
+
+## D-26 — Delivery outbox processing (REM-03, NOTIFY-03, EMAIL-01, CALL-01)
+
+- **Durability:** a delivery is recorded in the same transaction as its decision. A worker claims due deliveries under a lease and opens a *preparing* attempt. Before any transport call, it durably marks the attempt *submitting*.
+- **Send-time re-checks:** the payload owner (`LisaAgenda`) re-derives the content when the delivery is sent. Anything resolved, superseded, snoozed, deleted or expired is suppressed with a reason. The outbox then enforces recipients independently of any content:
+  - email: only to owner-approved addresses, and only while email is enabled;
+  - calls: only to the approved number, after the full CALL-01 gate;
+  - notifications: only to an active, eligible device on its own transport.
+- **Quiet hours:** notifications are deferred to the end of quiet hours if they are still valid then, and expire otherwise. Calls are refused by the call gate during quiet hours. Email is not an interruption and is not deferred.
+- **Attempts:** every claim that reaches content preparation counts toward the attempt limit, including attempts interrupted by a restart, so a crash loop cannot retry forever. A quiet-hours deferral removes its attempt because nothing was sent.
+- **Result classification:**
+  - not sent and throttled: retried with exponential backoff and jitter, inside the attempt limit and the validity window;
+  - rejected: failed. A rejection that invalidates the recipient deactivates the device token through `DeviceTokenFeedback`;
+  - unknown, or a lease that expired while submitting: *outcome unknown*, never resent automatically.
+- **No silent downgrade:** a live delivery on a channel without a live transport fails with a configuration reason. It is never captured as a dry run or sent another way.
+- **Dry runs:** dry-run captures record the intended recipient, subject and content, but never a device token. They count toward call limits, so dry runs show the same limits as live operation.
+- **Receipts:** "confirmed delivered" is set only when a device reports the notification as presented.
+
+## D-27 — Notification occurrences (NOTIFY-01, NOTIFY-03, plan §6.4)
+
+- **Reminder occurrence key:** `reminder:<id>:<firing instant>`. A snoozed reminder fires again as a new occurrence.
+- **Important change occurrence key:** `commitmentChange:<subject>:<change sequence>`. It is recorded for changes, cancellations and removals of non-tentative calendar events that have not ended more than an hour ago and start within 48 hours. Changes the owner makes to a task are not notified back to the owner; closing a task resolves its notifications.
+- **Brief availability occurrence key:** `brief:<local date>:<zone>`, at most one per day by policy. The same record marks the day's brief as dispatched. A brief missed beyond the catch-up window is recorded as an expired occurrence with an audit event, and nothing is sent.
+- **Routing:** every active registration gets a delivery record. A device that cannot receive a notification gets a *suppressed* record with the reason (permission, preferences, category, no active token).
+- **Collapse key:** the raw key is stored. The APNs adapter sends a fixed-length digest of it.
+
+## D-28 — Call escalation (CALL-01, REM-01)
+
+- **Queueing:** an urgent confirmed deadline queues the call five minutes after the reminder notification, so an acknowledgement in that window suppresses the call.
+- **Gate at send time:** the whole CALL-01 gate is evaluated when the call is sent. The "earlier reminder outstanding" condition comes from stored reminder states, never from a missing push acknowledgement alone.
+- **Classification:** the Time Sensitive level never authorizes a call.
+
+## D-29 — Pairing and device credentials (NOTIFY-02, SEC-03)
+
+- **Pairing codes:** live only in host memory for 10 minutes. Each is eight Crockford base-32 characters and single use. Five failed attempts discard every pending code.
+- **Credentials:** a 256-bit random credential is shown to the device once. The host stores its SHA-256 verifier and compares in constant time (swift-crypto, REC-DEP-06).
+- **Push tokens:**
+  - accepted only from an authenticated registration, for a configured topic and environment;
+  - the last five replaced tokens are kept;
+  - provider "unregistered" reports apply only when their timestamp is newer than the token's registration.
+- **Mac app:** its embedded host registers as a local-notification installation.
+
+## D-30 — Preference values and authority (MEM-01)
+
+- **Value formats:**
+  - times: `HH:MM`;
+  - windows: `[daily|weekdays|weekend|mon,tue…] HH:MM-HH:MM`;
+  - quiet hours: one daily range;
+  - lists: entries or comma-separated text;
+  - phone numbers: E.164;
+  - the model endpoint: https or loopback;
+  - data sharing: `none`, `local-only`, `extraction-only` or `full`.
+- **Exploration frequency:** a frequency of n per week becomes a daily idea budget of duration × n ÷ 7 minutes.
+- **Authority:**
+  - explicit values replace inferred ones, never the reverse;
+  - inferred values take effect only after the owner confirms them;
+  - inference is refused for consequential keys;
+  - paired devices cannot set consequential keys;
+  - model keys configure the host and do not map to owner settings.
+- **Effective settings:** the configuration file overlaid with effective preferences, and the `SettingsSource` every service reads.
+
+## D-31 — Captures, deletion, export and retention (IDEA-01, DATA-04, DATA-05)
+
+- **Captures:**
+  - idempotent by request ID;
+  - an idea is stored verbatim at once, before any interpretation;
+  - shared links and text become shared news items under the "Shared by the owner" source. Sharing the same address again (case-insensitive scheme and host, fragment ignored) links to the same item.
+- **Deletion:**
+  - deleting a capture also deletes its idea, and the reverse;
+  - deleting an email or news item deletes its evidence and raw content, and unlinks tasks and proposals, which keep their text;
+  - stored briefs drop items that cite deleted records and are marked stale for regeneration;
+  - disabling a source states whether imported records are kept; if not, they are deleted with their raw content.
+- **Export:** format `lisa-export` version 1, with the schema and application versions. Device credential verifiers and push tokens are never exported.
+- **Retention defaults:**
+  - raw content: 90 days;
+  - final delivery history: 180 days;
+  - audit records: 365 days;
+  - unshared, unrated feed items: 30 days;
+  - zero keeps a category indefinitely;
+  - logs rotate by size (D-09).
+
+## D-32 — Ingestion and reconciliation (INGEST-01, MAIL-02, CAL-02, NEWS-01)
+
+- **Runner:**
+  - each page is stored in the transaction that advances the cursor;
+  - a source counts as freshly synchronized only after its last page;
+  - failures are classified on the source, and the cursor stays put;
+  - the most recent capability and parse notes are kept on the source.
+- **Mail:**
+  - deduplicated per source by the stable message key, and by Message-ID;
+  - owner addressing comes from the owner's approved addresses: forwarded by the owner, sent by the owner, direct, carbon copy, or unknown sender;
+  - the owner's own words (the note above a forward, or the body of a message the owner sent) are stored separately as the only text that can confirm a commitment;
+  - attached invitations become event proposals without a model.
+- **Calendar:**
+  - additions and material changes increase the occurrence's change sequence;
+  - only a complete snapshot can cancel missing occurrences, and only inside the expansion window (7 days back, 120 days ahead);
+  - a failed or partial retrieval changes nothing it did not see.
+- **News:** keys are per source; cross-source duplicates are grouped by ranking.
+
+## D-33 — Extraction results (MAIL-02, EVENT-01, MODEL-03, MODEL-04)
+
+- **Mapping of validated items:**
+  - commitments and requests addressed to the owner become tasks, with the item's confirmation;
+  - requests also mark the email for attention;
+  - meetings become event proposals with their uncertainty;
+  - changes and information become attention notes for the brief.
+- **Reprocessing:** a task re-extracted from the same evidence with the same title is updated, never duplicated, and fields the owner corrected are left untouched.
+- **Without a usable model:** the email waits as "awaiting model" instead of being guessed.
+
+## D-34 — Transaction discipline (DATA-02, OPS-02)
+
+- **Rule:** code inside a store transaction uses only that transaction. Effective settings (which read preferences) and raw content are read or written before or after it; batch processors read settings in their preparation step.
+- **Guard:** `SQLiteDatabase` detects use of the connection from inside one of its own transactions on the same thread and fails with `SQLITE_MISUSE`, instead of deadlocking on its lock. Phase 4 verification found exactly this deadlock in ingestion before the rule was applied.
