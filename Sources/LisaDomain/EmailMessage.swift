@@ -72,6 +72,11 @@ public struct EmailMessage: Entity {
     public var calendarPartCount: Int
     public var evidenceID: EvidenceID
     public var extraction: ExtractionState
+    /// Validated reasons the message needs the owner's attention, such as a request for a response.
+    public var attention: [String]?
+    /// Text the owner wrote: the note above a forward, or the whole body of a message the owner sent. Only this text
+    /// can make an extracted commitment confirmed.
+    public var ownerNote: String?
 
     public init(
         id: EmailID = .random(), sourceID: SourceID, messageKey: String, messageID: String?, inReplyTo: String?,
@@ -99,5 +104,7 @@ public struct EmailMessage: Entity {
         self.calendarPartCount = calendarPartCount
         self.evidenceID = evidenceID
         self.extraction = .pending
+        self.attention = nil
+        self.ownerNote = nil
     }
 }
