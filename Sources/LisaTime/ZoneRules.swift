@@ -17,25 +17,7 @@ public enum LocalTimeResolution: Hashable, Sendable {
 public enum ZoneRules {
     /// Resolves `local` in `zone`, reporting gaps and overlaps explicitly.
     public static func resolve(_ local: LocalDateTime, in zone: TimeZone) -> LocalTimeResolution {
-        let naive = TimeInterval(local.secondsSinceEpoch)
-        let offsetBefore = zone.secondsFromGMT(for: Date(timeIntervalSince1970: naive - 86_400))
-        let offsetAfter = zone.secondsFromGMT(for: Date(timeIntervalSince1970: naive + 86_400))
-        var valid: [Date] = []
-        for offset in Set([offsetBefore, offsetAfter]) {
-            let candidate = Date(timeIntervalSince1970: naive - TimeInterval(offset))
-            if zone.secondsFromGMT(for: candidate) == offset {
-                valid.append(candidate)
-            }
-        }
-        valid.sort()
-        if valid.count >= 2, let earlier = valid.first, let later = valid.last, earlier != later {
-            return .overlap(earlier: earlier, later: later)
-        }
-        if let only = valid.first {
-            return .exact(only)
-        }
-        let shifted = Date(timeIntervalSince1970: naive - TimeInterval(offsetBefore))
-        return .gap(shifted: shifted, gapSeconds: offsetAfter - offsetBefore)
+        resolve(local, rules: zone)
     }
 
     /// The instant for `local` in `zone`: the earlier instant in an overlap (unless `preferLater`), and the
