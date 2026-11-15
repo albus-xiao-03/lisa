@@ -18,12 +18,15 @@ public struct ReminderSettings: Hashable, Codable, Sendable {
     public var notifyCommitmentChanges: Bool
     public var snoozeMinutes: Int
     public var quietHours: QuietHours
+    /// Also send reminders by email to the approved addresses (notifications remain the default channel).
+    public var emailReminders: Bool
 
     public init(
         deadlineOffsetsMinutes: [Int] = [1440, 60], dateOnlyReminderTime: LocalTime? = nil,
         overdueReminderTime: LocalTime = LocalTime(secondsSinceMidnight: 9 * 3600),
         proposalFollowUpTime: LocalTime = LocalTime(secondsSinceMidnight: 9 * 3600), planBlockLeadMinutes: Int = 10,
-        notifyCommitmentChanges: Bool = true, snoozeMinutes: Int = 15, quietHours: QuietHours = .defaultValue
+        notifyCommitmentChanges: Bool = true, snoozeMinutes: Int = 15, quietHours: QuietHours = .defaultValue,
+        emailReminders: Bool = false
     ) {
         self.deadlineOffsetsMinutes = deadlineOffsetsMinutes
         self.dateOnlyReminderTime = dateOnlyReminderTime
@@ -33,5 +36,6 @@ public struct ReminderSettings: Hashable, Codable, Sendable {
         self.notifyCommitmentChanges = notifyCommitmentChanges
         self.snoozeMinutes = snoozeMinutes
         self.quietHours = quietHours
+        self.emailReminders = emailReminders
     }
 }
