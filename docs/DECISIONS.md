@@ -185,3 +185,40 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Duplicates:** removed by canonical URL (lower-cased host, no `www.`, no fragment, no tracking parameters) and by 80% title-word overlap.
 - **Score:** interest matches × recency (24-hour half-life) × source weight × 0.8 for title-only items.
 - **Reasons:** each selected item carries a short reason, and title-only items are labeled.
+
+## D-22 — Record storage design (DATA-02, DATA-04, MAIL-02)
+
+- **Records:** each collection is a table of JSON record bodies (`DomainJSON`, millisecond instants) plus the indexed columns its entity declares (`LisaPorts/EntityIndexes.swift`).
+- **Queries:** may name only declared fields (plus `id`, `revision`, `updated_at`), and every value is a bound parameter.
+- **Deduplication:** unique natural keys enforce it. Examples:
+  - per-source email key;
+  - occurrence key (source, UID, original start);
+  - capture request ID;
+  - reminder and notification occurrence keys;
+  - delivery idempotency key;
+  - device installation and credential verifier.
+- **Updates:** succeed only when the stored revision equals the caller's (optimistic concurrency); the stored revision then increases by one.
+- **Connection:** one serialized connection per store with `journal_mode=WAL`, `synchronous=FULL` (an outbox intent is durable before any side effect), `foreign_keys=ON` and `trusted_schema=OFF`. The database file is created with mode 0600.
+- **Search index:** none in R1. Deleting an item invalidates the generated plans and briefs that referenced it, which are regenerated (DATA-05).
+
+## D-23 — Migrations, backups and restore (DATA-02, DATA-05)
+
+- **Migrations:** append-only SQL, one transaction each, including the `user_version` change.
+  - v1: core collections.
+  - v2: devices and notification occurrences.
+  - v3: idempotency records, plus a `deliveries.payload_key` column backfilled from stored JSON.
+- **Before migrating:** an existing database is copied to `<db>.pre-migration-v<n>-<ms>.sqlite`.
+- **Failures:** a failed migration rolls back and reports; the database is never recreated or discarded. A database with a newer schema is refused.
+- **Schema check:** at open, the code checks that every collection and indexed column it expects exists.
+- **Backups:** use SQLite's online backup API and write a manifest (format, schema version, creation time, application version, record counts).
+- **Restore:** checks the manifest format, schema version, integrity and the backup's own `user_version`, then moves the current database aside (`.before-restore-<ms>`, never deleted) before copying the backup into place.
+- **Evidence (temporary checks):**
+  - a v1 database with a delivery migrated to v3, and the backfilled `payload_key` found the record;
+  - a broken v4 left the schema at v3, the data intact and no partial tables;
+  - `user_version` 99 was refused;
+  - restore returned the pre-backup state and kept the replaced file.
+
+## D-24 — Raw content retention (DATA-05)
+
+- **Storage:** raw source bytes (messages, feed documents) live in a separate `raw_content` table, referenced from evidence by `RawContentRef`.
+- **Retention:** purging by storage time never touches records, so retention of raw content and of generated records can differ. The settings are documented in `docs/OPERATIONS.md` (Phase 5).
