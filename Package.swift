@@ -24,6 +24,9 @@ let package = Package(
         .library(name: "LisaRanking", targets: ["LisaRanking"]),
         .library(name: "LisaBriefComposer", targets: ["LisaBriefComposer"]),
         .library(name: "LisaInference", targets: ["LisaInference"]),
+        .library(name: "LisaPorts", targets: ["LisaPorts"]),
+        .library(name: "LisaSQLite", targets: ["LisaSQLite"]),
+        .library(name: "LisaStore", targets: ["LisaStore"]),
     ],
     targets: [
         .target(name: "LisaRedaction"),
@@ -47,6 +50,11 @@ let package = Package(
         .target(name: "LisaRanking", dependencies: ["LisaDomain", "LisaTime"]),
         .target(name: "LisaBriefComposer", dependencies: ["LisaDomain", "LisaTime"]),
         .target(name: "LisaInference", dependencies: ["LisaDomain", "LisaTime"]),
+        .target(name: "LisaPorts", dependencies: ["LisaDomain", "LisaTime"]),
+        .systemLibrary(
+            name: "CSQLite", path: "Sources/CSQLite", pkgConfig: "sqlite3", providers: [.apt(["libsqlite3-dev"])]),
+        .target(name: "LisaSQLite", dependencies: ["CSQLite"]),
+        .target(name: "LisaStore", dependencies: ["LisaSQLite", "LisaPorts", "LisaDomain", "LisaTime"]),
     ],
     swiftLanguageModes: [.v6]
 )
