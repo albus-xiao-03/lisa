@@ -41,8 +41,8 @@ public enum CalendarExpander {
             context.expandSeries(uid: uid, master: master, overrides: overrides[uid] ?? [:])
         }
         for (uid, instances) in overrides where masters[uid] == nil {
-            for event in instances.values {
-                context.addSingle(uid: uid, event: event, key: nil)
+            for (key, event) in instances {
+                context.addSingle(uid: uid, event: event, key: key)
             }
         }
         context.occurrences.sort { ($0.sortStart, $0.uid, $0.occurrenceKey) < ($1.sortStart, $1.uid, $1.occurrenceKey) }
@@ -142,17 +142,20 @@ public enum CalendarExpander {
                     if let key = key(for: value) { excluded.insert(key) }
                 }
             }
+            // A one-off event keeps one stable key, so moving it is a change rather than a removal plus an addition.
+            let isSeries = master.property("RRULE") != nil || !master.properties(named: "RDATE").isEmpty
             var seen = Set<String>()
             var consumedOverrides = Set<String>()
             for value in starts {
                 guard let key = key(for: value), !seen.contains(key) else { continue }
                 seen.insert(key)
                 if excluded.contains(key) { continue }
+                let occurrenceKey = isSeries ? key : CalendarExpander.singleOccurrenceKey
                 if let override = overrides[key] {
                     consumedOverrides.insert(key)
-                    addSingle(uid: uid, event: override, key: key)
+                    addSingle(uid: uid, event: override, key: occurrenceKey)
                 } else {
-                    addOccurrence(uid: uid, event: master, start: value, key: key)
+                    addOccurrence(uid: uid, event: master, start: value, key: occurrenceKey)
                 }
                 guard occurrences.count < options.limits.maxTotalOccurrences else {
                     warn(
@@ -276,6 +279,10 @@ public enum CalendarExpander {
             }
         }
     }
+
+    /// The occurrence key of an event without RRULE or RDATE. Series instances are keyed by their original start
+    /// (the RECURRENCE-ID of an override), which stays the same when an instance is moved.
+    public static let singleOccurrenceKey = "single"
 
     static func utcKey(_ instant: Date) -> String {
         let local = ZoneRules.local(for: instant, rules: FixedOffsetRules(seconds: 0))
