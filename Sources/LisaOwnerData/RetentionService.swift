@@ -14,12 +14,18 @@ public struct RetentionSettings: Hashable, Codable, Sendable {
     /// Feed items that were never shared, rated or saved by the owner.
     public var feedItemDays: Int
 
-    public init(rawContentDays: Int = 90, deliveryHistoryDays: Int = 180, auditDays: Int = 365, feedItemDays: Int = 30)
-    {
+    /// The most raw content kept, in bytes; the oldest is purged first. Zero keeps all (OPS-02).
+    public var rawContentMaxBytes: Int
+
+    public init(
+        rawContentDays: Int = 90, deliveryHistoryDays: Int = 180, auditDays: Int = 365, feedItemDays: Int = 30,
+        rawContentMaxBytes: Int = 0
+    ) {
         self.rawContentDays = rawContentDays
         self.deliveryHistoryDays = deliveryHistoryDays
         self.auditDays = auditDays
         self.feedItemDays = feedItemDays
+        self.rawContentMaxBytes = rawContentMaxBytes
     }
 }
 
@@ -51,6 +57,9 @@ public final class RetentionService: Sendable {
         var report = RetentionReport()
         func cutoff(_ days: Int) -> Date? { days > 0 ? now.addingTimeInterval(-Double(days) * 86_400) : nil }
         if let date = cutoff(settings.rawContentDays) { report.rawContent = try raw.purge(storedBefore: date) }
+        if settings.rawContentMaxBytes > 0 {
+            report.rawContent += try raw.purge(keepingAtMostBytes: settings.rawContentMaxBytes)
+        }
         var rawRefs: [String] = []
         try store.write { tx in
             if let date = cutoff(settings.deliveryHistoryDays) {
