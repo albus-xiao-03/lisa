@@ -35,10 +35,22 @@ let package = Package(
         .library(name: "LisaReview", targets: ["LisaReview"]),
         .library(name: "LisaAgenda", targets: ["LisaAgenda"]),
         .library(name: "LisaApplication", targets: ["LisaApplication"]),
+        .library(name: "LisaAPIContract", targets: ["LisaAPIContract"]),
+        .library(name: "LisaConfig", targets: ["LisaConfig"]),
+        .library(name: "LisaClient", targets: ["LisaClient"]),
+        .library(name: "LisaAPI", targets: ["LisaAPI"]),
+        .library(name: "LisaRuntime", targets: ["LisaRuntime"]),
+        .library(name: "LisaLocalSources", targets: ["LisaLocalSources"]),
+        .library(name: "LisaHost", targets: ["LisaHost"]),
+        .library(name: "LisaFixtures", targets: ["LisaFixtures"]),
+        .library(name: "LisaDemo", targets: ["LisaDemo"]),
+        .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
         // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-06).
-        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1")
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1"),
+        // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-01): the `lisa` command-line interface only.
+        .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2"),
     ],
     targets: [
         .target(name: "LisaRedaction"),
@@ -95,6 +107,52 @@ let package = Package(
             name: "LisaApplication",
             dependencies: [
                 "LisaTime", "LisaDomain", "LisaLogging", "LisaPorts", "LisaIngestion", "LisaReview", "LisaDelivery",
+                "LisaAgenda", "LisaDevices", "LisaOwnerData",
+            ]),
+        // Foundation only: shared with the iPhone and iPad app (plan §5.1 rule 4).
+        .target(name: "LisaAPIContract"),
+        .target(name: "LisaConfig", dependencies: ["LisaTime", "LisaDomain", "LisaSecrets"]),
+        // Foundation and the contract only, so Apple apps can link it.
+        .target(name: "LisaClient", dependencies: ["LisaAPIContract"]),
+        .target(name: "LisaLocalSources", dependencies: ["LisaDomain", "LisaPorts"]),
+        .target(
+            name: "LisaRuntime",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaPorts", "LisaIngestion", "LisaOwnerData",
+                "LisaApplication",
+            ]),
+        .target(
+            name: "LisaHost",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaSecrets", "LisaLogging", "LisaPorts", "LisaStore", "LisaInference",
+                "LisaIngestion", "LisaReview", "LisaDelivery", "LisaAgenda", "LisaDevices", "LisaOwnerData",
+                "LisaApplication", "LisaRuntime", "LisaAPI", "LisaAPIContract", "LisaLocalSources", "LisaConfig",
+                "LisaMIME", "LisaICalendar",
+            ]),
+        // Synthetic demonstration data, rooted at Fixtures/ (plan §5.1 row 50).
+        .target(
+            name: "LisaFixtures", path: "Fixtures", exclude: ["README.md"],
+            resources: [.copy("mail"), .copy("calendar"), .copy("feeds"), .copy("demo")]),
+        .target(
+            name: "LisaDemo",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaInference", "LisaDelivery", "LisaDevices",
+                "LisaLocalSources", "LisaApplication", "LisaRuntime", "LisaAPIContract", "LisaClient", "LisaHost",
+                "LisaFixtures",
+            ]),
+        // The `lisa` executable (plan §5.1 row 52).
+        .executableTarget(
+            name: "LisaCLI",
+            dependencies: [
+                "LisaSecrets", "LisaPorts", "LisaLocalSources", "LisaRuntime", "LisaAPIContract", "LisaClient",
+                "LisaConfig", "LisaHost", "LisaDemo",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]),
+        .target(
+            name: "LisaAPI",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaLogging", "LisaCrypto", "LisaPorts", "LisaAPIContract",
+                "LisaApplication",
                 "LisaAgenda", "LisaDevices", "LisaOwnerData",
             ]),
     ],
