@@ -13,8 +13,8 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 | ID | Implementation | Automated evidence | Manual / Apple | Status |
 |---|---|---|---|---|
 | ARCH-01 | `Package.swift` (Swift 6 mode, no Apple frameworks); Linux networking differences (Phase 6) | Linux debug/release builds | macOS build | Partial: package and foundations (P1) |
-| ARCH-02 | Module split, plan §5.1; extra edges to earlier rows in D-25 | Linux debug and release builds of the 29 targets so far | — | Partial (P1–P4) |
-| ARCH-03 | `LisaRuntime` lock, `LisaHost` | — | — | Planned (P5, P7) |
+| ARCH-02 | Module split, plan §5.1; extra edges and new modules in D-25 | Linux debug and release builds of every target | — | Partial (P1–P5) |
+| ARCH-03 | `LisaRuntime/DataDirectoryLock.swift` (exclusive lock), `LisaHost`, CLI commands that take the lock; `docs/OPERATIONS.md` | Temporary checks PASS (Linux): a second writer fails with the owner's process ID; restart preserves state | Mac app embedded mode | Partial: headless host (P5); client mode P7, Mac app P8 |
 | ARCH-04 | Approved dependencies only, plan §11 | — | — | Ongoing |
 | DATA-01 | `Sources/LisaDomain/*` | Temporary checks: lifecycles, identities | — | Implemented (P1); persistence in P3 |
 | DATA-02 | `LisaStore` (D-22, D-23), `LisaSQLite` | Temporary checks PASS (Linux): restart persistence, revision conflicts, rollback on failure, v1→v3 migration with backfill, failed migration, newer schema refused | — | Implemented (P3) |
@@ -23,15 +23,15 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 | DATA-05 | `LisaStore` (backup/restore, raw-content purge), `LisaOwnerData` (deletion, source disable with an explicit retention choice, versioned export, retention periods; D-31); `docs/OPERATIONS.md` (P5) | Temporary checks PASS (Linux): backup manifest, restore, raw-content purge; deleting an email removes evidence and raw content; export carries no credentials or tokens | — | Partial: implemented (P3–P4); operations document P5 |
 | INGEST-01 | `LisaPorts/SourceConnector.swift` (contract), `LisaIngestion/ConnectorRunner.swift` (D-32); adapters P6 | Temporary checks PASS (Linux): refetch deduplicates; a failed retrieval keeps the cursor and records its class; a stale source becomes fresh after success | — | Implemented (P4); adapters P6 |
 | MAIL-01 | `LisaMIME` (MIME, charsets, forwards, attachments), `LisaHTMLText`; IMAP in P6 | Temporary checks PASS (Linux): plain, HTML-only, forwarded (inline and attached), multipart, malformed, charsets | Live mailbox | Partial: parsing implemented (P2); IMAP P6 |
-| MAIL-02 | `LisaMIME`, `LisaIngestion/MailIngestion.swift` (dedup by key and Message-ID, owner addressing, owner note, invitations), `LisaInference` (confirmation) | Temporary checks PASS (Linux): identity headers; forwarded by the owner with the original sender kept; refetch stores once; only the owner's text confirms | — | Implemented (P2, P4) |
+| MAIL-02 | `LisaMIME`, `LisaIngestion/MailIngestion.swift` (dedup by key, and by Message-ID across sources; owner addressing; owner note; invitations), `LisaInference` (confirmation) | Temporary checks PASS (Linux): identity headers; forwarded by the owner with the original sender kept; refetch and a second source store once; only the owner's text confirms | — | Implemented (P2, P4, P5) |
 | CAL-01 | `LisaICalendar` (subset in D-11); HTTPS feeds in P6 | Temporary checks PASS (Linux): recurrence across DST, EXDATE, overrides, cancellation, transparency, all-day, VTIMEZONE, floating, unsupported warnings, bounds | — | Partial: engine implemented (P2) |
-| CAL-02 | `LisaIngestion/CalendarReconciliation.swift`, stable occurrence keys (D-11, D-32) | Temporary checks PASS (Linux): add, move (one occurrence with a new change sequence), partial snapshot removes nothing, unreadable data changes nothing, complete snapshot cancels missing events | — | Implemented (P4) |
+| CAL-02 | `LisaIngestion/CalendarReconciliation.swift`, stable occurrence keys and series durations (D-11, D-32, D-40) | Temporary checks PASS (Linux): add, move (one occurrence with a new change sequence), partial snapshot removes nothing, unreadable data changes nothing, complete snapshot cancels missing events, repeats keep their duration | — | Implemented (P4, P5) |
 | EVENT-01 | `LisaMatching`, `LisaReview/ProposalService.swift` (re-matching, review actions, `.ics` export), proposals from invitations and extraction | Temporary checks PASS (Linux): matched, possible, not found, dismissed, awaiting refresh; export round trip (engine) | — | Partial: engine (P2) and service (P4); service-level checks in Phase T |
 | NEWS-01 | `LisaFeeds`, `LisaXML`, `LisaRanking`, `LisaIngestion/NewsIngestion.swift`; feed fetching P6 | Temporary checks PASS (Linux): RSS/Atom, mutes, duplicates, reasons, title-only label (engines) | — | Partial: engines (P2), ingestion (P4); feeds P6 |
 | NEWS-02 | `LisaXSource` | — | Live X API | Planned (P6) |
 | NEWS-03 | `LisaDiscordSource` | — | Live Discord bot | Planned (P6) |
 | NEWS-04 | `LisaOwnerData/CaptureService.swift` (shared links and text become shared news items); share sheet P8 | Temporary checks PASS (Linux): the same link shared twice is one item | Apple share sheet | Partial: capture workflow (P4); Apple P8 |
-| MEM-01 | `LisaDomain/Preference.swift`, `LisaOwnerData/PreferenceService.swift`, `PreferenceMapping.swift`, `EffectiveSettings` (D-30) | Temporary checks PASS (Linux): devices cannot set consequential keys; inference refused for them and ineffective until confirmed; explicit values never replaced; invalid values refused; deletion restores configuration | — | Implemented (P4) |
+| MEM-01 | `LisaDomain/Preference.swift`, `LisaOwnerData/PreferenceService.swift`, `PreferenceMapping.swift`, `EffectiveSettings` (D-30); `lisa preference` | Temporary checks PASS (Linux): devices cannot set consequential keys; inference refused for them and ineffective until confirmed; explicit values never replaced; invalid values refused; deletion restores configuration | — | Implemented (P4–P5) |
 | IDEA-01 | `LisaDomain/Idea.swift`, `Capture.swift`, `LisaOwnerData/CaptureService.swift`, `IdeaService.swift`, unschedulable reasons in `LisaAgenda/PlanService.swift` | Temporary checks PASS (Linux): lifecycle; capture saved without a model; retried capture deduplicated | Siri, apps | Implemented (P4); Apple entry points P8 |
 | MODEL-01 to MODEL-04 | `LisaInference` (provider boundary, validator, bounded repair, deterministic provider, data-sharing policy), `LisaReview/ExtractionService.swift`; HTTP adapter P6 | Temporary checks PASS (Linux): quotes, confirmation authority, dates, one repair, remote refused by policy, minimization; without a model email waits as awaiting model; injected instructions change no recipient, number or preference | Live endpoint | Partial: core and service (P2, P4); adapter P6 |
 | PLAN-01 to PLAN-05 | `LisaPlanning` (D-15), `LisaAgenda/PlanService.swift` (revisions, explained changes, block actions, rejection fingerprints) | Temporary checks PASS (Linux): §16.2 fixture exact, no overlaps, determinism, locks preserved, allocation cap, provisional, rejections; service plans events and tasks and accepts blocks; timezone change replans | — | Implemented (P2, P4) |
@@ -43,21 +43,21 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 | NOTIFY-02 | `LisaDomain/DeviceRegistration.swift`, `LisaDevices/DeviceService.swift` (D-29); API routes P5 | Temporary checks PASS (Linux): single-use pairing codes with an attempt limit; separate credentials; topic and environment checks; stale provider reports ignored; revocation cancels pending deliveries | Devices | Partial: service (P4); API P5/P7 |
 | NOTIFY-03 | `LisaDomain/NotificationIntent.swift`, `Delivery.swift`, `LisaDelivery`, `LisaAgenda` (D-26, D-27) | Temporary checks PASS (Linux): successive changes each delivered once per device across a retry and a restart; pending changes coalesce, delivered ones never; crash after submission and unknown outcomes are not resent; retries bounded | — | Implemented (P4) |
 | NOTIFY-04 | `LisaAPNs`, `LisaCurl`, `LisaCrypto` | — | Live APNs | Planned (P6); Apple-specific details need documentation access |
-| NOTIFY-05 | `LisaClient`, `Apps/` | — | Devices | Planned (P5, P8) |
+| NOTIFY-05 | `LisaClient/NotificationActionHandler.swift` (deterministic request IDs, durable queue), `NotificationCategoryID`/`NotificationActionID` in the contract; Apple bridge P8 | Temporary checks PASS (Linux) (in process): an action taken offline is queued once and applied once after reconnecting, suppressing every device's pending delivery | Devices | Partial: portable action handling (P5); Apple P8 |
 | NOTIFY-06 | `LisaPolicy/NotificationContentPolicy.swift`, `UrgencyRule.swift`; APNs P6; Apple P8 | Temporary checks PASS (Linux): generic content, opt-in titles truncated, Time Sensitive only for urgent confirmed deadlines | Devices | Partial: policy implemented (P2) |
 | NOTIFY-07 | Outbox and queue outage behavior (P4); `LisaRuntime`, `docs/OPERATIONS.md`, `docs/SETUP-APPLE.md` | — | VPN route, devices | Partial (P4); P5–P8 |
-| UI-01 to UI-03 | `LisaPresentation`, `LisaClient`, `Apps/` | — | Mac, iPhone, iPad | Planned (P5, P8) |
+| UI-01 to UI-03 | `LisaClient` (offline queue, response cache), `LisaPresentation` and `Apps/` (P8) | Temporary checks PASS (Linux) (in process): queued captures and actions survive restarts and apply once after reconnecting; conflicts are recoverable; cache keeps age | Mac, iPhone, iPad | Partial: portable queue and cache (P5); UI P8 |
 | SIRI-01, SIRI-02 | `Apps/Shared` App Intents, `docs/SETUP-APPLE.md` | — | Devices | Planned (P8) |
 | APPLE-01 | `Apps/project.yml` (XcodeGen), entitlements | — | Mac | Planned (P8) |
-| API-01 to API-03 | `LisaAPIContract`, `LisaAPI`, `LisaAPIServer` | — | — | Planned (P5, P7) |
+| API-01 to API-03 | `LisaAPIContract`, `LisaAPI` (router, D-35), in-process transport in `LisaHost`; network server P7; `docs/API.md` | Temporary checks PASS (Linux) (in process): request IDs required, replayed and refused when reused; validation; 409 with current revision; pagination; 413; 429; device authentication and permissions; credential never returned | — | Partial: contract and router (P5); network transport P7 |
 | SEC-01 | `LisaSecrets`, `LisaRedaction`, Keychain (P8) | Temporary checks: references, protected files, redaction — PASS | Keychain on devices | Partial (P1) |
 | SEC-02 | `LisaXML` (D-12), `LisaHTMLText` (D-14); network boundaries P6 | Temporary checks PASS (Linux): XXE, entity expansion, external DTD not loaded, malformed recovery, script removal | — | Partial: content boundaries implemented (P2) |
-| SEC-03 | Principal checks in every service, device credential verifiers (D-29), `LisaInference` minimization; `docs/SECURITY.md` (P5) | Temporary checks PASS (Linux): models and devices refused for owner-only operations | — | Partial (P4); document P5 |
-| OPS-01 | `LisaRuntime`, `LisaLogging` | Temporary checks: redacted logs, rotation — PASS | — | Partial (P1 logging) |
-| OPS-02 | Limits in every engine (`ICalendarLimits`, `MIMELimits`, `XMLReadLimits`, `ModelUsageLimits`, planner caps), connector page limits, delivery attempt limits | Temporary checks PASS (Linux): recurrence and size limits, log growth, delivery retry exhaustion | — | Partial (P1–P4) |
-| CLI-01 | `lisa` executable | — | — | Planned (P5, P7) |
-| DEMO-01 | `LisaDemo`, `Fixtures/` | — | — | Planned (P5) |
-| CFG-01 to CFG-03 | `LisaConfig`, `config.example.json5`, `docs/SETUP-LINUX.md` | — | — | Planned (P5) |
+| SEC-03 | Principal checks in every service, device credential verifiers (D-29), `LisaInference` minimization, `docs/SECURITY.md` (what each provider receives) | Temporary checks PASS (Linux): models and devices refused for owner-only operations | — | Implemented (P4–P5) |
+| OPS-01 | `LisaRuntime` (lock, persisted schedules, bounded cycles, isolated source jobs, backoff with jitter honoring retry-after, maintenance, signals), `LisaLogging` | Temporary checks PASS (Linux): runtime cycle over a local source; failing source isolated; health reports the cycle | — | Implemented (P5); `serve` loop P7 |
+| OPS-02 | `LisaConfig` `limits` section passed to every processor (message, feed, items, bytes, recurrence, concurrency, model, logs, raw content), connector page limits, delivery attempt limits | Temporary checks PASS (Linux): recurrence and size limits, log growth, delivery retry exhaustion, oversized request bodies, configuration bounds | — | Implemented (P1–P5) |
+| CLI-01 | `Sources/LisaCLI` (`lisa`: doctor, demo, run-once, import, capture, plan, brief, status, export, backup, restore, device, task, reminder, proposal, preference; D-39) | Linux runs of `lisa --help`, `lisa demo` (exit 0) and `lisa doctor` (valid and invalid configuration) | — | Partial: everything except `serve` and client mode (P7) |
+| DEMO-01 | `LisaDemo`, `Fixtures/`, `lisa demo` (D-39) | Temporary checks PASS (Linux), and the real executable on Linux: all eight steps pass, including the restart without duplicates | — | Implemented (P5) |
+| CFG-01 to CFG-03 | `LisaConfig` (JSON5 reader, schema version 1, validation), `config.example.json5`, `lisa doctor`, `docs/SETUP-LINUX.md` | Temporary checks PASS (Linux): the example validates; syntax errors carry line and column; unknown keys and unsafe settings are refused with actionable messages | — | Implemented (P5) |
 
 ## Linux acceptance (R1 §16.1)
 
@@ -65,16 +65,19 @@ L01–L33 are verified first by temporary checks in the phases shown in plan §9
 
 | Test | Status |
 |---|---|
-| L01 | Partial: Phase 1–4 modules build in debug and release on Linux (aarch64, Swift 6.4.2) |
+| L01 | Partial: Phase 1–5 modules build in debug and release on Linux (aarch64, Swift 6.4.2) |
 | L04, L06, L08, L11, L14 | Temporary checks PASS (engine level); persistent tests in Phase T |
 | L03 | Temporary checks PASS (store level; restart across reopen) |
-| L05, L07, L09, L10, L15, L16, L19, L28, L32 | Temporary checks PASS (service level, Phase 4) |
+| L05, L07, L09, L10, L15, L16, L19, L28, L32 | Temporary checks PASS (service level, Phase 4; L05 and L10 extended in process, Phase 5) |
+| L24 | Temporary checks PASS, and `lisa demo` on Linux: the full synthetic workflow across a restart (Phase 5) |
+| L20, L21, L30 | Partial: in-process parts PASS (Phase 5); network parts in Phase 7 |
 | L12, L13 | Temporary checks PASS (engine level P2; service recomputation and grounding P4) |
 | L17, L33 | Temporary checks PASS (policy P2; send-time gate, escalation and device levels P4) |
-| L22 | Partial: recurrence, message, document, model-output and delivery-retry limits checked (temporary) |
+| L22 | Partial: recurrence, message, document, model-output, delivery-retry, request-size and configuration limits checked (temporary) |
 | L23 | Temporary checks PASS (v1→v3 migration, failed migration, restore) |
 | L25, L26, L29, L31 | Partial: service parts PASS (temporary, P4); API, client and Apple parts in P5–P8 |
-| L02, L18, L20, L21, L24, L27, L30 | Planned |
+| L02 | Planned: the persistent offline suite is Phase T |
+| L18, L27 | Planned (Phase 6) |
 
 ## Apple acceptance (R1 §16.4)
 
