@@ -8,8 +8,8 @@ import LisaMIME
 import LisaPorts
 import LisaTime
 
-/// Stores messages from a mailbox or local mail files. Messages are deduplicated per source by their stable key and
-/// by Message-ID, so re-fetching never stores a message twice.
+/// Stores messages from a mailbox or local mail files. Messages are deduplicated by their stable per-source key and
+/// by Message-ID across all sources, so re-fetching or re-importing never stores a message twice.
 public struct MailBatchProcessor: BatchProcessor {
     public struct PreparedMessage: Sendable {
         var item: FetchedItem
@@ -113,12 +113,10 @@ public struct MailBatchProcessor: BatchProcessor {
                 outcome.unchanged += 1
                 continue
             }
+            // Message-IDs are globally unique, so the same message arriving through a second source (for example a
+            // local import of a message already fetched by IMAP) is stored once and never re-extracted (L05).
             if let messageID = parsed.messageID,
-                try tx.first(
-                    EmailMessage.self,
-                    RecordQuery.all.filter("source_id", equals: source.id.rawValue).filter(
-                        "message_id", equals: messageID))
-                    != nil
+                try tx.first(EmailMessage.self, RecordQuery.all.filter("message_id", equals: messageID)) != nil
             {
                 outcome.unchanged += 1
                 continue
