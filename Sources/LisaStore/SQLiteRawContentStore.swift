@@ -37,6 +37,22 @@ public final class SQLiteRawContentStore: RawContentStore {
         }
     }
 
+    public func purge(keepingAtMostBytes budget: Int) throws -> Int {
+        try database.writeTransaction { session in
+            let total = try session.query("SELECT COALESCE(SUM(size), 0) FROM raw_content").first?.first?.integer ?? 0
+            var excess = total - Int64(max(0, budget))
+            guard excess > 0 else { return 0 }
+            var oldest: [String] = []
+            for row in try session.query("SELECT id, size FROM raw_content ORDER BY stored_at ASC, id ASC") {
+                guard excess > 0, let id = row[0].text, let size = row[1].integer else { break }
+                oldest.append(id)
+                excess -= size
+            }
+            for id in oldest { try session.query("DELETE FROM raw_content WHERE id = ?", [.text(id)]) }
+            return oldest.count
+        }
+    }
+
     public func purge(storedBefore cutoff: Date) throws -> Int {
         try database.perform { session in
             try session.query(
