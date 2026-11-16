@@ -82,9 +82,16 @@ public final class LisaApplication: Sendable {
     /// Calendar changes to events starting within this many hours are important enough to notify.
     public static let changeRelevanceHours = 48
     public let services: LisaServices
+    /// Which APNs topics and environments device tokens may be registered for (from configuration).
+    public let pushPolicy: PushRegistrationPolicy
 
-    public init(services: LisaServices) {
+    /// The default push policy accepts no tokens until APNs is configured.
+    public init(
+        services: LisaServices,
+        pushPolicy: PushRegistrationPolicy = PushRegistrationPolicy(allowedTopics: [], allowedEnvironments: [])
+    ) {
         self.services = services
+        self.pushPolicy = pushPolicy
     }
 
     var store: any RecordStore { services.store }
