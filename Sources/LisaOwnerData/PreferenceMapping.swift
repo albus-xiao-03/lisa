@@ -89,8 +89,9 @@ public enum PreferenceMapping {
             return false
         case .modelDataSharing:
             let policy = try text(value, key)
-            guard ["none", "local-only", "extraction-only", "full"].contains(policy) else {
-                throw invalid(key, "must be none, local-only, extraction-only or full")
+            // The raw values of the inference module's data-sharing policy (`ModelDataSharing`).
+            guard ["none", "localOnly", "remoteMinimized"].contains(policy) else {
+                throw invalid(key, "must be none, localOnly or remoteMinimized")
             }
             return false
         default:
