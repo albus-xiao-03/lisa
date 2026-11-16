@@ -21,7 +21,8 @@ public enum ForwardedMessageDetector {
     ]
 
     public static func detect(in text: String) -> InlineForward? {
-        let lines = text.components(separatedBy: "\n")
+        // Any newline, including CRLF, which Swift treats as a single character.
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
         guard
             let markerIndex = lines.firstIndex(where: { line in
                 let normalized = line.trimmingCharacters(in: .whitespaces).lowercased()
