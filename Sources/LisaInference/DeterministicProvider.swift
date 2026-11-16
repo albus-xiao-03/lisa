@@ -28,7 +28,8 @@ public struct DeterministicProvider: ModelProvider {
 
     static func items(in content: String) -> [ModelExtractedItem] {
         var items: [ModelExtractedItem] = []
-        for rawLine in content.components(separatedBy: "\n") {
+        // Any newline, including CRLF, which Swift treats as a single character.
+        for rawLine in content.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init) {
             let line = rawLine.trimmingCharacters(in: .whitespaces).trimmingCharacters(
                 in: CharacterSet(charactersIn: ">*- "))
             let lower = line.lowercased()
