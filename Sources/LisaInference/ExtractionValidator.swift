@@ -52,7 +52,8 @@ public enum ExtractionValidator {
         guard text.utf8.count <= limits.maxResponseBytes else { throw PayloadError.tooLarge }
         var body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if body.hasPrefix("```") {
-            body = body.split(separator: "\n", omittingEmptySubsequences: false).dropFirst().joined(separator: "\n")
+            body = body.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).dropFirst().joined(
+                separator: "\n")
             if let fence = body.range(of: "```", options: .backwards) { body = String(body[..<fence.lowerBound]) }
         }
         do {
