@@ -12,7 +12,7 @@
 | Format and decision engines | `LisaICalendar`, `LisaMIME`, `LisaXML`, `LisaFeeds`, `LisaHTMLText`, `LisaPlanning`, `LisaPolicy`, `LisaMatching`, `LisaRanking`, `LisaBriefComposer`, `LisaInference` | Implemented (Phase 2) |
 | Persistence | `LisaPorts`, `CSQLite`, `LisaSQLite`, `LisaStore` | Implemented (Phase 3) |
 | Application services | `LisaIngestion`, `LisaReview`, `LisaDelivery`, `LisaAgenda`, `LisaDevices`, `LisaOwnerData`, `LisaApplication`, `LisaCrypto` | Implemented (Phase 4) |
-| Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaDemo`, `LisaFixtures`, `lisa` | Phase 5 |
+| Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaLocalSources`, `LisaDemo`, `LisaFixtures`, `lisa` (`LisaCLI`) | Implemented (Phase 5; Linux) |
 | Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Phase 6 |
 | Network API | `LisaAPIServer` | Phase 7 |
 | Apple applications | `LisaPresentation`, `Apps/` | Phase 8 |
@@ -41,6 +41,26 @@ Services depend only on `RecordStore` (in `LisaPorts`); `LisaStore` implements i
 - **Ports:** services reach storage only through `RecordStore`, settings through `SettingsSource` (configuration overlaid with effective preferences, D-30), sources through `SourceConnector`, and transports through the email, call, push and local-notification protocols. Live adapters arrive in Phase 6; until then only dry-run transports exist.
 - **Delivery path:** decision → notification occurrence and per-device delivery records in one transaction → leased claim → send-time re-check by the payload owner → recipient enforcement and the call gate → *submitting* recorded → transport → classified result (D-26, D-27).
 - **Transactions:** code inside a transaction uses only that transaction (D-34).
+
+## Host, runtime and API (Phase 5)
+
+- **Composition:** `LisaHost` opens in plan §5.2 order:
+  1. the data-directory lock;
+  2. logging;
+  3. the SQLite store;
+  4. effective settings (configuration overlaid with preferences);
+  5. adapters;
+  6. services and the facade;
+  7. the runtime;
+  8. the router;
+  9. the in-process transports.
+
+  Recovery after downtime runs before anything else (D-36).
+- **One API path:** every client action goes through `LisaClient`, then `APITransport`, then `LisaAPI` (the router), then `LisaApplication`. The CLI, the demo and the Mac app's embedded mode use the in-process transport as the local owner; paired devices authenticate with their credential. Validation, request identities, revision checks and permissions are identical for both (D-35).
+- **Clients:** `LisaClient` depends only on Foundation and the contract, so the iPhone and iPad app can link it. It provides the typed client, the durable offline queue with stable request IDs, the response cache and notification-action handling.
+- **Runtime:** `LisaRuntime` holds the single-writer lock and persisted schedules, and runs bounded cycles with isolated source jobs, backoff with jitter, daily maintenance and graceful shutdown (D-36).
+- **Configuration:** `LisaConfig` reads a versioned JSON5 file with its own bounded reader. Validation is strict and actionable, unknown keys are reported, secrets are references only, and every delivery channel defaults to a dry run.
+- **Offline demonstration:** `LisaDemo`, with `LisaFixtures` rooted at `Fixtures/`, runs DEMO-01 without accounts or network (D-39).
 
 ## Trust boundaries (so far)
 
