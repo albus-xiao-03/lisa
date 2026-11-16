@@ -120,7 +120,7 @@ public struct ParsedMail: Sendable {
             } else if type.mimeType == "text/html", !isAttachment {
                 let decoded = CharsetDecoder.decode(entity.body, charset: type.charset)
                 if !decoded.faithful { warnings.append("an HTML part used an unsupported charset") }
-                let converted = htmlToText(decoded.text)
+                let converted = htmlToText(decoded.text).replacingOccurrences(of: "\r\n", with: "\n")
                 htmlConverted += (htmlConverted.isEmpty ? "" : "\n\n") + converted
             } else {
                 let name = entity.disposition?.filename ?? type.parameters["name"].map(EncodedWords.decode)
