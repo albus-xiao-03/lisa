@@ -1,0 +1,7 @@
+[
+  { "key": "news.interests", "value": { "list": ["swift", "productivity"] } },
+  { "key": "brief.topics", "value": { "list": ["open source"] } },
+  { "key": "planning.windows", "value": { "list": ["weekdays 08:00-17:00"] } },
+  { "key": "planning.bufferMinutes", "value": { "number": 10 } },
+  { "key": "ideas.explorationMinutes", "value": { "number": 45 } }
+]
