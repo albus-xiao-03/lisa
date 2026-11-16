@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Demo Developer Blog</title>
+  <subtitle>Synthetic demonstration feed for Lisa. Not real content.</subtitle>
+  <link href="https://blog.example.org/demo/" rel="alternate"/>
+  <link href="https://blog.example.org/demo/feed.atom" rel="self"/>
+  <id>tag:blog.example.org,2026:demo-feed</id>
+  <updated>2026-11-16T09:20:00Z</updated>
+  <author>
+    <name>Demo Blog Team</name>
+  </author>
+  <entry>
+    <title>An open source template for weekly reviews</title>
+    <link href="https://blog.example.org/demo/open-source-weekly-review-template" rel="alternate"/>
+    <id>tag:blog.example.org,2026:demo/open-source-weekly-review-template</id>
+    <published>2026-11-16T09:20:00Z</published>
+    <updated>2026-11-16T09:20:00Z</updated>
+    <category term="open source"/>
+    <summary>A synthetic, freely licensed template for a short Friday review.</summary>
+  </entry>
+  <entry>
+    <title>Server-side Swift meetup recap: structured concurrency in practice</title>
+    <link href="https://blog.example.org/demo/server-side-swift-meetup-recap" rel="alternate"/>
+    <id>tag:blog.example.org,2026:demo/server-side-swift-meetup-recap</id>
+    <published>2026-11-15T15:40:00Z</published>
+    <updated>2026-11-15T15:40:00Z</updated>
+    <category term="swift"/>
+    <summary>Notes from a synthetic demo meetup about task groups and cancellation.</summary>
+  </entry>
+  <entry>
+    <title>Demo league goalkeepers of the season, ranked</title>
+    <link href="https://blog.example.org/demo/goalkeepers-ranked" rel="alternate"/>
+    <id>tag:blog.example.org,2026:demo/goalkeepers-ranked</id>
+    <published>2026-11-15T08:30:00Z</published>
+    <updated>2026-11-15T08:30:00Z</updated>
+    <category term="sports"/>
+    <summary>A synthetic ranking of demo league goalkeepers.</summary>
+  </entry>
+  <entry>
+    <title>Swift on Linux: notes from the demo build farm</title>
+    <link href="https://blog.example.org/demo/swift-on-linux-build-farm" rel="alternate"/>
+    <id>tag:blog.example.org,2026:demo/swift-on-linux-build-farm</id>
+    <published>2026-11-14T20:00:00Z</published>
+    <updated>2026-11-14T20:00:00Z</updated>
+    <category term="swift"/>
+  </entry>
+</feed>
