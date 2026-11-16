@@ -233,6 +233,13 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - `LisaMatching` and `LisaInference` → `LisaTime`, for local dates and date resolution;
   - `LisaPorts` → `LisaRedaction`, because a push message carries the device token as `Sensitive<String>`;
   - `LisaReview` → `LisaTime`, and `LisaApplication` → `LisaTime` and `LisaLogging`, for the injected clock and logger.
+- **Phase 5 additions**, again only edges to earlier rows or new modules placed before their users:
+  - `LisaAPI` → `LisaTime`, `LisaLogging`, `LisaCrypto`, `LisaPorts`, `LisaAgenda`, `LisaDevices` and `LisaOwnerData`, for the types in the facade's signatures and SHA-256 request fingerprints;
+  - `LisaRuntime` → `LisaDomain`, `LisaIngestion` and `LisaOwnerData`;
+  - `LisaHost` → the service and adapter modules it composes, plus `LisaConfig`, `LisaMIME` and `LisaICalendar` for the configured limits;
+  - `LisaDemo` → the modules its scenario drives;
+  - `LisaCLI` → `LisaConfig`, `LisaHost`, `LisaClient`, `LisaDemo` and swift-argument-parser.
+- **New modules:** `LisaLocalSources` (D-37) sits before `LisaHost`. `LisaFixtures` is rooted at `Fixtures/`, as plan §5.1 says.
 - **Why:** declaring every imported module keeps the dependency graph explicit; nothing relies on a transitive import.
 
 ## D-26 — Delivery outbox processing (REM-03, NOTIFY-03, EMAIL-01, CALL-01)
@@ -285,7 +292,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - lists: entries or comma-separated text;
   - phone numbers: E.164;
   - the model endpoint: https or loopback;
-  - data sharing: `none`, `local-only`, `extraction-only` or `full`.
+  - data sharing: `none`, `localOnly` or `remoteMinimized` (the inference module's `ModelDataSharing` values; corrected in Phase 5).
 - **Exploration frequency:** a frequency of n per week becomes a daily idea budget of duration × n ÷ 7 minutes.
 - **Authority:**
   - explicit values replace inferred ones, never the reverse;
@@ -323,7 +330,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - failures are classified on the source, and the cursor stays put;
   - the most recent capability and parse notes are kept on the source.
 - **Mail:**
-  - deduplicated per source by the stable message key, and by Message-ID;
+  - deduplicated by the stable per-source message key, and by Message-ID across all sources (made global in Phase 5, so a message imported through a second source is never stored or extracted twice);
   - owner addressing comes from the owner's approved addresses: forwarded by the owner, sent by the owner, direct, carbon copy, or unknown sender;
   - the owner's own words (the note above a forward, or the body of a message the owner sent) are stored separately as the only text that can confirm a commitment;
   - attached invitations become event proposals without a model.
@@ -347,3 +354,85 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 
 - **Rule:** code inside a store transaction uses only that transaction. Effective settings (which read preferences) and raw content are read or written before or after it; batch processors read settings in their preparation step.
 - **Guard:** `SQLiteDatabase` detects use of the connection from inside one of its own transactions on the same thread and fails with `SQLITE_MISUSE`, instead of deadlocking on its lock. Phase 4 verification found exactly this deadlock in ingestion before the rule was applied.
+
+## D-35 — API contract and router (API-01–API-03)
+
+- **Contract:** `LisaAPIContract` depends on Foundation only. It defines every route, request and response type, the error model, pagination, the push-payload schema, and the notification category and action identifiers. Clients never see domain types.
+- **Routes:** the API-02 list, plus documented extensions:
+  - creating tasks;
+  - editing ideas;
+  - plan-block actions;
+  - listing reminders;
+  - notification actions;
+  - a proposal's `.ics` file;
+  - pairing codes;
+  - export.
+- **Callers:** the in-process transport is trusted as the local owner. Every other caller authenticates with a device credential (`Authorization: Bearer`), or with the owner credential that the network phase adds. The pairing route is authenticated by its one-time code.
+- **Request identities:**
+  - every mutation carries `Lisa-Request-ID` (8–128 letters, digits or `._:-`);
+  - the ledger keys requests by caller and ID, and fingerprints the method, path, query and body with SHA-256;
+  - a retry replays the recorded answer; reusing an ID for a different request is a 422;
+  - definite answers (2xx, 400, 403, 404, 409, 413) are kept for 30 days, while 401, 429 and 5xx are retried for real;
+  - concurrent duplicates wait for the first;
+  - pairing responses carry a credential or a pairing code, so they are never recorded.
+- **Revision checks:** task and idea patches, proposal actions, plan-block actions and device preferences require the revision the client saw; a mismatch is a 409 with the current revision.
+- **Limits and errors:**
+  - pages of at most 200, with a stable cursor (the last record ID);
+  - request bodies of at most 256 KiB;
+  - a fixed one-minute window per caller (300 requests; anonymous callers get a tenth);
+  - typed error codes with distinct statuses; messages never echo secrets or private content.
+
+## D-36 — Host composition and runtime (ARCH-03, OPS-01, OPS-02)
+
+- **Single writer:** an exclusive `flock` on `<data directory>/lisa.lock`, released by the operating system if the process dies. A second writer fails with the owner's process ID and mode.
+- **Startup order:** the host opens in plan §5.2 order, then recovers after downtime: expired leases first, then missed reminders.
+- **No silent substitution:**
+  - live delivery on a channel without an adapter refuses to start instead of falling back to a dry run;
+  - a configured source whose adapter is not in the build is registered and marked unavailable;
+  - a missing remote model adapter leaves email "awaiting model".
+- **Cycle:**
+  - due sources run with bounded concurrency, isolated from each other;
+  - failures back off exponentially with jitter, never earlier than a provider's retry-after;
+  - then the application cycle runs, and daily maintenance (retention and ledger pruning).
+- **Persistence:** schedules persist in `runtime-state.json`, and dry-run captures in `dry-run/captures.jsonl` (owner-only, bounded).
+- **Shutdown:** SIGINT and SIGTERM end the loop after the current cycle.
+
+## D-37 — Local directory sources (INGEST-01, CLI-01, DEMO-01)
+
+- **New module:** `LisaLocalSources`, not in plan §5.1, imports local files for `lisa import` and the offline demo:
+  - `.eml` mail, read incrementally by file name;
+  - `.ics` calendars and RSS/Atom feeds, read as complete snapshots.
+- **File handling:** regular files only, without following symbolic links or descending into subdirectories, within the sync limits. An oversized file is skipped with a note.
+- **Effect on later phases:** `LisaCalendarFeeds` (Phase 6) therefore covers HTTPS subscriptions only.
+
+## D-38 — Push payload (NOTIFY-04, NOTIFY-06)
+
+- **Source:** keys verified on 2026-11-16 against Apple's "Generating a remote notification" and "Sending notification requests to APNs" (official DocC JSON).
+- **`aps` dictionary:** `alert` with `title-loc-key` and `loc-key`, plus `category`, `thread-id`, `sound: "default"`, and `interruption-level` `active` or `time-sensitive`. There are no silent, badge or critical keys.
+- **Item titles:** a device that opted in to titles gets the `<CATEGORY>_BODY_TITLED` localization key, with the truncated title as its only `loc-args` value.
+- **Custom data:** the `lisa` object holds only a schema version, the kind, and opaque notification and subject identifiers with the subject revision.
+- **Size:** payloads stay under 4 KB (4,096 bytes), and collapse identifiers within 64 bytes.
+
+## D-39 — Command-line interface and offline demonstration (CLI-01, DEMO-01, CFG-02)
+
+- **`lisa` commands:**
+  - `doctor`, `demo`, `run-once`, `import`, `capture`, `plan`, `brief`, `status`, `export`, `backup` and `restore`;
+  - `device` (`pair-code`, `list`, `revoke`), `task`, `reminder`, `proposal` and `preference`.
+
+  `serve` and client mode arrive with the network server (Phase 7).
+- **Paths:** the configuration file is `--config`, then `$LISA_CONFIG`, then `~/.config/lisa/config.json5`. `--data-dir` overrides the configured directory.
+- **Lock:** every command takes the single-writer lock, so while another runtime owns the directory it exits with code 4 instead of competing.
+- **Exit codes:** 0 success, 1 failure, 3 invalid configuration, 4 data directory in use, 5 checks failed, 6 host refused to start, 64 usage error.
+- **Client path:** commands act through the owner's in-process client, exactly the path the apps use.
+- **Demonstration:**
+  - It runs only in a new or empty directory, so it can never touch real data.
+  - Its clock is fixed at 2026-11-16 08:00 America/New_York, its identities and fixtures are synthetic and labeled, every channel is dry-run, and extraction uses the rule-based provider.
+  - Two synthetic devices pair, register and acknowledge through the same API path real devices use.
+  - It restarts once, and fails any check whose evidence is missing.
+
+## D-40 — Defects found and fixed in Phase 5
+
+- **Recurrence durations (CAL-01).** Every repeat after the first was measured from its own start to the series' DTEND, so repeats lasted zero minutes and looked like free time to the planner. Instances now use the series' own duration; overrides and one-off events keep their own.
+- **CRLF lines (MAIL-01).** Swift treats `"\r\n"` as one character, so `components(separatedBy: "\n")` did not split it. HTML-converted text kept CRLF, and a `Due:` line in an HTML paragraph never reached its task. HTML text and mail text are now normalized, and line-based readers split on any newline.
+- **Feed raw content (DATA-05).** The feed document was stored on every synchronization, even when every entry was already known. It is now kept only when an entry is new.
+- **Cross-source duplicates (L05).** Message-IDs were deduplicated per source, so importing a message through a second source stored it, and extracted its commitments, twice. They are now deduplicated across sources (D-32).
