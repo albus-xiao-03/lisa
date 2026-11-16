@@ -69,11 +69,16 @@ public enum HTMLText {
         }
     }
 
-    /// Collapses runs of spaces and blank lines and bounds the length.
+    /// Collapses runs of spaces and blank lines and bounds the length. Line endings are normalized first: Swift treats
+    /// `"\r\n"` as one character, so splitting on `"\n"` alone would leave CRLF lines joined.
     static func collapse(_ text: String, limit: Int) -> String {
         var lines: [String] = []
         var blank = false
-        for rawLine in text.replacingOccurrences(of: "\u{00A0}", with: " ").components(separatedBy: "\n") {
+        let normalized = text.replacingOccurrences(of: "\u{00A0}", with: " ").replacingOccurrences(
+            of: "\r\n", with: "\n"
+        )
+        .replacingOccurrences(of: "\r", with: "\n")
+        for rawLine in normalized.components(separatedBy: "\n") {
             let line = rawLine.split(whereSeparator: { $0 == " " || $0 == "\t" || $0 == "\r" }).joined(separator: " ")
             if line.isEmpty {
                 if !blank, !lines.isEmpty { lines.append("") }
