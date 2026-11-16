@@ -21,4 +21,7 @@ public protocol RawContentStore: Sendable {
     /// Deletes content stored before `cutoff`; returns how many items were removed.
     @discardableResult
     func purge(storedBefore cutoff: Date) throws -> Int
+    /// Deletes the oldest content until at most `budget` bytes remain (OPS-02); returns how many items were removed.
+    @discardableResult
+    func purge(keepingAtMostBytes budget: Int) throws -> Int
 }
