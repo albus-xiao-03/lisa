@@ -1,0 +1,418 @@
+// Lisa configuration, schema version 1.
+//
+// The file is JSON5: comments, trailing commas, unquoted keys and 'single-quoted' text are allowed. Lisa reads it
+// completely or not at all: if any setting is wrong, every problem is listed with its line and column, and a
+// misspelled setting is reported rather than ignored.
+//
+// SAFE BY DEFAULT. As written, this configuration contacts no one. Every delivery channel is a dry run, which records
+// each intended email, call or push without sending it; email and calls are disabled; every source is disabled; and
+// the model is the built-in deterministic provider, which sends nothing anywhere. A section left out of the file takes
+// these same safe defaults.
+//
+// SECRETS NEVER GO IN THIS FILE. A setting whose name ends in "Secret" holds a reference to where the secret lives:
+//   env:NAME                   an environment variable
+//   file:/absolute/path        a file that only the owner can read (mode 0600)
+//   keychain:service/account   a Keychain item (Apple applications only)
+// A password, token or key written here directly is rejected.
+//
+// PRODUCTION SETUP HAS FOUR SEPARATE STEPS, each a deliberate change:
+//   1. Configure an adapter: fill in its section (email, calls, notifications.apns, model, or an entry in sources)
+//      with host names, identifiers and secret references. This only describes how to reach the service: nothing is
+//      contacted and nothing is sent.
+//   2. Verify access: run `lisa doctor`, which validates this file and reports capabilities without sending messages,
+//      placing calls or pushing notifications. Fix what it reports before going on.
+//   3. Enable scheduled operation: set a source's `enabled: true` so it is synchronized on its schedule, and set
+//      delivery.emailEnabled or delivery.callsEnabled so Lisa plans deliveries on that channel. While a channel's
+//      mode is "dryRun", its deliveries are still only recorded.
+//   4. Enable real delivery: set delivery.modes.email, delivery.modes.call or delivery.modes.push to "live". Only then
+//      does Lisa send email, place calls or push notifications, and only to the approved addresses, the approved
+//      number and the owner's paired devices.
+//
+// Every name, address, number and identifier below is synthetic (example.com, example.org, +1 555 numbers).
+{
+  // The schema version. Required; this Lisa reads version 1.
+  version: 1,
+
+  // Where Lisa keeps her data. Required: an absolute path, or one starting with ~/ for the home directory. One Lisa
+  // host uses a data directory at a time. On macOS, for example: "~/Library/Application Support/Lisa".
+  dataDirectory: "~/.local/share/lisa",
+
+  // The IANA time zone for planning, briefs, reminders and quiet hours. Required.
+  timeZone: "America/New_York",
+
+  // PLANNING. Lisa proposes work and idea blocks only inside planning windows, and never over busy calendar time,
+  // protected time or locked blocks. Proposals change only Lisa's own rundown, never a calendar.
+  // A window is { days, start, end, label? }:
+  //   days        "daily", "weekdays", "weekend", or a list of days such as ["mon", "wed", "fri"]
+  //   start, end  "HH:MM" in 24-hour time, in timeZone. end must be later than start, so split a window that would
+  //               cross midnight into two.
+  //   label       optional text shown with the window
+  planning: {
+    // When Lisa may propose blocks. Default: weekdays 09:00-17:00.
+    windows: [
+      { days: "weekdays", start: "09:00", end: "17:00" },
+    ],
+    // Time Lisa never plans into. Default: none.
+    protectedTime: [
+      { days: "daily", start: "12:00", end: "13:00", label: "Lunch" },
+    ],
+    // Minutes kept free before and after busy events. Lisa never invents travel time; set this for breathing room.
+    // Default 0 (0-240).
+    bufferMinutes: 0,
+    // The largest share of free time Lisa may fill with proposals, so the day is not packed. Default 0.75 (0.05-1).
+    maximumAllocation: 0.75,
+    // Minutes per day Lisa may propose for exploring ideas. Default 60 (0-480).
+    ideaExplorationBudgetMinutes: 60,
+    // Durations used when a task or an idea has no estimate. Default 30 each (5-480).
+    defaultTaskMinutes: 30,
+    defaultIdeaMinutes: 30,
+  },
+
+  // DATE READING. How dates that are ambiguous in writing are read. By default they stay unresolved and are shown
+  // with every possible reading, rather than guessed.
+  dateReading: {
+    // Numeric dates such as 03/04: "monthFirst" (March 4), "dayFirst" (3 April), or null to keep them ambiguous.
+    // Default null.
+    numericDateOrder: null,
+    // "next Friday": "ambiguous" (keep both readings), "followingWeek" (the Friday of next week) or "nearestUpcoming"
+    // (the coming Friday). Default "ambiguous".
+    nextWeekday: "ambiguous",
+  },
+
+  // MORNING BRIEF.
+  brief: {
+    // The local time the daily brief is prepared. Default "06:30".
+    deliveryTime: "06:30",
+    // The target length of the readable brief, in words. Deadlines and commitments come first; anything left out
+    // stays in the full view. Default 220 (50-3000).
+    targetWords: 220,
+    // Used only to estimate how long the spoken brief takes. Default 150 (60-400).
+    wordsPerMinute: 150,
+    // If the host was off at brief time, at most one catch-up brief is made when it is back within this many hours;
+    // 0 means no catch-up brief. Default 4 (0-24).
+    catchUpWindowHours: 4,
+    // Topics the brief should cover. Default: none.
+    topics: ["deadlines this week"],
+  },
+
+  // REMINDERS. These are R1 starting values, not established preferences; adjust them freely.
+  reminders: {
+    // Minutes before a confirmed, timed deadline at which a reminder is due. Default [1440, 60], that is 24 hours
+    // and 1 hour (each 1-10080, at most 10 entries).
+    deadlineOffsetsMinutes: [1440, 60],
+    // Deadlines that have a date but no time are reminded only at this local time, and keep their date-only meaning.
+    // Default null: no reminders for date-only deadlines until a time is set.
+    dateOnlyReminderTime: null,
+    // Overdue confirmed tasks are reminded at most once a day, at this time. Default "09:00".
+    overdueReminderTime: "09:00",
+    // Each unresolved event proposal is followed up at most once a day, at this time. Default "09:00".
+    proposalFollowUpTime: "09:00",
+    // Minutes before an accepted plan block starts. Default 10 (0-240).
+    planBlockLeadMinutes: 10,
+    // Remind about relevant changes to confirmed commitments. Default true.
+    notifyCommitmentChanges: true,
+    // The snooze length, in minutes. Default 15 (1-1440).
+    snoozeMinutes: 15,
+    // Quiet hours in timeZone; they may wrap past midnight, and equal times mean no quiet hours. Notifications are
+    // held until quiet hours end and no calls are placed; email is not held. Default 22:00-07:00.
+    quietHours: { start: "22:00", end: "07:00" },
+    // Also send reminders by email, to the approved addresses only. Default false. This needs delivery.emailEnabled,
+    // and nothing is sent while delivery.modes.email is "dryRun".
+    emailReminders: false,
+  },
+
+  // NEWS. An item is selected only when it matches an interest; items from muted sources or on muted topics never
+  // are. Each list defaults to empty.
+  news: {
+    interests: ["urban planning", "swift programming"],
+    // Source names, as given in sources[].name.
+    mutedSources: [],
+    mutedTopics: ["celebrity gossip"],
+  },
+
+  // DELIVERY: whom Lisa may contact, and whether anything is really sent. The approved addresses and number below are
+  // the only destinations Lisa ever uses. They are never taken from messages, calendars or other settings, and
+  // nothing Lisa infers can change them.
+  delivery: {
+    // "dryRun" records each intended delivery without sending it; "live" sends it (step 4). Default "dryRun" for
+    // every channel.
+    modes: {
+      email: "dryRun", // "live" also needs the email section, emailEnabled and an approved address
+      call: "dryRun", // "live" also needs the calls section, callsEnabled and approvedPhoneNumber
+      push: "dryRun", // "live" also needs notifications.apns with a topic and an enabled environment
+    },
+    // Whether Lisa plans email deliveries, such as the brief and reminder emails, at all. Default false.
+    emailEnabled: false,
+    // Whether an urgent reminder may escalate to a phone call at all. Default false.
+    callsEnabled: false,
+    // The owner's own addresses: the only recipients of Lisa's email. Lisa also recognizes the owner by them in
+    // forwarded and copied mail. At most 20. Default: none.
+    approvedEmailAddresses: ["owner@example.com"],
+    // The owner's own number in E.164 form (+, country code and number, no spaces): the only number Lisa may call.
+    // Default null.
+    approvedPhoneNumber: "+15555550100",
+    // Attempts per delivery before it is marked failed. Default 5 (1-20).
+    maxAttempts: 5,
+    // Retry delays: the first wait, then doubling with jitter up to the maximum. Defaults 30 seconds (1-3600) and
+    // 3600 seconds (1-86400, and at least baseBackoffSeconds).
+    baseBackoffSeconds: 30,
+    maxBackoffSeconds: 3600,
+    // How long one worker holds a claimed delivery, in seconds. Default 120 (10-3600).
+    leaseSeconds: 120,
+    // When a reminder may escalate to a call. A call also needs callsEnabled, the approved number, a confirmed and
+    // incomplete commitment, no acknowledgement, no quiet hours and room in the daily limits.
+    calls: {
+      // A confirmed deadline within this many minutes may qualify. Default 15 (1-120).
+      urgencyWindowMinutes: 15,
+      // Only high-priority commitments qualify. Default true.
+      requireHighPriority: true,
+      // An earlier reminder must have been delivered and left unacknowledged. Default true.
+      requireEarlierUnacknowledgedReminder: true,
+      // The most calls per commitment, and in total, per local day. Defaults 1 and 3 (each 1-10).
+      maxCallsPerCommitmentPerDay: 1,
+      maxCallsPerDay: 3,
+    },
+  },
+
+  // EMAIL ADAPTER: SMTP over TLS, sending as Lisa. Optional; without it, email can only be a dry run. Configuring it
+  // sends nothing (step 1): real email also needs delivery.emailEnabled and delivery.modes.email "live", and goes only
+  // to delivery.approvedEmailAddresses. Write email: null to remove the adapter.
+  email: {
+    host: "smtp.example.com",
+    // "implicitTLS" (TLS from the first byte) or "startTLS" (a TLS upgrade that must succeed). There is no plaintext
+    // option, and certificates are always verified. Default "implicitTLS".
+    security: "implicitTLS",
+    // Default 465 for implicitTLS and 587 for startTLS.
+    port: 465,
+    username: "lisa@example.com",
+    // A reference to the SMTP password, never the password itself.
+    passwordSecret: "env:LISA_SMTP_PASSWORD",
+    // Lisa's own address. It must not be one of the owner's approved addresses.
+    fromAddress: "lisa@example.com",
+    // The display name on Lisa's mail. Optional.
+    fromName: "Lisa",
+  },
+
+  // CALL ADAPTER: Twilio Programmable Voice. Optional; without it, calls can only be dry runs. Configuring it places
+  // no call (step 1): real calls also need delivery.callsEnabled, delivery.approvedPhoneNumber and delivery.modes.call
+  // "live", and each call must pass the rule in delivery.calls. Write calls: null to remove the adapter.
+  calls: {
+    // The Account SID from the Twilio console: AC and 32 hexadecimal digits.
+    accountSID: "AC00000000000000000000000000000000",
+    // A reference to the Twilio auth token, never the token itself.
+    authTokenSecret: "env:LISA_TWILIO_AUTH_TOKEN",
+    // The Twilio number calls come from, in E.164 form.
+    fromNumber: "+15555550199",
+  },
+
+  // NOTIFICATIONS. The host decides every notification, and each paired iPhone, iPad and Mac with notifications on
+  // receives it. Notification text is generic; details appear only in the app.
+  notifications: {
+    // Whether the host generates notifications at all. Default true. While delivery.modes.push is "dryRun", pushes
+    // are only recorded.
+    enabled: true,
+    // The owner's opt-in to the Time Sensitive level, for urgent confirmed deadlines only: a high-priority deadline
+    // within urgentDeadlineWindowMinutes whose task is incomplete. It never authorizes a call and never bypasses quiet
+    // hours or limits. Default false, because any level above standard needs explicit configuration.
+    timeSensitiveForUrgentDeadlines: false,
+    // Default 15 (1-120).
+    urgentDeadlineWindowMinutes: 15,
+    // How long a reminder notification may still be delivered after it is due, when nothing else ends it sooner.
+    // Default 240 minutes (1-1440).
+    defaultValidityMinutes: 240,
+    // Notify once when each day's brief is ready. Default true.
+    notifyBriefAvailability: true,
+    // APNS PROVIDER. Optional; without it, pushes can only be dry runs. It needs an Apple Developer Program
+    // membership, an APNs authentication key, and app IDs with the Push Notifications capability. Configuring it
+    // sends nothing (step 1); real pushes also need delivery.modes.push "live". Write apns: null to remove it.
+    apns: {
+      // The environments device registrations may use: development (the sandbox, for development-signed builds) and
+      // production (distribution-signed builds). They stay separate: a device token is only ever sent to its own
+      // environment. Default: both false.
+      environments: { development: false, production: false },
+      // A reference to the APNs authentication key (.p8). The Mac app uses a Keychain reference; a headless host
+      // uses a protected file (mode 0600) or an environment variable.
+      signingKeySecret: "file:/etc/lisa/secrets/apns-signing-key.p8",
+      // The 10-character Team ID and Key ID from the Apple Developer account.
+      teamID: "ABCDE12345",
+      keyID: "ABC123DEFG",
+      // The app bundle identifiers that may register for pushes. At most 10.
+      topics: ["com.example.lisa.companion", "com.example.lisa.mac"],
+    },
+  },
+
+  // MODEL. Without a usable model, captures, calendars, planning and reminders keep working, and items that need
+  // interpretation wait for review instead of being guessed.
+  model: {
+    // "deterministic" (built-in rules that send nothing anywhere; the default), "openAICompatible" (an
+    // OpenAI-compatible Chat Completions endpoint) or "none" (no model at all).
+    provider: "deterministic",
+    // The Chat Completions base address, used only by "openAICompatible": https, or plain http to a loopback address
+    // (127.0.0.1, ::1 or localhost). It may be set ahead of time (step 1).
+    endpoint: "http://127.0.0.1:8080/v1",
+    // The model name sent with each request, used only by "openAICompatible".
+    modelIdentifier: "example-local-model",
+    // A reference to the endpoint's API key, if it needs one. Default null.
+    apiKeySecret: null,
+    // What may be sent to the model: "none" (nothing; only the deterministic provider can be used), "localOnly"
+    // (only to an endpoint on this machine or a private network; the default) or "remoteMinimized" (a remote
+    // endpoint may receive minimized content, with addresses, numbers and links removed). A cloud endpoint needs
+    // "remoteMinimized", chosen explicitly. Only IP addresses and localhost count as local; any other host name is
+    // treated as remote.
+    dataSharing: "localOnly",
+    // Seconds allowed for one request. Default 60 (5-600).
+    requestTimeoutSeconds: 60,
+    // Bounds on model use.
+    limits: {
+      maxInputCharacters: 12000, // characters of content per request; default 12000 (500-200000)
+      maxOutputTokens: 1200, // default 1200 (16-32768)
+      maxRequestsPerDay: 500, // default 500 (1-100000)
+      maxResponseBytes: 65536, // default 65536 (1024-4194304)
+      maxItems: 25, // extracted items accepted from one response; default 25 (1-100)
+    },
+  },
+
+  // SOURCES. Each entry is { kind, key, name, enabled, syncIntervalMinutes, staleAfterMinutes,
+  // retainImportedOnDisable, and the settings of its kind }. At most 100 entries.
+  //   kind                     "mailbox", "calendarFeed", "newsFeed", "xAccount", "discordChannel" or "localImport"
+  //   key                      the source's permanent identity: lowercase letters, digits, '.', '_' and '-'. It is
+  //                            stored with everything imported, so a changed key is a new source. Keys are unique.
+  //   name                     the display name; defaults to the key
+  //   enabled                  synchronize on a schedule (step 3). Default false, so a new source is verified first.
+  //   syncIntervalMinutes      minutes between synchronizations (5-1440). Default 15 for mailbox and localImport,
+  //                            30 for calendarFeed and discordChannel, and 60 for newsFeed and xAccount.
+  //   staleAfterMinutes        the source is reported stale after this long without a successful synchronization
+  //                            (5-43200, and at least syncIntervalMinutes). Default 360, or twice syncIntervalMinutes
+  //                            when that is longer.
+  //   retainImportedOnDisable  keep imported records when the source is disabled or removed. Default true.
+  // Every example below is disabled.
+  sources: [
+    {
+      // Lisa's OWN mailbox, read over IMAP with TLS. Never the owner's personal mailbox: the owner forwards or copies
+      // messages to Lisa's address instead. Lisa only reads it; messages are never marked, moved or deleted.
+      kind: "mailbox",
+      key: "lisa-mailbox",
+      name: "Lisa's mailbox",
+      enabled: false,
+      host: "imap.example.com",
+      security: "implicitTLS", // or "startTLS"; default "implicitTLS"
+      port: 993, // default 993 for implicitTLS and 143 for startTLS
+      username: "lisa@example.com",
+      passwordSecret: "env:LISA_IMAP_PASSWORD",
+      folder: "INBOX", // default "INBOX"
+      // Lisa's own address, which the owner sends to. It must not be one of the owner's approved addresses.
+      mailboxAddress: "lisa@example.com",
+    },
+    {
+      // A calendar subscription, read only. A private subscription address is a secret: keep it outside this file
+      // and reference it with urlSecret. Set exactly one of url, urlSecret and file.
+      kind: "calendarFeed",
+      key: "personal-calendar",
+      name: "Personal calendar",
+      enabled: false,
+      urlSecret: "env:LISA_PERSONAL_CALENDAR_URL",
+      // Times without a zone in this calendar are read in this zone. Default: timeZone.
+      floatingTimeZone: "America/New_York",
+    },
+    {
+      // A public calendar at an https address (write a webcal:// address with https:// instead).
+      kind: "calendarFeed",
+      key: "public-holidays",
+      name: "Public holidays",
+      enabled: false,
+      url: "https://calendar.example.org/holidays.ics",
+    },
+    {
+      // A local .ics file.
+      kind: "calendarFeed",
+      key: "exported-calendar",
+      name: "Exported calendar",
+      enabled: false,
+      file: "~/Lisa/calendars/exported.ics",
+    },
+    {
+      // An RSS or Atom feed: url, or urlSecret for a private feed address.
+      kind: "newsFeed",
+      key: "example-news",
+      name: "Example News",
+      enabled: false,
+      url: "https://news.example.org/feed.xml",
+    },
+    {
+      // A selected X account, read through the official X API. API access may not permit every endpoint; denied
+      // capabilities are reported, not worked around.
+      kind: "xAccount",
+      key: "x-example",
+      name: "Example on X",
+      enabled: false,
+      userID: "1234567890",
+      bearerTokenSecret: "env:LISA_X_BEARER_TOKEN",
+    },
+    {
+      // A Discord channel that an authorized bot can read. Use a bot token, never the owner's own account token.
+      // Lisa never posts to Discord.
+      kind: "discordChannel",
+      key: "discord-announcements",
+      name: "Community announcements",
+      enabled: false,
+      channelID: "123456789012345678",
+      botTokenSecret: "env:LISA_DISCORD_BOT_TOKEN",
+    },
+    {
+      // A directory of exported files: format "mail" (.eml messages) or "calendar" (.ics files).
+      kind: "localImport",
+      key: "mail-drop",
+      name: "Exported mail",
+      enabled: false,
+      directory: "~/Lisa/import/mail",
+      format: "mail",
+      retainImportedOnDisable: true,
+    },
+  ],
+
+  // HOST API. Every companion device and client authenticates with its own revocable credential from pairing; there
+  // is no setting that turns authentication off.
+  api: {
+    // The IP address to listen on. Default "127.0.0.1": this machine only. Any other address, including "0.0.0.0",
+    // needs tls.mode "native" or "reverseProxy".
+    bindAddress: "127.0.0.1",
+    // Default 8765.
+    port: 8765,
+    tls: {
+      // "none" (plain HTTP, allowed only on a loopback address; the default), "native" (Lisa serves TLS with the
+      // certificate and key below) or "reverseProxy" (a trusted proxy terminates TLS, so Lisa serves plain HTTP and
+      // must listen on a loopback or private address, never on every interface). Certificate checks are never
+      // turned off.
+      mode: "none",
+      // References to the PEM certificate chain and private key; both are required for "native".
+      certificateSecret: null,
+      privateKeySecret: null,
+    },
+    // Days that records of mutating requests are kept, so a retried request takes effect only once. At least 30,
+    // the clients' longest offline retry period. Default 30 (30-3650).
+    idempotencyRetentionDays: 30,
+  },
+
+  // RETENTION, in days; 0 keeps a category indefinitely (0-3650).
+  retention: {
+    rawContentDays: 90, // raw message and feed content; default 90
+    deliveryHistoryDays: 180, // finished deliveries; default 180
+    auditDays: 365, // audit records; default 365
+    feedItemDays: 30, // feed items the owner never shared, rated or saved; default 30
+  },
+
+  // RESOURCE LIMITS. Every bound is finite.
+  limits: {
+    maxMessageBytes: 25000000, // the largest email message; default 25 MB (1024-100000000)
+    maxFeedBytes: 10000000, // the largest feed document; default 10 MB (1024-50000000)
+    maxItemsPerSync: 200, // items per synchronization pass; the rest wait for the next pass; default 200 (1-5000)
+    maxBytesPerSync: 50000000, // bytes per pass, at least the two limits above; default 50 MB (1024-1000000000)
+    syncTimeoutSeconds: 60, // time for one pass of one source; default 60 (5-3600)
+    maxRecurrenceOccurrencesPerEvent: 1000, // occurrences expanded per recurring event; default 1000 (1-10000)
+    maxTotalOccurrences: 20000, // per calendar, at least the per-event limit; default 20000 (1-200000)
+    maxConcurrentRequests: 4, // network requests in flight at once; default 4 (1-32)
+    logMaxBytes: 5000000, // log file size before rotation; default 5 MB (65536-1000000000)
+    logKeepFiles: 3, // rotated log files kept; default 3 (1-100)
+    rawContentMaxBytes: 500000000, // all raw content kept, oldest removed first; default 500 MB (1000000-1000000000000)
+  },
+}
