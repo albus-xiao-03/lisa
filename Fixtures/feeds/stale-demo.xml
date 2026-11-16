@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Demo Archive Weekly</title>
+    <link>https://archive.example.com/demo/</link>
+    <description>Synthetic demonstration feed for Lisa that stopped updating. Not real news.</description>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 26 Oct 2026 14:00:00 +0000</lastBuildDate>
+    <item>
+      <title>Demo archive: office move schedule</title>
+      <link>https://archive.example.com/demo/office-move-schedule</link>
+      <guid isPermaLink="true">https://archive.example.com/demo/office-move-schedule</guid>
+      <pubDate>Mon, 26 Oct 2026 14:00:00 +0000</pubDate>
+      <category>facilities</category>
+      <description>Synthetic notice: the demo office moves to the third floor in December.</description>
+    </item>
+    <item>
+      <title>Demo archive: cafeteria menu for late October</title>
+      <link>https://archive.example.com/demo/cafeteria-menu-october</link>
+      <guid isPermaLink="true">https://archive.example.com/demo/cafeteria-menu-october</guid>
+      <pubDate>Mon, 19 Oct 2026 14:00:00 +0000</pubDate>
+      <category>facilities</category>
+      <description>Synthetic menu: soup on Mondays and a salad bar every day.</description>
+    </item>
+  </channel>
+</rss>
