@@ -144,6 +144,8 @@ public enum CalendarExpander {
             }
             // A one-off event keeps one stable key, so moving it is a change rather than a removal plus an addition.
             let isSeries = master.property("RRULE") != nil || !master.properties(named: "RDATE").isEmpty
+            // Every instance lasts as long as the series' own DTSTART–DTEND (or DURATION), not until the master's DTEND.
+            let seriesLength = span(of: master, start: start)
             var seen = Set<String>()
             var consumedOverrides = Set<String>()
             for value in starts {
@@ -155,7 +157,7 @@ public enum CalendarExpander {
                     consumedOverrides.insert(key)
                     addSingle(uid: uid, event: override, key: occurrenceKey)
                 } else {
-                    addOccurrence(uid: uid, event: master, start: value, key: occurrenceKey)
+                    addOccurrence(uid: uid, event: master, start: value, key: occurrenceKey, length: seriesLength)
                 }
                 guard occurrences.count < options.limits.maxTotalOccurrences else {
                     warn(
@@ -220,8 +222,12 @@ public enum CalendarExpander {
             }
         }
 
-        mutating func addOccurrence(uid: String, event: ICalComponent, start: TimeValue, key: String) {
-            let length = span(of: event, start: start)
+        /// Adds one occurrence. `length` is the series' duration for recurrence instances; when it is `nil` the event's
+        /// own span is used (one-off events and overrides with their own DTSTART and DTEND).
+        mutating func addOccurrence(
+            uid: String, event: ICalComponent, start: TimeValue, key: String, length: Int? = nil
+        ) {
+            let length = length ?? span(of: event, start: start)
             let times: OccurrenceTimes
             if case .date(let date) = start {
                 times = .allDay(first: date, endExclusive: date.adding(days: max(1, length / 86_400)))
