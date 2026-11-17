@@ -81,7 +81,8 @@ extension APIRouter {
                     "push": owner.delivery.pushMode.rawValue,
                     "localNotification": configuration.localNotificationsLive ? "live" : "dryRun",
                 ],
-                outbox: outbox, sources: sources, deviceWarnings: deviceWarnings, warnings: runtime.warnings))
+                outbox: outbox, sources: sources, deviceWarnings: deviceWarnings, warnings: runtime.warnings,
+                model: configuration.model))
     }
 
     func export(_ caller: Caller) throws -> APIResponse {
