@@ -17,7 +17,7 @@ The contract types live in `Sources/LisaAPIContract/`. Clients never see the hos
 | Instants | ISO 8601 UTC with milliseconds, for example `2026-11-16T12:00:00.000Z`. Instants without milliseconds are also accepted. |
 | Local dates and times | Local dates are `YYYY-MM-DD`; local times are `HH:MM`. Both are in the owner's configured time zone. |
 | Pagination | `limit` is 1–200 (default 50). `cursor` is the `nextCursor` of the previous page. Pages are ordered by record identifier, which is stable across inserts. |
-| Revisions | Records carry `revision`. Updates send the revision they saw as `expectedRevision`. A mismatch returns `409 conflict` with `currentRevision`, so the client can reload and decide. |
+| Revisions | Records carry `revision`. Updates send the revision they saw as `expectedRevision`. A mismatch returns `409 conflict` with `currentRevision`, so the client can reload and decide. A successful change answers with the record as stored after the host's follow-up work (replanning, reminder changes), so its `revision` is the one to send next. A later runtime cycle can still change the record, and the next change then gets the recoverable `409`. |
 
 ### Authentication and permissions
 
@@ -101,7 +101,7 @@ The network server itself answers a few requests before they reach the router, w
 
 | Operation | Route | Notes |
 |---|---|---|
-| Runtime health | `GET /v1/health` | Status, delivery modes (`dryRun`/`live`), outbox counts, source freshness, device warnings |
+| Runtime health | `GET /v1/health` | Status, delivery modes (`dryRun`/`live`), outbox counts, source freshness, device warnings, and `model`: `{provider: none\|deterministic\|openAICompatible, name?, location?, deterministic, available, dailyRequestLimit?}`. `available` says whether the host could set the provider up, not that an endpoint answers. It never includes an endpoint address, a key reference or a credential; hosts that predate the field omit it (D-47) |
 | Rundown | `GET /v1/rundown?date=` | The stored plan, computed on first request for today or a later date |
 | Plan-block action | `POST /v1/plans/{planID}/blocks/{blockID}/actions` | `{action: accept\|lock\|reject\|complete\|defer, expectedRevision}` |
 | Brief | `GET /v1/brief?date=` | Generated on first request for today |
