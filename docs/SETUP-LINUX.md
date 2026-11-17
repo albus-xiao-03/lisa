@@ -23,7 +23,7 @@ The Swift driver links with `ld.gold`, so install `binutils-gold` if your distri
 |---|---|---|
 | `libsqlite3-dev` | 3.46.1 | The data store (DATA-02) |
 | `libxml2-dev` | 2.9.14 | XML and HTML reading (feeds, HTML mail) |
-| `libcurl4-openssl-dev` | 8.14.1, built with HTTP/2 through nghttp2 1.64.0 and OpenSSL 3.5.7 | Network adapters (Phase 6) |
+| `libcurl4-openssl-dev` | 8.14.1, built with HTTP/2 through nghttp2 1.64.0 and OpenSSL 3.5.7 | Network adapters; APNs needs libcurl 8.10.0 or later with HTTP/2 (`lisa doctor` checks it) |
 | `pkg-config` | 1.8.1 | Locating the libraries |
 | `libicu-dev` | 76.1 | Foundation's text support |
 | `nghttp2-server` (optional) | 1.64.0 | A local HTTP/2 test server for adapter verification |
