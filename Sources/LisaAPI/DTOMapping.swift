@@ -2,6 +2,7 @@
 
 import Foundation
 import LisaAPIContract
+import LisaApplication
 import LisaDomain
 import LisaTime
 
@@ -43,6 +44,16 @@ enum DTOMapping {
             id: capture.id.rawValue, kind: CaptureKindValue(rawValue: capture.kind.rawValue) ?? .text,
             capturedAt: capture.capturedAt, processing: capture.processing.rawValue,
             ideaID: capture.resultingIdeaID?.rawValue, newsID: capture.resultingNewsID?.rawValue, created: created)
+    }
+
+    static func captureRetrieval(_ outcome: CapturedPageOutcome) -> CaptureRetrievalDTO {
+        let item = outcome.item
+        return CaptureRetrievalDTO(
+            captureID: outcome.capture.id.rawValue, newsID: item.id.rawValue, retrieved: outcome.retrieved,
+            boundary: item.boundary.rawValue, title: item.title, pageURL: outcome.retrieved ? item.pageURL : nil,
+            retrievedAt: outcome.retrieved ? item.retrievedAt : nil, textCharacters: outcome.keptCharacters,
+            textTruncated: outcome.textTruncated, failureClass: outcome.failure?.errorClass.rawValue,
+            failureSummary: outcome.failure?.summary)
     }
 
     static func timing(_ timing: ProposedTiming) -> ProposedTimingDTO {
