@@ -38,6 +38,20 @@ public struct CurlMailServer: Hashable, Sendable {
         self.trustStorePath = trustStorePath
     }
 
+    /// Whether the host is a DNS name or an IP literal and the port is in range, so the URL built from them cannot
+    /// carry anything else.
+    public var isWellFormed: Bool {
+        guard (1...65_535).contains(port), !host.isEmpty, host.utf8.count <= 253 else { return false }
+        if IPLiteral.parse(host) != nil { return true }
+        return host.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { label in
+            (1...63).contains(label.utf8.count) && label.first != "-" && label.last != "-"
+                && label.utf8.allSatisfy { byte in
+                    (0x30...0x39).contains(byte) || (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte)
+                        || byte == 0x2D
+                }
+        }
+    }
+
     /// The host as it appears in a URL, with IPv6 literals in brackets.
     var urlHost: String {
         host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
