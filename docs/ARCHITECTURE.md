@@ -109,7 +109,9 @@ Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The
 | Companion models | Rundown, brief and speech text, capture, tasks, reminders, pending actions and conflicts, connectivity and cache age, connection and pairing, this device's notification settings |
 | Mac models (D-47) | Inbox (proposals and possible tasks to review), ideas, memory (preferences), settings and health (runtime state, sources, delivery modes, model configuration, paired devices and their notification state), brief history |
 | Shared rules | Cached data is never shown as current (`LoadState`). Changes go through the durable queue with revision checks, and conflicts are recoverable. Outcomes are truthful: done, queued, unavailable, conflict or failed |
-| `Apps/` | XcodeGen definition (`Apps/project.yml`), configuration and entitlements (`Apps/Config/`); the shared adapters and the two apps follow |
+| Shared helpers | Client services and the connection settings, push registration, notification receipts, Siri actions and replies, spoken text (D-48) |
+| `Apps/Shared/` (D-48) | Compiled into both apps: Keychain stores, protected storage, host trust (`PinnedServerTrustEvaluator`), the notification bridge, speech, the six App Intents with App Shortcuts, and the notification strings |
+| `Apps/` | XcodeGen definition (`Apps/project.yml`), configuration and entitlements (`Apps/Config/`); the SwiftUI apps in `Apps/Companion/` and `Apps/Mac/` |
 
 ## Trust boundaries (so far)
 
