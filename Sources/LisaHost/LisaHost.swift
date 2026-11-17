@@ -135,7 +135,8 @@ public final class LisaHost: Sendable {
                 idempotencyRetentionDays: settings.idempotencyRetentionDays,
                 requestsPerMinute: settings.requestsPerMinute,
                 ownerCredentialVerifier: { ownerAccess.verify($0) },
-                localNotificationsLive: platform.localNotifications != nil),
+                localNotificationsLive: platform.localNotifications != nil,
+                model: HostModelStatus.status(of: settings.model, provider: provider, limits: settings.modelLimits)),
             status: RuntimeStatusBridge(runtime: runtime), logger: logger)
         self.settings = settings
         self.storage = storage
