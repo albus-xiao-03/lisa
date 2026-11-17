@@ -188,7 +188,8 @@ public final class LisaHost: Sendable {
                         SourceJob(
                             key: source.key, sourceID: record.id, interval: interval, connector: connector,
                             processor: CalendarBatchProcessor(
-                                settings: effective, clock: clock, limits: settings.calendarLimits),
+                                settings: effective, clock: clock, limits: settings.calendarLimits,
+                                floatingZone: source.floatingTimeZone),
                             limits: settings.syncLimits))
                 case .feed:
                     jobs.append(
