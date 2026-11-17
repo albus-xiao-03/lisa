@@ -1,0 +1,5 @@
+// Placeholder signing for Lisa's Apple targets (APPLE-01). No signing credential is ever committed.
+// Put your own values in Signing.local.xcconfig next to this file (git ignores it), for example:
+//   DEVELOPMENT_TEAM = <your Team ID>
+DEVELOPMENT_TEAM = TEAMID0000
+#include? "Signing.local.xcconfig"
