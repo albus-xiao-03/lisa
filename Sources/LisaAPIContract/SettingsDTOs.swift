@@ -165,11 +165,13 @@ public struct HealthDTO: Codable, Hashable, Sendable {
     /// Paired devices that cannot currently receive notifications, with the reason.
     public var deviceWarnings: [String]
     public var warnings: [String]
+    /// The model configuration; absent from hosts that do not report it, which decode as `nil`.
+    public var model: ModelStatusDTO?
 
     public init(
         status: String, apiVersion: String, applicationVersion: String, schemaVersion: Int, startedAt: Date,
         lastCycleAt: Date?, lastCycleProblem: String?, deliveryModes: [String: String], outbox: OutboxSummaryDTO,
-        sources: [SourceStatusDTO], deviceWarnings: [String], warnings: [String]
+        sources: [SourceStatusDTO], deviceWarnings: [String], warnings: [String], model: ModelStatusDTO? = nil
     ) {
         self.status = status
         self.apiVersion = apiVersion
@@ -183,5 +185,6 @@ public struct HealthDTO: Codable, Hashable, Sendable {
         self.sources = sources
         self.deviceWarnings = deviceWarnings
         self.warnings = warnings
+        self.model = model
     }
 }
