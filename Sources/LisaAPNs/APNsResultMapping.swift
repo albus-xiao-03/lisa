@@ -29,8 +29,7 @@ public enum APNsResultMapping {
     /// The result of a classified response. `tokenUpdateAllowedAt` is when a newer provider token may next be used
     /// on the connection; it sets the retry time after `TooManyProviderTokenUpdates`.
     ///
-    /// TransportResult has no case for a temporary provider failure with a retry time, so 5xx responses map to
-    /// `throttled` with Apple's 15-minute minimum delay.
+    /// 5xx responses are temporary failures, retried no sooner than Apple's 15-minute minimum delay.
     public static func result(for response: APNsResponseClass, tokenUpdateAllowedAt: Date, now: Date)
         -> TransportResult
     {
@@ -61,8 +60,8 @@ public enum APNsResultMapping {
             return .notSent(reason: "APNs \(status) \(reason): the notification was not accepted; it may be retried")
         case .throttled(let retryAfter):
             return .throttled(retryAfter: retryAfter)
-        case .temporaryFailure(_, _, let retryAfter):
-            return .throttled(retryAfter: retryAfter)
+        case .temporaryFailure(let status, let reason, let retryAfter):
+            return .temporarilyUnavailable(reason: "APNs \(status) \(reason)", retryAfter: retryAfter)
         case .notHTTP2(let version):
             return .rejected(
                 reason: "capability: the APNs response used \(version.rawValue) instead of HTTP/2",
