@@ -65,7 +65,7 @@ All owner data stays on the authoritative host, inside its data directory. The d
 
 ## Network boundaries
 
-- **Explicit connectors only.** Lisa connects only to configured endpoints, plus a link the owner explicitly asks it to read (NEWS-01). All host-side traffic goes through libcurl (D-41).
+- **Explicit connectors only.** Lisa connects only to configured endpoints, plus a link the owner explicitly asks it to read (NEWS-01, D-46): only the local owner or a paired device can ask, only for a link the owner captured, once per item, to public https addresses, with one bounded GET and nothing the page refers to. Each attempt is audited with its outcome and failure class only, never the address or content. All host-side traffic goes through libcurl (D-41).
 - **Address policy.** Every resolved address is checked when a connection opens, and again before any request byte is sent. That defeats DNS rebinding and covers reused connections. The policy refuses:
   - loopback, private and shared addresses, except an endpoint the owner configured with such a literal (a local model server or mail server);
   - link-local addresses, including cloud metadata, and reserved, documentation and multicast addresses, always.
