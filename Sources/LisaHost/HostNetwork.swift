@@ -16,6 +16,8 @@ public enum HTTPClientPurpose: Hashable, Sendable {
     case calls
     /// One APNs environment.
     case apns(APNsEnvironment)
+    /// The CLI's client-mode connection to a host already running on this machine.
+    case ownerClient
 }
 
 /// How the host reaches the network.
@@ -48,6 +50,8 @@ public struct HostNetwork: Sendable {
                         configuration: .init(userAgent: userAgent, idleHandles: 1, maxIdleConnectionSeconds: 3_600))
                 case .connectors, .model, .calls:
                     try CurlHTTPClient(configuration: .init(userAgent: userAgent))
+                case .ownerClient:
+                    try CurlHTTPClient(configuration: .init(userAgent: userAgent, idleHandles: 1))
                 }
             }, mailTrustStorePath: nil, library: library)
     }
