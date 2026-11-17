@@ -81,7 +81,26 @@ extension HostSettings {
                 maxOccurrencesPerEvent: bounds.maxRecurrenceOccurrencesPerEvent,
                 maxTotalOccurrences: bounds.maxTotalOccurrences),
             maxFeedBytes: bounds.maxFeedBytes, deliveryAdapters: Self.deliveryAdapters(configuration),
-            modelTimeoutSeconds: configuration.model.requestTimeoutSeconds)
+            modelTimeoutSeconds: configuration.model.requestTimeoutSeconds, api: Self.api(configuration.api))
+    }
+
+    /// The network API's listener. Validation has already required the TLS references for native TLS.
+    static func api(_ api: APIConfiguration) -> APIServerSettings {
+        let protection: APIServerSettings.Protection
+        switch api.tls.mode {
+        case .none:
+            protection = .none
+        case .reverseProxy:
+            protection = .reverseProxy
+        case .native:
+            if let chain = api.tls.certificateSecret, let key = api.tls.privateKeySecret {
+                protection = .native(certificateChain: chain, privateKey: key)
+            } else {
+                // Unreachable after validation. Plain HTTP fails closed: the server refuses it off loopback.
+                protection = .none
+            }
+        }
+        return APIServerSettings(bindAddress: api.bindAddress, port: api.port, protection: protection)
     }
 
     static func source(_ source: SourceConfiguration, applicationVersion: String) -> HostSource {
