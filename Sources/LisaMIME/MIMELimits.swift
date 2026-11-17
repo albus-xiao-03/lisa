@@ -36,7 +36,8 @@ public enum MIMEError: Error, Hashable, Sendable, CustomStringConvertible {
         case .headersTooLarge: "the message headers exceed the configured size limit"
         case .noHeaders: "the data does not start with a message header block"
         case .headerInjection(let name): "header \(name) contains a line break"
-        case .invalidAddress(let address): "\(address) is not a valid email address"
+        // The address itself is private information and is never part of the description.
+        case .invalidAddress: "an address is not a valid email address"
         }
     }
 }
