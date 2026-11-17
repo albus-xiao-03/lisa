@@ -16,6 +16,7 @@ import LisaOwnerData
 import LisaPorts
 import LisaReview
 import LisaRuntime
+import LisaSecrets
 import LisaStore
 import LisaTime
 
@@ -33,6 +34,10 @@ public final class LisaHost: Sendable {
     public let recoveryNotes: [String]
     /// Configured capabilities that are not available in this build, for `lisa doctor` and health.
     public let unavailable: [String]
+    /// The owner credential of the loopback owner listener while the network API is served.
+    public let ownerAccess: OwnerAccess
+    /// Resolves secret references, such as the API's TLS identity.
+    let secrets: any SecretStore
     let lock: DataDirectoryLock
 
     /// Opens the host in the order of plan §5.2 and recovers after any downtime.
@@ -112,12 +117,14 @@ public final class LisaHost: Sendable {
             application: application, jobs: jobs, schedule: ScheduleStore(directory: directory),
             options: settings.runtime,
             logger: logger)
+        let ownerAccess = OwnerAccess()
         let router = APIRouter(
             application: application,
             configuration: RouterConfiguration(
                 applicationVersion: settings.applicationVersion, schemaVersion: Migrations.latestVersion,
                 idempotencyRetentionDays: settings.idempotencyRetentionDays,
                 requestsPerMinute: settings.requestsPerMinute,
+                ownerCredentialVerifier: { ownerAccess.verify($0) },
                 localNotificationsLive: platform.localNotifications != nil),
             status: RuntimeStatusBridge(runtime: runtime), logger: logger)
         self.settings = settings
@@ -129,6 +136,8 @@ public final class LisaHost: Sendable {
         self.logger = logger
         self.lock = lock
         self.unavailable = unavailable
+        self.ownerAccess = ownerAccess
+        self.secrets = platform.secrets
         self.recoveryNotes = try runtime.recover()
         logger.notice(
             "host opened",
