@@ -2,18 +2,27 @@
 // retention and resource bounds.
 
 import Foundation
+import LisaAPNs
+import LisaCalendarFeeds
 import LisaConfig
+import LisaCurl
 import LisaDelivery
 import LisaDevices
+import LisaDiscordSource
 import LisaDomain
 import LisaICalendar
+import LisaIMAP
 import LisaInference
 import LisaLocalSources
 import LisaMIME
+import LisaNewsFeeds
 import LisaOwnerData
 import LisaPorts
 import LisaRuntime
+import LisaSMTP
 import LisaTime
+import LisaTwilio
+import LisaXSource
 
 extension HostSettings {
     /// Host settings for a validated configuration. Network sources whose adapters are not in this build are kept
@@ -34,7 +43,7 @@ extension HostSettings {
             allowedTopics: Set(apns?.topics ?? []),
             allowedEnvironments: Set(
                 (apns?.environments ?? []).compactMap { LisaDomain.APNsEnvironment(rawValue: $0.rawValue) }))
-        let sources = configuration.sources.map(Self.source)
+        let sources = configuration.sources.map { Self.source($0, applicationVersion: applicationVersion) }
         let mailbox = configuration.sources.lazy.compactMap { source -> String? in
             if case .mailbox(let settings) = source.settings { return settings.mailboxAddress }
             return nil
@@ -71,10 +80,11 @@ extension HostSettings {
             calendarLimits: ICalendarLimits(
                 maxOccurrencesPerEvent: bounds.maxRecurrenceOccurrencesPerEvent,
                 maxTotalOccurrences: bounds.maxTotalOccurrences),
-            maxFeedBytes: bounds.maxFeedBytes)
+            maxFeedBytes: bounds.maxFeedBytes, deliveryAdapters: Self.deliveryAdapters(configuration),
+            modelTimeoutSeconds: configuration.model.requestTimeoutSeconds)
     }
 
-    static func source(_ source: SourceConfiguration) -> HostSource {
+    static func source(_ source: SourceConfiguration, applicationVersion: String) -> HostSource {
         var mailboxAddress: String?
         var floatingTimeZone: TimeZoneID?
         let access: SourceAccess
@@ -84,29 +94,65 @@ extension HostSettings {
             access = .localDirectory(URL(fileURLWithPath: settings.directory), format)
         case .mailbox(let settings):
             mailboxAddress = settings.mailboxAddress
-            access = .adapter("IMAP mailbox")
+            access = .imapMailbox(
+                IMAPMailboxSettings(
+                    host: settings.host, port: settings.port, security: Self.mailSecurity(settings.security),
+                    username: settings.username, password: settings.passwordSecret, folder: settings.folder,
+                    addresses: ConfiguredHostScope.addressPolicy(forHost: settings.host)))
         case .calendarFeed(let settings):
             floatingTimeZone = settings.floatingTimeZone
-            if case .file(let path) = settings.location {
-                access = .localFile(URL(fileURLWithPath: path), .calendar)
-            } else {
-                access = .adapter("HTTPS calendar subscription")
+            switch settings.location {
+            case .file(let path): access = .localFile(URL(fileURLWithPath: path), .calendar)
+            case .url(let url): access = .calendarSubscription(.url(url))
+            case .secretURL(let reference): access = .calendarSubscription(.secretURL(reference))
             }
         case .newsFeed(let settings):
-            if case .file(let path) = settings.location {
-                access = .localFile(URL(fileURLWithPath: path), .feed)
-            } else {
-                access = .adapter("RSS/Atom feed")
+            switch settings.location {
+            case .file(let path): access = .localFile(URL(fileURLWithPath: path), .feed)
+            case .url(let url): access = .newsFeed(.url(url))
+            case .secretURL(let reference): access = .newsFeed(.secretURL(reference))
             }
-        case .xAccount:
-            access = .adapter("X API")
-        case .discordChannel:
-            access = .adapter("Discord")
+        case .xAccount(let settings):
+            access = .xAccount(XAccountConfiguration(userID: settings.userID, bearerToken: settings.bearerTokenSecret))
+        case .discordChannel(let settings):
+            access = .discordChannel(
+                DiscordChannelConfiguration(
+                    channelID: settings.channelID, botToken: settings.botTokenSecret,
+                    userAgent: DiscordUserAgent(version: applicationVersion)))
         }
         return HostSource(
             key: source.key, name: source.name, kind: source.kind, enabled: source.enabled,
             staleAfterSeconds: source.staleAfterSeconds, syncIntervalSeconds: source.syncIntervalMinutes * 60,
             retainImportedOnDisable: source.retainImportedOnDisable, access: access, mailboxAddress: mailboxAddress,
             floatingTimeZone: floatingTimeZone)
+    }
+
+    /// The live delivery adapters the configuration describes. Configuring them sends nothing by itself.
+    static func deliveryAdapters(_ configuration: LisaConfiguration) -> DeliveryAdapterSettings {
+        let smtp = configuration.email.map { email in
+            SMTPSettings(
+                host: email.host, port: email.port, security: Self.mailSecurity(email.security),
+                username: email.username, passwordSecret: email.passwordSecret,
+                addresses: ConfiguredHostScope.addressPolicy(forHost: email.host))
+        }
+        let twilio = configuration.calls.map { calls in
+            TwilioSettings(
+                accountSID: calls.accountSID, authTokenSecret: calls.authTokenSecret, fromNumber: calls.fromNumber)
+        }
+        let apns = configuration.notifications.apns.map { apns in
+            APNsSettings(
+                teamID: apns.teamID, keyID: apns.keyID, signingKey: apns.signingKeySecret,
+                allowedTopics: Set(apns.topics),
+                allowedEnvironments: Set(
+                    apns.environments.compactMap { LisaDomain.APNsEnvironment(rawValue: $0.rawValue) }))
+        }
+        return DeliveryAdapterSettings(smtp: smtp, twilio: twilio, apns: apns)
+    }
+
+    static func mailSecurity(_ security: TransportSecurity) -> CurlMailSecurity {
+        switch security {
+        case .implicitTLS: .implicitTLS
+        case .startTLS: .startTLS
+        }
     }
 }
