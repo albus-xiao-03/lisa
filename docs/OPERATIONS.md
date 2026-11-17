@@ -92,6 +92,11 @@ When the host opens, it reconciles before doing anything else:
   - Connections that send nothing for 20 seconds, or stall a body for 30 seconds, are closed by design.
 - **Stopping.** SIGINT or SIGTERM stops accepting connections, lets requests in progress finish for up to 5 seconds, completes the current cycle, then releases the lock. While the host is stopped, devices show cached data and queue their actions.
 
+## Reading captured links (NEWS-01)
+
+- `lisa capture --kind link --retrieve <url>` captures the link and reads its page once. It exits 1 when the page could not be read, printing the reason. Reading needs the network adapter: when libcurl is unavailable, `lisa doctor` and health list "reading captured links is unavailable".
+- A rerun with the same `--request-id` replays the earlier answer; a second read of the same item is refused.
+
 ## Devices and connectivity
 
 - **Pairing codes.** A pairing code lives only in the running host's memory for 10 minutes. Restarting the host invalidates pending codes; create a new one with `lisa device pair-code`.
