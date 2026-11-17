@@ -29,6 +29,13 @@ typedef struct lisa_curl_address_gate {
     void *context;
     /// Set to 1 once the pre-request check has passed: from then on, request bytes may reach the server.
     int request_started;
+    /// How many times the request may be sent; 0 means no limit. libcurl resends a request on a new connection when
+    /// a reused one died without a response, so a non-idempotent request is limited to 1.
+    int max_requests;
+    /// How many times the pre-request check passed.
+    int request_count;
+    /// Set to 1 when a further send was refused because `max_requests` was reached.
+    int resend_refused;
 } lisa_curl_address_gate;
 
 int lisa_curl_setopt_long(void *handle, int option, long value);
