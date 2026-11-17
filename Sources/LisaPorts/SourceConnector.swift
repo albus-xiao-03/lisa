@@ -24,7 +24,7 @@ public enum FetchedItemKind: String, Hashable, Sendable {
     case calendar
     /// An RSS or Atom document.
     case feed
-    /// A social post or channel message, as JSON produced by its connector.
+    /// A social post or channel message: its text as UTF-8, with the optional `title` and `url` metadata keys.
     case post
     /// An owner-requested web page.
     case page
