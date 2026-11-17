@@ -94,6 +94,11 @@ static int lisa_prereq(void *clientp, char *primary_ip, char *local_ip, int prim
         allowed = gate->check(gate->context, bytes, 16);
     }
     if (!allowed) return CURL_PREREQFUNC_ABORT;
+    if (gate->max_requests > 0 && gate->request_count >= gate->max_requests) {
+        gate->resend_refused = 1;
+        return CURL_PREREQFUNC_ABORT;
+    }
+    gate->request_count += 1;
     gate->request_started = 1;
     return CURL_PREREQFUNC_OK;
 }
