@@ -545,3 +545,72 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Device tokens.** Registration assumed 32–200 characters and accepted fullwidth digits. It now accepts ASCII hexadecimal of any even length up to 1,024.
 - **Private data in descriptions.** HTTP requests and headers now redact credentials and show only method, origin and header names. MIME's invalid-address error no longer contains the address.
 - **libcurl cleanup.** libcurl can call back into Lisa from `curl_easy_cleanup`, so cleanup is now explicit while the callback state is still alive. Returned handles are reset first.
+
+## D-44 — Network API server, local client mode and the model request budget (API-01–API-03, ARCH-03, CLI-01, MODEL-01)
+
+- **Server.** `LisaAPIServer` serves HTTP/1.1 with swift-nio 2.105.0 and swift-nio-ssl 2.37.6, handling one request at a time per connection. It depends on `LisaAPIContract` only, not on `LisaAPI` as the plan's module table says; `LisaHost` maps each connection to the router's `RequestOrigin`, so the server holds no application types.
+- **Two listeners.**
+  - The device listener is at `api.bindAddress` and `api.port` (default `127.0.0.1:8765`).
+  - The owner listener is on `127.0.0.1` with a free port, for the CLI in client mode.
+
+  Plain HTTP is allowed only on loopback; any other address needs native TLS or a trusted reverse proxy. The configuration validator checks this, and the server checks it again. Bind addresses must be IP literals and are never resolved.
+- **Authentication per listener.**
+  - The device listener accepts device credentials, and pairing codes on `POST /v1/devices/pair`. It never accepts the owner credential, whatever the peer's address.
+  - The owner listener accepts only the owner credential, and only from loopback peers.
+  - Loopback is decided on raw address bytes, including IPv4-mapped IPv6 peers (NIO's sockets are always dual-stack). Behind a reverse proxy, no peer counts as local.
+- **The owner credential.**
+  - It is issued for each `lisa serve` run: 256 random bits, kept in memory only as a SHA-256 digest, compared in constant time and revoked at shutdown.
+  - `lisa serve` writes it with the owner port to `<data directory>/run/owner-endpoint.json` and removes the file at shutdown. The file is mode 0600 in a 0700 directory, replaced atomically, and refused when other users can read it.
+  - Client mode uses the file only when its process ID matches the owner of the data-directory lock, so a stale file is never used.
+- **Client mode uses libcurl.** The CLI connects through `LoopbackOwnerTransport`:
+  - only to 127.0.0.1, enforced by connect-time address checks;
+  - with no proxy and no redirects;
+  - with the Authorization header marked sensitive.
+
+  The CLI is host-side code, so it uses the host's network stack (plan §5). The URLSession transport is for the companion apps (D-45).
+- **TLS.**
+  - The minimum is TLS 1.2; NIOSSL's default is 1.0.
+  - TLS 1.2 is limited to ECDHE key exchange with AES-GCM or ChaCha20-Poly1305. The default list also offers RSA key exchange and CBC suites. TLS 1.3 uses BoringSSL's fixed suites.
+  - ALPN is `http/1.1`; there are no client certificates and no renegotiation.
+  - Encrypted private keys are refused at start-up, because BoringSSL would otherwise prompt for a passphrase on standard input.
+- **HTTP behavior that NIO leaves to the application.**
+  - **Parser errors.** An oversized request line or header fields get 431; NIO's default handler answers 400. Other parser errors get 400 and the connection is closed. llhttp's strict mode refuses `Content-Length` together with `Transfer-Encoding`, and repeated lengths.
+  - **Body size.** Bodies over 256 KiB get 413. A declared oversized body is read and discarded, up to 1 MiB, so the client sees the answer; anything larger closes the connection.
+  - **Expectations.** `Expect: 100-continue` is answered with 100 before the body is read (RFC 9110 §10.1.1). Any other expectation gets 417. Expectations in HTTP/1.0 requests are ignored.
+  - **Methods and header fields.** Methods the API does not use get 405 with `Allow`. An HTTP/1.1 request without exactly one `Host` gets 400, as does a repeated `Authorization`, `Content-Type`, `Host`, `Expect` or `Lisa-Request-ID`.
+  - **Request targets.** Percent-decoding is strict: `+` is not a space, `%2F` inside a segment is refused, and so are repeated query parameters. Clients encode targets with `APIRequest.encodedTarget()`, which uses only RFC 3986's unreserved characters.
+  - **Timeouts.** NIO has none of its own. The first request head must arrive within 20 seconds of connecting, which also bounds the TLS handshake. A body must finish within 30 seconds of its head, and a kept-alive connection must start its next request within 30 seconds. Nothing is timed while the host prepares a response.
+  - **Connections.** At most 64 at once; further ones are closed immediately.
+  - **Response headers.** Every response carries `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`. A 401 carries `WWW-Authenticate: Bearer realm="lisa"`.
+- **Shutdown.**
+  - The server stops accepting connections and sends each open one `ChannelShouldQuiesceEvent`, so requests in progress finish with `Connection: close`.
+  - Connections still open after 5 seconds are closed. The runtime loop then stops and the data-directory lock is released.
+  - `ServerQuiescingHelper` is not used, because it is in swift-nio-extras, which is not approved.
+- **Resolved dependencies.**
+  - `Package.resolved` gains swift-atomics 1.3.1, swift-collections 1.7.6, swift-nio 2.105.0, swift-nio-ssl 2.37.6 and swift-system 1.9.0.
+  - swift-certificates, which swift-nio-ssl declares only for its own tests, is neither fetched nor pinned. The swift-crypto 5.1.1 conflict noted in the plan therefore does not arise.
+- **The model request budget (MODEL-01).**
+  - Every provider request, including the single repair attempt, is first reserved against `maxRequestsPerDay`.
+  - The count is kept per owner-local day in `<data directory>/model-requests.json` (mode 0600), so a restart never resets it.
+  - When the limit is reached, or the count cannot be read or written, items wait (MODEL-04). A damaged file, or one written by another version, is an error, never a reset.
+  - The deterministic offline provider is not counted.
+
+## D-45 — The companions' URLSession transport (API-01, NOTIFY-07)
+
+- **Endpoint.** `HostEndpoint` accepts an `https` address, or `http` only for a loopback IP literal or `localhost`. It refuses user names and passwords, queries and fragments. An optional path prefix allows a reverse proxy that serves Lisa under a sub-path. Error messages never repeat the address.
+- **Session.** `URLSessionTransport` uses one ephemeral session with no cookies, no credential storage and no cache.
+  - Every request is a delegate-driven data task, so on every platform redirects are refused (a 3xx comes back as the response) and the 4 MiB response limit is enforced while the body arrives.
+  - Requests that set framing headers (`Host`, `Content-Length` and similar), contain CR, LF or non-ASCII header values, or are GETs with a body are refused before sending. Paths must start with `/v1/` and are encoded with `APIRequest.encodedTarget()`.
+- **Challenges.**
+  - A challenge is never answered with a credential, except a server-trust challenge when a `ServerTrustEvaluator` is configured. The Security-framework evaluator that pins the host's key or certificate authority is an Apple adapter (Phase 8).
+  - swift-corelibs-foundation never raises server-trust challenges, so on Linux the transport refuses to start with an evaluator rather than silently using system trust.
+  - A 401 with `WWW-Authenticate: Bearer realm="lisa"` is safe on Linux: swift-corelibs-foundation raises a challenge only for Basic with a realm. Answering such a challenge with a credential would make it resend the request repeatedly, which the transport never does.
+- **Failures on Linux.** swift-corelibs-foundation's error codes are not reliable: TLS failures arrive as `URLError -1`, and `cannotConnectToHost` can follow a request that was already delivered. The transport therefore reads libcurl's message.
+  - A connect failure is `unreachable`, and a TLS handshake failure is `refused`.
+  - Everything else is `interrupted`, so a queued mutation is retried with the same request ID and never assumed unapplied.
+  - Reasons contain neither the message nor any request content.
+- **Linux limitations.**
+  - IPv6 literal hosts are refused when the transport is created, because swift-corelibs-foundation rejects every such URL.
+  - `resourceTimeout` is ignored there.
+  - FoundationNetworking's libcurl sends even loopback requests through a proxy named by `http_proxy`, `all_proxy` or `ALL_PROXY` unless `no_proxy` lists the host, and URLSession cannot turn that off. That is why the CLI reaches a running host with libcurl directly (D-44).
+- **Not verified on Apple platforms.** The delegate method signatures, the server-trust path, `resourceTimeout`, IPv6 literals and system proxy behavior are unverified until Phase 8 runs on a Mac and devices.
