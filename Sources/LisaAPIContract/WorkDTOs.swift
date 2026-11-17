@@ -264,3 +264,51 @@ public struct CaptureDTO: Codable, Hashable, Sendable {
         self.created = created
     }
 }
+
+/// `POST /v1/captures/{id}/retrieve`: what reading the page behind a captured link did (NEWS-01).
+///
+/// A page is read once. When `retrieved` is false the page could not be read for a lasting reason (it needs signing in
+/// or payment, is not a web page, is too large, or its address is refused): `failureClass` and `failureSummary` say
+/// why, the item is unchanged and nothing from the page was kept. Text read from a page is labeled `pageText`: what the
+/// site serves an anonymous reader, which for a paywalled page can be only its public part.
+public struct CaptureRetrievalDTO: Codable, Hashable, Sendable {
+    public var captureID: String
+    public var newsID: String
+    /// Whether the page was read and kept.
+    public var retrieved: Bool
+    /// The item's accessible-content boundary afterwards: `pageText` when the page's text was read; otherwise as
+    /// before, usually `titleOnly` (also when a page that was read has no text Lisa can read without scripts).
+    public var boundary: String
+    /// The item's title: the page's own title when the item had only the link as its title.
+    public var title: String
+    /// The address that served the page, after redirects, when it was read.
+    public var pageURL: String?
+    /// When the page was read.
+    public var retrievedAt: Date?
+    /// How many characters of the page's text the item keeps.
+    public var textCharacters: Int
+    /// Whether the page's text was cut at a size bound, so the item keeps only its beginning.
+    public var textTruncated: Bool
+    /// Why the page was not read, as a source error class: `authentication`, `permissionDenied`, `unsupported`,
+    /// `configuration` or `parse`.
+    public var failureClass: String?
+    /// The reason in words, without the address's path or query.
+    public var failureSummary: String?
+
+    public init(
+        captureID: String, newsID: String, retrieved: Bool, boundary: String, title: String, pageURL: String?,
+        retrievedAt: Date?, textCharacters: Int, textTruncated: Bool, failureClass: String?, failureSummary: String?
+    ) {
+        self.captureID = captureID
+        self.newsID = newsID
+        self.retrieved = retrieved
+        self.boundary = boundary
+        self.title = title
+        self.pageURL = pageURL
+        self.retrievedAt = retrievedAt
+        self.textCharacters = textCharacters
+        self.textTruncated = textTruncated
+        self.failureClass = failureClass
+        self.failureSummary = failureSummary
+    }
+}
