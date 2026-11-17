@@ -42,13 +42,17 @@ public struct ExtractionPipeline: Sendable {
     public let provider: (any ModelProvider)?
     public let sharing: ModelDataSharing
     public let limits: ModelUsageLimits
+    /// Enforces `limits.maxRequestsPerDay`; `nil` leaves requests uncounted (the offline deterministic provider).
+    public let budget: (any ModelRequestBudget)?
 
     public init(
-        provider: (any ModelProvider)?, sharing: ModelDataSharing, limits: ModelUsageLimits = ModelUsageLimits()
+        provider: (any ModelProvider)?, sharing: ModelDataSharing, limits: ModelUsageLimits = ModelUsageLimits(),
+        budget: (any ModelRequestBudget)? = nil
     ) {
         self.provider = provider
         self.sharing = sharing
         self.limits = limits
+        self.budget = budget
     }
 
     static let systemPrompt = """
@@ -82,6 +86,7 @@ public struct ExtractionPipeline: Sendable {
         ]
         var repairAttempted = false
         for attempt in 0..<2 {
+            if let waiting = reserveRequest() { return .awaitingModel(waiting) }
             let response: ModelResponse
             do {
                 response = try await provider.complete(
@@ -114,5 +119,16 @@ public struct ExtractionPipeline: Sendable {
             }
         }
         return .failed("the model output was invalid after one repair attempt")
+    }
+
+    /// Why no request may be sent now, or `nil` once one is reserved. Items wait rather than being guessed (MODEL-04).
+    func reserveRequest() -> String? {
+        guard let budget else { return nil }
+        do {
+            if try budget.reserve(limit: limits.maxRequestsPerDay) { return nil }
+            return "the daily limit of \(limits.maxRequestsPerDay) model requests is reached; items wait until tomorrow"
+        } catch {
+            return "the model request count cannot be recorded, so no request is sent: \(error)"
+        }
     }
 }
