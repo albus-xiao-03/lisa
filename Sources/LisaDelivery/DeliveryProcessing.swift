@@ -323,6 +323,9 @@ extension DeliveryOutbox {
         case .throttled(let retryAfter):
             return try retryOrFail(
                 submitting, reason: "throttled by the provider", retryAfter: retryAfter, owner: owner)
+        case .temporarilyUnavailable(let reason, let retryAfter):
+            return try retryOrFail(
+                submitting, reason: "temporarily unavailable: \(reason)", retryAfter: retryAfter, owner: owner)
         case .rejected(let reason, let invalidatesRecipient, let timestamp):
             if invalidatesRecipient, case .device(let deviceID) = submitting.recipient, let tokenFeedback {
                 let token = try store.read { try $0.get(DeviceRegistration.self, id: deviceID) }?.pushToken
