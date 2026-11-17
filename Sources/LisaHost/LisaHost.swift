@@ -58,13 +58,8 @@ public final class LisaHost: Sendable {
         ]
         if platform.logToStandardError { sinks.append(StandardErrorSink()) }
         let logger = Logger(category: "lisa", sink: MultiplexSink(sinks))
-        let delivery = settings.ownerSettings.delivery
-        for (channel, mode) in [
-            ("email", delivery.emailMode), ("call", delivery.callMode), ("push", delivery.pushMode),
-        ]
-        where mode == .live {
-            throw HostError.liveDeliveryUnavailable(channel: channel)
-        }
+        let adapters = HostAdapters(settings: settings, platform: platform)
+        let live = try adapters.liveTransports()
         let storage: LisaStorage
         do {
             storage = try LisaStorage.open(path: directory.appendingPathComponent("lisa.sqlite").path, now: clock.now())
@@ -79,20 +74,12 @@ public final class LisaHost: Sendable {
         let devices = DeviceService(store: store, clock: clock, logger: logger)
         let outbox = DeliveryOutbox(
             store: store, clock: clock, logger: logger, settings: effective, content: AgendaContent(store: store),
-            live: LiveTransports(localNotification: platform.localNotifications), recorder: recorder,
+            live: live, recorder: recorder,
             tokenFeedback: devices, sender: settings.emailSender)
         let notifications = NotificationService(clock: clock, logger: logger, outbox: outbox)
         var unavailable: [String] = []
-        let provider: (any ModelProvider)?
-        switch settings.model {
-        case .none:
-            provider = nil
-        case .deterministic:
-            provider = DeterministicProvider()
-        case .openAICompatible:
-            provider = nil
-            unavailable.append("the OpenAI-compatible model adapter is not in this build; email waits for a model")
-        }
+        let (provider, modelNote) = adapters.modelProvider()
+        if let modelNote { unavailable.append(modelNote) }
         let services = LisaServices(
             store: store, clock: clock, logger: logger, settings: effective,
             captures: CaptureService(store: store, clock: clock, logger: logger),
@@ -119,7 +106,7 @@ public final class LisaHost: Sendable {
             devices: devices)
         let application = LisaApplication(services: services, pushPolicy: settings.pushPolicy)
         let (jobs, notes) = try Self.jobs(
-            for: settings, services: services, store: store, raw: raw, settings: effective)
+            for: settings, adapters: adapters, services: services, store: store, raw: raw, settings: effective)
         unavailable += notes
         let runtime = HostRuntime(
             application: application, jobs: jobs, schedule: ScheduleStore(directory: directory),
@@ -148,11 +135,11 @@ public final class LisaHost: Sendable {
             ["mode": .public(platform.mode), "sources": .count(jobs.count), "schema": .count(Migrations.latestVersion)])
     }
 
-    /// Registers configured sources and builds a synchronization job for each one this build can reach. A source
-    /// whose adapter is missing is registered and marked unavailable, never silently skipped.
+    /// Registers configured sources and builds a synchronization job for each one. A source whose adapter cannot be
+    /// built is registered and marked failing, never silently skipped.
     static func jobs(
-        for settings: HostSettings, services: LisaServices, store: any RecordStore, raw: any RawContentStore,
-        settings effective: any SettingsSource
+        for settings: HostSettings, adapters: HostAdapters, services: LisaServices, store: any RecordStore,
+        raw: any RawContentStore, settings effective: any SettingsSource
     ) throws -> ([SourceJob], [String]) {
         var jobs: [SourceJob] = []
         var notes: [String] = []
@@ -162,59 +149,69 @@ public final class LisaHost: Sendable {
                 kind: source.kind, name: source.name, configurationKey: source.key,
                 staleAfterSeconds: source.staleAfterSeconds)
             guard source.enabled else { continue }
-            let local: (LocalDirectoryConnector, LocalSourceFormat)?
-            switch source.access {
-            case .localDirectory(let url, let format):
-                local = (LocalDirectoryConnector(directory: url, format: format), format)
-            case .localFile(let url, let format): local = (LocalDirectoryConnector(file: url, format: format), format)
-            case .adapter: local = nil
+            let connector: any SourceConnector
+            switch adapters.connector(for: source.access) {
+            case .success(let built):
+                connector = built
+            case .failure(let reason):
+                notes.append("\(source.name): the \(source.access.adapterName) adapter cannot be used: \(reason)")
+                try markUnavailable(record.id, reason: "\(reason)", store: store, clock: clock)
+                continue
             }
-            switch source.access {
-            case .localDirectory, .localFile:
-                guard let (connector, format) = local else { continue }
-                let interval = TimeInterval(source.syncIntervalSeconds)
-                switch format {
-                case .mail:
-                    jobs.append(
-                        SourceJob(
-                            key: source.key, sourceID: record.id, interval: interval, connector: connector,
-                            processor: MailBatchProcessor(
-                                store: store, raw: raw, settings: effective, clock: clock,
-                                mailboxAddress: source.mailboxAddress ?? settings.emailSender.address,
-                                limits: settings.messageLimits),
-                            limits: settings.syncLimits))
-                case .calendar:
-                    jobs.append(
-                        SourceJob(
-                            key: source.key, sourceID: record.id, interval: interval, connector: connector,
-                            processor: CalendarBatchProcessor(
-                                settings: effective, clock: clock, limits: settings.calendarLimits,
-                                floatingZone: source.floatingTimeZone),
-                            limits: settings.syncLimits))
-                case .feed:
-                    jobs.append(
-                        SourceJob(
-                            key: source.key, sourceID: record.id, interval: interval, connector: connector,
-                            processor: NewsBatchProcessor(
-                                store: store, raw: raw, clock: clock, maxFeedBytes: settings.maxFeedBytes),
-                            limits: settings.syncLimits))
-                }
-            case .adapter(let description):
-                notes.append(
-                    "\(source.name): the \(description) adapter is not in this build, so it is not synchronized")
-                try store.write { tx in
-                    guard var current = try tx.get(Source.self, id: record.id) else { return }
-                    let now = clock.now()
-                    current.lastFailure = SourceFailure(
-                        errorClass: .unsupported, summary: "the \(description) adapter is not available in this build",
-                        occurredAt: now)
-                    current.lastAttemptAt = now
-                    current.updatedAt = now
-                    try tx.update(current)
-                }
+            let interval = TimeInterval(source.syncIntervalSeconds)
+            switch Self.contentKind(of: source.access) {
+            case .mail:
+                jobs.append(
+                    SourceJob(
+                        key: source.key, sourceID: record.id, interval: interval, connector: connector,
+                        processor: MailBatchProcessor(
+                            store: store, raw: raw, settings: effective, clock: clock,
+                            mailboxAddress: source.mailboxAddress ?? settings.emailSender.address,
+                            limits: settings.messageLimits),
+                        limits: settings.syncLimits))
+            case .calendar:
+                jobs.append(
+                    SourceJob(
+                        key: source.key, sourceID: record.id, interval: interval, connector: connector,
+                        processor: CalendarBatchProcessor(
+                            settings: effective, clock: clock, limits: settings.calendarLimits,
+                            floatingZone: source.floatingTimeZone),
+                        limits: settings.syncLimits))
+            case .feed:
+                jobs.append(
+                    SourceJob(
+                        key: source.key, sourceID: record.id, interval: interval, connector: connector,
+                        processor: NewsBatchProcessor(
+                            store: store, raw: raw, clock: clock, maxFeedBytes: settings.maxFeedBytes),
+                        limits: settings.syncLimits))
             }
         }
         return (jobs, notes)
+    }
+
+    /// Which ingestion path a source's items take.
+    static func contentKind(of access: SourceAccess) -> LocalSourceFormat {
+        switch access {
+        case .localDirectory(_, let format), .localFile(_, let format): format
+        case .imapMailbox: .mail
+        case .calendarSubscription: .calendar
+        case .newsFeed, .xAccount, .discordChannel: .feed
+        }
+    }
+
+    /// Records that a source cannot be synchronized because its adapter is unavailable.
+    private static func markUnavailable(_ id: SourceID, reason: String, store: any RecordStore, clock: any WallClock)
+        throws
+    {
+        try store.write { tx in
+            guard var current = try tx.get(Source.self, id: id) else { return }
+            let now = clock.now()
+            current.lastFailure = SourceFailure(
+                errorClass: .unsupported, summary: "the adapter is unavailable: \(reason)", occurredAt: now)
+            current.lastAttemptAt = now
+            current.updatedAt = now
+            try tx.update(current)
+        }
     }
 
     /// A transport that acts as the local owner (the Mac app's embedded mode, the CLI, the demo).
