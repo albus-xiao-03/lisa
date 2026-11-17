@@ -187,8 +187,11 @@ public final class DeviceService: DeviceTokenFeedback {
     public func registerPushToken(
         deviceID: DeviceID, token: String, environment: APNsEnvironment, topic: String, policy: PushRegistrationPolicy
     ) throws -> DeviceRegistration {
+        // ASCII hexadecimal bytes; Apple says not to assume a token length, so only an upper bound applies.
         let cleaned = token.lowercased().filter { !$0.isWhitespace }
-        guard (32...200).contains(cleaned.count), cleaned.allSatisfy({ $0.isHexDigit }) else {
+        guard !cleaned.isEmpty, cleaned.count <= 1_024, cleaned.count % 2 == 0,
+            cleaned.unicodeScalars.allSatisfy({ (0x30...0x39).contains($0.value) || (0x61...0x66).contains($0.value) })
+        else {
             throw DeviceError.invalidToken
         }
         guard policy.allowedTopics.contains(topic) else { throw DeviceError.topicNotAllowed(topic) }
