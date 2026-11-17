@@ -695,3 +695,19 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - Reading the brief or rundown, capturing, saving and snoozing can run while the device is locked, so an alarm automation can speak the brief (SIRI-02). The system's "Allow Siri When Locked" setting governs this.
   - "Read the brief" in the app speaks only while the app is in use. The brief and rundown intents return their text for Shortcuts to speak.
 - **Evidence.** The pure logic is in LisaPresentation and is tested on Linux against a real in-process host: Siri replies, entity matching, token text, receipts and connection settings. The Apple adapters are only syntax-checked with `swiftc -parse`. Type-checking, Keychain entitlements, background time for actions, Siri timeouts and lock-screen behavior need an Apple build and devices.
+
+## D-49 — The companion app (UI-02, UI-03, NOTIFY-05)
+
+- **Layout.** iPad uses a sidebar with a detail view; iPhone uses five tabs, each with its own navigation stack. The screen in use is kept across iPad size changes. The app has one window, because the Info.plist has no scene manifest.
+- **Launch and foreground.**
+  - The shared environment is configured once, in `App.init`.
+  - Each launch and each real return from the background reads the notification permission, reports it, sends the queue and refreshes the screen in use.
+  - An APNs token is requested only once the device is paired.
+  - Unpairing or a revoked credential hides every screen's data.
+- **Notifications.** Opening a notification shows its screen, not the item itself, because no route reads a single task or reminder. An event proposal says to review it on the Mac, since UI-02 has no review screen. Permission is requested only from the pairing offer.
+- **Known limits.**
+  - Editing a task cannot yet set a new deadline or remove an estimate.
+  - The rundown has no read-aloud of its own; the rundown intent speaks it.
+  - The queue is sent on foreground return and on Send Now, with no network-change trigger.
+  - Some display logic lives in the views and is untested on Linux: which screen a notification opens, words for states, and the changed-fields check. Moving it into LisaPresentation is follow-up work.
+- **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
