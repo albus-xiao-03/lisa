@@ -54,7 +54,7 @@ public enum CurlSMTPSubmission {
         let easy: CurlEasy
         do { easy = try CurlEasy() } catch { return .failure(.refused(error.description)) }
         let transfer = CurlTransfer(maxBodyBytes: 0, maxHeaderBytes: 262_144, recordsLines: true)
-        let gate = CurlAddressGate(policy: server.addresses)
+        let gate = CurlAddressGate(policy: server.addresses, maxRequests: 1)
         let upload = CurlUpload(message.data)
         var recipients: CurlStringList?
         // libcurl may send QUIT and call the header and progress callbacks while cleaning up, so every callback
