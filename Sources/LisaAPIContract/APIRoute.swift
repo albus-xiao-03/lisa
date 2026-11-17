@@ -10,6 +10,8 @@ public enum APIRoute: Hashable, Sendable {
     case brief
     case regenerateBrief
     case capture
+    /// Reads the page behind a captured link, once (NEWS-01).
+    case retrieveCapture(id: String)
     case listTasks
     case createTask
     case task(id: String)
@@ -41,8 +43,8 @@ public enum APIRoute: Hashable, Sendable {
         case .health, .rundown, .brief, .listTasks, .task, .listIdeas, .listProposals, .proposalCalendarFile,
             .listReminders, .preferences, .sourcesStatus, .deviceNotificationPreferences, .listDevices, .export:
             .get
-        case .planBlockAction, .regenerateBrief, .capture, .createTask, .proposalAction, .reminderAction,
-            .notificationAction, .createPairingCode, .pairDevice, .notificationReceipts:
+        case .planBlockAction, .regenerateBrief, .capture, .retrieveCapture, .createTask, .proposalAction,
+            .reminderAction, .notificationAction, .createPairingCode, .pairDevice, .notificationReceipts:
             .post
         case .pushRegistration, .notificationStatus: .put
         case .updateTask, .updateIdea, .updatePreferences, .updateDeviceNotificationPreferences: .patch
@@ -60,6 +62,7 @@ public enum APIRoute: Hashable, Sendable {
         case .brief: return "\(prefix)/brief"
         case .regenerateBrief: return "\(prefix)/briefs/regenerate"
         case .capture: return "\(prefix)/captures"
+        case .retrieveCapture(let id): return "\(prefix)/captures/\(Self.escape(id))/retrieve"
         case .listTasks, .createTask: return "\(prefix)/tasks"
         case .task(let id), .updateTask(let id): return "\(prefix)/tasks/\(Self.escape(id))"
         case .listIdeas: return "\(prefix)/ideas"
@@ -138,6 +141,7 @@ public enum APIRoute: Hashable, Sendable {
             if segments == ["devices", "current", "notification-preferences"] { return .deviceNotificationPreferences }
             return nil
         case (.post, 3):
+            if segments[0] == "captures", segments[2] == "retrieve" { return .retrieveCapture(id: segments[1]) }
             guard segments[2] == "actions" || segments[1] == "current" else { return nil }
             switch segments[0] {
             case "event-proposals": return .proposalAction(id: segments[1])
