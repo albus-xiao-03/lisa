@@ -81,21 +81,32 @@ public final class APIRouter: Sendable {
         switch origin {
         case .trustedLocalOwner:
             return Caller(principal: .localOwner, deviceID: nil)
-        case .authenticateHeaders:
-            if route == .pairDevice { return Caller(principal: nil, deviceID: nil) }
-            guard let header = request.header(APIVersioning.authorizationHeader), header.hasPrefix("Bearer ") else {
+        case .loopbackOwner:
+            guard let credential = Self.bearerCredential(request), let verifier = configuration.ownerCredentialVerifier,
+                verifier(credential)
+            else {
                 throw APIFailure.unauthenticated
             }
-            let credential = header.dropFirst("Bearer ".count).trimmingCharacters(in: .whitespaces)
-            guard !credential.isEmpty, credential.count <= 512 else { throw APIFailure.unauthenticated }
-            if let verifier = configuration.ownerCredentialVerifier, verifier(credential) {
-                return Caller(principal: .localOwner, deviceID: nil)
-            }
-            guard let device = try application.authenticateDevice(credential: credential) else {
+            return Caller(principal: .localOwner, deviceID: nil)
+        case .authenticateHeaders:
+            if route == .pairDevice { return Caller(principal: nil, deviceID: nil) }
+            guard let credential = Self.bearerCredential(request),
+                let device = try application.authenticateDevice(credential: credential)
+            else {
                 throw APIFailure.unauthenticated
             }
             return Caller(principal: .pairedDevice(device.id), deviceID: device.id)
         }
+    }
+
+    /// The credential of an `Authorization: Bearer` header, if it has a plausible length.
+    static func bearerCredential(_ request: APIRequest) -> String? {
+        guard let header = request.header(APIVersioning.authorizationHeader), header.hasPrefix("Bearer ") else {
+            return nil
+        }
+        let credential = header.dropFirst("Bearer ".count).trimmingCharacters(in: .whitespaces)
+        guard !credential.isEmpty, credential.count <= 512 else { return nil }
+        return credential
     }
 
     /// Runs a mutation at most once per (caller, request ID). A retry returns the recorded response.
