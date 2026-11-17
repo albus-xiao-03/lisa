@@ -13,6 +13,9 @@ public enum TransportResult: Hashable, Sendable {
     /// Nothing was sent; retrying may succeed (connection failed before any request byte left).
     case notSent(reason: String)
     case throttled(retryAfter: Date?)
+    /// The provider reported a temporary failure (such as a server error); nothing was accepted, and a retry is
+    /// allowed after `retryAfter` when given.
+    case temporarilyUnavailable(reason: String, retryAfter: Date?)
     /// The provider refused the request; retrying the same request will not help.
     case rejected(reason: String, invalidatesRecipient: Bool, providerTimestamp: Date?)
     /// The request may have reached the provider, but the result is unknown. Never retried blindly.
