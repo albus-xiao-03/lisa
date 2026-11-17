@@ -47,6 +47,7 @@ public enum CurlSMTPSubmission {
         cancellation: CurlCancellation
     ) -> Result<Int, CurlMailFailure> {
         guard !message.recipients.isEmpty else { return .failure(.refused("there are no recipients")) }
+        guard server.isWellFormed else { return .failure(.refused("the SMTP server's host name or port is not valid")) }
         let addresses = [message.from] + message.recipients
         guard addresses.allSatisfy(isSafeAddress), isSafeHeloName(message.heloName) else {
             return .failure(.refused("an address or the EHLO name contains characters that are not allowed"))
