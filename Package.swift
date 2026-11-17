@@ -39,6 +39,7 @@ let package = Package(
         .library(name: "LisaConfig", targets: ["LisaConfig"]),
         .library(name: "LisaClient", targets: ["LisaClient"]),
         .library(name: "LisaAPI", targets: ["LisaAPI"]),
+        .library(name: "LisaAPIServer", targets: ["LisaAPIServer"]),
         .library(name: "LisaRuntime", targets: ["LisaRuntime"]),
         .library(name: "LisaLocalSources", targets: ["LisaLocalSources"]),
         .library(name: "LisaHost", targets: ["LisaHost"]),
@@ -63,6 +64,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1"),
         // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-01): the `lisa` command-line interface only.
         .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2"),
+        // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-03 and REC-DEP-04): the network API server only.
+        .package(url: "https://github.com/apple/swift-nio.git", exact: "2.105.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.6"),
     ],
     targets: [
         .target(name: "LisaRedaction"),
@@ -141,6 +145,7 @@ let package = Package(
                 "LisaApplication", "LisaRuntime", "LisaAPI", "LisaAPIContract", "LisaLocalSources", "LisaConfig",
                 "LisaMIME", "LisaICalendar", "LisaHTTP", "LisaCurl", "LisaCalendarFeeds", "LisaNewsFeeds", "LisaXSource",
                 "LisaDiscordSource", "LisaIMAP", "LisaSMTP", "LisaTwilio", "LisaAPNs", "LisaOpenAICompatible",
+                "LisaAPIServer", "LisaCrypto",
             ]),
         // Synthetic demonstration data, rooted at Fixtures/ (plan §5.1 row 50).
         .target(
@@ -207,7 +212,7 @@ let package = Package(
             name: "LisaCLI",
             dependencies: [
                 "LisaSecrets", "LisaPorts", "LisaLocalSources", "LisaRuntime", "LisaAPIContract", "LisaClient",
-                "LisaConfig", "LisaHost", "LisaDemo",
+                "LisaConfig", "LisaHost", "LisaDemo", "LisaAPIServer",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]),
         .target(
@@ -216,6 +221,15 @@ let package = Package(
                 "LisaTime", "LisaDomain", "LisaLogging", "LisaCrypto", "LisaPorts", "LisaAPIContract",
                 "LisaApplication",
                 "LisaAgenda", "LisaDevices", "LisaOwnerData",
+            ]),
+        .target(
+            name: "LisaAPIServer",
+            dependencies: [
+                "LisaAPIContract", "LisaLogging",
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ]),
     ],
     swiftLanguageModes: [.v6]
