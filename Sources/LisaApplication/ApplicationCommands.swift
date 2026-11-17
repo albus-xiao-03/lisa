@@ -1,4 +1,5 @@
-// Owner and device commands on the facade, each followed by its cross-service consequences.
+// Owner and device commands on the facade, each followed by its cross-service consequences and answering with its
+// record as stored once those are done.
 
 import Foundation
 import LisaAgenda
@@ -29,7 +30,7 @@ extension LisaApplication {
     public func createTask(_ draft: TaskDraft, by principal: Principal) throws -> LisaTask {
         let update = try services.tasks.create(draft, by: principal)
         try propagate(update.changes)
-        return update.task
+        return try latest(update.task)
     }
 
     public func correctTask(
@@ -39,7 +40,7 @@ extension LisaApplication {
     {
         let update = try services.tasks.correct(id, expectedRevision: expectedRevision, correction, by: principal)
         try propagate(update.changes)
-        return update.task
+        return try latest(update.task)
     }
 
     /// Completes, cancels, reopens or starts a task. Completion and cancellation suppress pending deliveries for the
@@ -49,7 +50,7 @@ extension LisaApplication {
     {
         let update = try services.tasks.transition(id, to: status, expectedRevision: expectedRevision, by: principal)
         try propagate(update.changes)
-        return update.task
+        return try latest(update.task)
     }
 
     public func editIdea(_ id: IdeaID, expectedRevision: Revision, _ edit: IdeaEdit, by principal: Principal) throws
@@ -57,7 +58,7 @@ extension LisaApplication {
     {
         let idea = try services.ideas.edit(id, expectedRevision: expectedRevision, edit, by: principal)
         try propagate([.ideaChanged(id)])
-        return idea
+        return try latest(idea)
     }
 
     public func moveIdea(
@@ -67,7 +68,7 @@ extension LisaApplication {
     {
         let idea = try services.ideas.transition(id, to: lifecycle, expectedRevision: expectedRevision, by: principal)
         try propagate([.ideaChanged(id)])
-        return idea
+        return try latest(idea)
     }
 
     // MARK: - Reminders and notification actions
@@ -85,7 +86,7 @@ extension LisaApplication {
                 _ = try setTaskStatus(taskID, to: .completed, expectedRevision: nil, by: principal)
             }
         }
-        return reminder
+        return try latest(reminder)
     }
 
     /// An action submitted from a notification (plan §6.5), identified by the payload's notification ID.
@@ -134,7 +135,7 @@ extension LisaApplication {
         let (proposal, change) = try services.proposals.apply(
             action, to: id, expectedRevision: expectedRevision, by: principal)
         try propagate([change])
-        return proposal
+        return try latest(proposal)
     }
 
     public func actOnPlanBlock(
@@ -156,13 +157,13 @@ extension LisaApplication {
         let (preference, change) = try services.preferences.set(
             key, value, expectedRevision: expectedRevision, by: principal)
         try propagate([change])
-        return preference
+        return try latest(preference)
     }
 
     public func confirmPreference(_ key: PreferenceKey, by principal: Principal) throws -> Preference {
         let (preference, change) = try services.preferences.confirm(key, by: principal)
         try propagate([change])
-        return preference
+        return try latest(preference)
     }
 
     public func delete(_ item: DeletableItem, by principal: Principal) throws -> DeletionResult {
@@ -197,5 +198,14 @@ extension LisaApplication {
                 recipient: .device(id), reason: "the device was removed", at: now, in: tx)
         }
         return device
+    }
+
+    // MARK: - Results
+
+    /// `record` as stored now. A command's consequences (replanning, matching, reminder changes) may change the record
+    /// it just saved, so answering with the saved copy would hand the caller an outdated revision; `record` itself is
+    /// returned when it is no longer stored.
+    private func latest<E: StoredEntity>(_ record: E) throws -> E {
+        try self.record(E.self, id: record.id) ?? record
     }
 }
