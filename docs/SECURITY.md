@@ -64,13 +64,16 @@ All owner data stays on the authoritative host, inside its data directory. The d
 
 ## Network boundaries
 
-- **Phase 5 makes no network connections.** The offline demo and local imports run without contacting any service.
-- **Explicit connectors only.** The network adapters in Phase 6 connect only to explicitly configured endpoints, and only through libcurl.
-- **URL and address policy.** That policy refuses:
-  - non-HTTPS schemes;
-  - redirects to other schemes;
-  - loopback, link-local and private addresses, and cloud metadata addresses. An explicitly configured local model endpoint is the exception.
-  - addresses changed between resolution and connection.
+- **Explicit connectors only.** Lisa connects only to configured endpoints, plus a link the owner explicitly asks it to read (NEWS-01). All host-side traffic goes through libcurl (D-41).
+- **Address policy.** Every resolved address is checked when a connection opens, and again before any request byte is sent. That defeats DNS rebinding and covers reused connections. The policy refuses:
+  - loopback, private and shared addresses, except an endpoint the owner configured with such a literal (a local model server or mail server);
+  - link-local addresses, including cloud metadata, and reserved, documentation and multicast addresses, always.
+- **URL policy.**
+  - https only; plain http only to a loopback model server.
+  - No credentials in URLs.
+  - No redirects for authenticated APIs. Feed redirects are re-validated at every hop and never carry credentials to another origin.
+- **TLS.** TLS 1.2 or later, with peer and host verification against the system trust store. There is no option to disable verification. Proxy environment variables are ignored, so the destination's address is the one checked.
+- **No duplicate actions.** A POST is sent at most once per attempt. libcurl's automatic resend is refused, and the attempt is recorded as an unknown outcome.
 - **API exposure.** The API binds to loopback by default. Non-loopback access requires device authentication and TLS, either native or through a trusted reverse proxy. Certificate validation is never disabled.
 
 ## What each provider receives (SEC-03)
@@ -82,7 +85,8 @@ All owner data stays on the authoritative host, inside its data directory. The d
 | Mail server (IMAP) | Lisa's own mailbox login; read-only commands | Synchronization of Lisa's own mailbox |
 | Mail server (SMTP) | Lisa's sending identity, the approved recipients, and the brief or reminder text | Email delivery in live mode |
 | Twilio | The approved phone number and a short spoken message | Call escalation in live mode, after every CALL-01 condition |
-| X, Discord, calendar and news hosts | Requests for the configured account, channel or feed | Synchronization of that source |
+| X, Discord, calendar and news hosts | Requests for the configured account, channel or feed; X and Discord also receive their tokens | Synchronization of that source |
+| The host of a link the owner captured | One GET for that page, with no cookies or credentials | Only when the owner asks Lisa to read the link |
 
 - **Disabling a provider.** Disabling a provider, or removing its configuration, stops new requests to it.
 - **Dry run by default.** Delivery stays dry-run until the owner deliberately enables live mode for a channel (CFG-02). Live mode on a channel without an adapter refuses to start rather than pretending (D-36).
