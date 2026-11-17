@@ -107,6 +107,7 @@ The network server itself answers a few requests before they reach the router, w
 | Brief | `GET /v1/brief?date=` | Generated on first request for today |
 | Regenerate brief | `POST /v1/briefs/regenerate` | `{date?}`; creates a new version; no second notification |
 | Capture | `POST /v1/captures` | `{kind: idea\|text\|link\|sharedAppleNews, text?, url?, title?, channel}`; `201` when created, `200` when the request ID matched an earlier capture |
+| Read a captured link | `POST /v1/captures/{id}/retrieve` | No body; local owner and paired devices. `200` `{retrieved, item, characters, truncated, failureClass?, failureSummary?}`, including when the page could not be read for a lasting reason; `404` unknown capture; `409` not an owner-captured link, the item was deleted, or the page was already read; `503` with `retryAfterSeconds` for a temporary failure or a read already in progress (D-46) |
 | Tasks | `GET /v1/tasks?status=&limit=&cursor=`, `GET /v1/tasks/{id}`, `POST /v1/tasks`, `PATCH /v1/tasks/{id}` | Patches need `expectedRevision`; corrected fields are kept through later reprocessing |
 | Ideas | `GET /v1/ideas?lifecycle=`, `PATCH /v1/ideas/{id}` | The original capture is never changed |
 | Event proposals | `GET /v1/event-proposals?state=`, `POST /v1/event-proposals/{id}/actions` | `{action: confirmMatch\|dismiss\|correct\|reportAdded, expectedRevision, …}` |
