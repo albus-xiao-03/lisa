@@ -636,3 +636,30 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - A temporary failure is a 503 with the site's `Retry-After`, or 60 seconds. It is not recorded, so a retry with the same request ID runs again.
   - Each attempt is audited with its outcome and failure class only.
 - **CLI.** `lisa capture --kind link --retrieve` derives the retrieval's request ID from `--request-id`, so a rerun replays. `--retrieve` with another kind is a usage error.
+
+## D-47 — The Mac app's view models, model status in health, and current revisions in answers (UI-01, UI-03, MODEL-01, EVENT-01)
+
+- **Where.** The Mac screens' view models are in LisaPresentation, beside the companion's, and are built and tested on Linux. The SwiftUI views come later and only display them.
+  - Inbox: event proposals that need review, and extracted tasks still marked possible.
+  - Ideas, and Memory (the owner's preferences).
+  - Settings and health, which includes paired devices.
+  - The brief screen can step through earlier days.
+- **Model status in health.** `GET /v1/health` gains an optional `model` object, so the Mac app can show the model configuration in client mode too. It holds:
+  - the provider (`none`, `deterministic` or `openAICompatible`), the model's name and where it runs;
+  - `deterministic`, and `available`, which says whether the host could set the provider up (not that an endpoint answers);
+  - the daily request limit.
+
+  An OpenAI-compatible model is named by its configured identifier, never by the provider's descriptor, which contains the endpoint's origin. The object never holds an endpoint address, a key reference or a credential. Older JSON without it decodes as `nil`.
+- **Answers carry the stored record.** Commands that change a task, idea, proposal, reminder or preference now answer with the record as stored after their follow-up work.
+  - Before, when replanning changed the record again (as it does when it records why it cannot place an idea), the answer was one revision behind, so the client's next change conflicted.
+  - A later runtime cycle, such as matching proposals against refreshed calendars, can still change a record after the answer. The next change then gets the recoverable 409.
+- **Undated proposals.** A proposal with no date stays "needs details" even when the calendars hold nothing to compare it with. Before, matching against an empty calendar turned it into "not found".
+- **Screen semantics.**
+  - Dismissing an extracted task in the inbox cancels it.
+  - "Schedule" for an idea offers it for planning; it becomes scheduled when the owner accepts the planner's block.
+  - Idea changes are not in the offline queue. The Mac app reaches its host in process or on loopback, so an unreachable host is reported as unavailable and nothing is kept.
+  - Two offline changes to the same preference or proposal are not merged: the second becomes a recoverable conflict.
+- **Limits of the API, kept as they are.**
+  - No route reads one idea or proposal, so after a conflict the screens look for it in the list, within a bound.
+  - Tasks cannot be filtered by origin or confirmation, so the inbox filters open tasks itself.
+  - No route lists preference keys: the app names the R1 keys itself and shows unknown keys by name.
