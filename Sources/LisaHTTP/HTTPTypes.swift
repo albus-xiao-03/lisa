@@ -3,8 +3,8 @@
 
 import Foundation
 
-/// One header field. Names compare case-insensitively.
-public struct HTTPHeader: Hashable, Sendable {
+/// One header field. Names compare case-insensitively. A sensitive value never appears in a description or mirror.
+public struct HTTPHeader: Hashable, Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var name: String
     public var value: String
     /// A credential (such as `Authorization`): never logged, and dropped when a redirect leaves the origin.
@@ -28,6 +28,12 @@ public struct HTTPHeader: Hashable, Sendable {
             }
         return nameValid && !value.utf8.contains { $0 == 0x0D || $0 == 0x0A || $0 == 0x00 }
     }
+
+    public var description: String { isSensitive ? "\(name): <redacted>" : "\(name): \(value)" }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror { Mirror(self, children: ["field": description]) }
 }
 
 /// Which HTTP version a request needs.
@@ -59,8 +65,9 @@ public enum AddressPolicy: Hashable, Sendable {
     case loopbackOnly
 }
 
-/// One HTTP request.
-public struct HTTPRequest: Sendable {
+/// One HTTP request. Its description and mirror show only the method, the origin and the header names, because
+/// paths, queries, bodies and credentials can be private.
+public struct HTTPRequest: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var method: String
     public var url: URL
     public var headers: [HTTPHeader]
@@ -98,6 +105,14 @@ public struct HTTPRequest: Sendable {
 
     /// The method and origin only, safe to log: paths and queries can carry secrets (private calendar addresses).
     public var logLabel: String { "\(method) \(URLPolicy.origin(of: url))" }
+
+    public var description: String {
+        "\(logLabel) headers: [\(headers.map(\.name).joined(separator: ", "))] body: \(body?.count ?? 0) bytes"
+    }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror { Mirror(self, children: ["request": description]) }
 
     /// The first value of a header, ignoring the case of its name.
     public func header(_ name: String) -> String? {
