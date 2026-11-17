@@ -4,7 +4,9 @@ import Foundation
 import LisaRedaction
 
 /// Reads secrets from environment variables.
-public struct EnvironmentSecretStore: SecretStore {
+public struct EnvironmentSecretStore: SecretStore, CustomStringConvertible, CustomDebugStringConvertible,
+    CustomReflectable
+{
     private let environment: [String: String]
 
     /// Uses the current process environment.
@@ -27,4 +29,11 @@ public struct EnvironmentSecretStore: SecretStore {
         guard value.utf8.count <= 65_536 else { throw SecretStoreError.tooLarge(reference.description) }
         return Sensitive(value)
     }
+
+    /// Never shows a value or a variable name: printing, dumping or mirroring the store reveals nothing.
+    public var description: String { "EnvironmentSecretStore(\(environment.count) variables)" }
+
+    public var debugDescription: String { description }
+
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
