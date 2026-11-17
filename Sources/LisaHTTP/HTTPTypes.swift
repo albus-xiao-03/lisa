@@ -34,7 +34,9 @@ public struct HTTPHeader: Hashable, Sendable {
 public enum HTTPVersionRequirement: Hashable, Sendable {
     /// HTTP/2 when the server offers it, otherwise HTTP/1.1.
     case any
-    /// HTTP/2 only, negotiated by TLS ALPN; the request is never sent over HTTP/1.1 (APNs, NOTIFY-04).
+    /// HTTP/2 only (APNs, NOTIFY-04): only `h2` is offered in TLS ALPN and the request is never sent over HTTP/1.1.
+    /// libcurl still speaks HTTP/2 to a TLS server that selects no ALPN protocol at all; such an exchange fails and
+    /// is reported as possibly sent.
     case http2Only
 }
 
