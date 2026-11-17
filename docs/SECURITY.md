@@ -83,6 +83,14 @@ All owner data stays on the authoritative host, inside its data directory. The d
   - Behind a reverse proxy, no request counts as coming from this machine.
   - The server bounds header size, body size, connection count and every wait for the client, and refuses ambiguous framing (request smuggling) and repeated credential headers. Responses forbid caching and content sniffing.
 
+## Apple apps (D-48)
+
+- **Keychain.** The device's pairing identity, and on the Mac the embedded host's `keychain:` secrets, are Keychain items. They are available after first unlock, on this device only, and are never synchronized.
+- **Files.** The queue, the cache and the connection settings are kept in the app's own Application Support directory: mode 0700, protected until first unlock, excluded from backups.
+- **Host trust.** With an owner-supplied certificate or authority, the app trusts only that anchor for the configured host name and can also pin the host's certificate. Otherwise the system trust store and App Transport Security decide. Certificate validation cannot be turned off.
+- **Locked devices.** Completing a task, from a notification or from Siri, needs the device unlocked. With "Allow Siri When Locked" on, Siri can read the brief or rundown, capture, save and snooze on a locked device, so anyone who can speak to it can hear the brief. The owner decides with that system setting.
+- **Notification text.** It is generic localized text, with a hidden-preview placeholder per category. Item titles appear only on devices that opted in.
+
 ## What each provider receives (SEC-03)
 
 | Provider | Receives | When |
