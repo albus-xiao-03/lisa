@@ -1,18 +1,23 @@
 // What the composition root needs: validated settings from configuration and services supplied by the platform.
 
 import Foundation
+import LisaCalendarFeeds
 import LisaDelivery
 import LisaDevices
+import LisaDiscordSource
 import LisaDomain
 import LisaICalendar
+import LisaIMAP
 import LisaInference
 import LisaLocalSources
 import LisaMIME
+import LisaNewsFeeds
 import LisaOwnerData
 import LisaPorts
 import LisaRuntime
 import LisaSecrets
 import LisaTime
+import LisaXSource
 
 /// How a configured source is reached.
 public enum SourceAccess: Hashable, Sendable {
@@ -20,8 +25,28 @@ public enum SourceAccess: Hashable, Sendable {
     case localDirectory(URL, LocalSourceFormat)
     /// One local file, such as a configured `.ics` calendar.
     case localFile(URL, LocalSourceFormat)
-    /// A network adapter (IMAP, HTTPS calendar or feed, X, Discord), described for health until it is available.
-    case adapter(String)
+    /// Lisa's own mailbox over IMAP, read only (MAIL-01).
+    case imapMailbox(IMAPMailboxSettings)
+    /// An HTTPS iCalendar subscription (CAL-01).
+    case calendarSubscription(CalendarSubscriptionAddress)
+    /// An RSS or Atom feed (NEWS-01).
+    case newsFeed(NewsFeedAddress)
+    /// A selected X account (NEWS-02).
+    case xAccount(XAccountConfiguration)
+    /// A Discord channel read by a bot (NEWS-03).
+    case discordChannel(DiscordChannelConfiguration)
+
+    /// A short name of the adapter, for health and `lisa doctor`.
+    public var adapterName: String {
+        switch self {
+        case .localDirectory, .localFile: "local files"
+        case .imapMailbox: "IMAP mailbox"
+        case .calendarSubscription: "HTTPS calendar subscription"
+        case .newsFeed: "RSS/Atom feed"
+        case .xAccount: "X API"
+        case .discordChannel: "Discord"
+        }
+    }
 }
 
 /// One configured source.
@@ -63,7 +88,7 @@ public enum ModelChoice: Hashable, Sendable {
     case none
     /// The labeled rule-based provider (demo and tests).
     case deterministic
-    /// An OpenAI-compatible endpoint; its adapter arrives with the network adapters.
+    /// An OpenAI-compatible Chat Completions endpoint.
     case openAICompatible(endpoint: String, model: String, apiKey: SecretReference?)
 }
 
@@ -94,6 +119,10 @@ public struct HostSettings: Sendable {
     public var calendarLimits: ICalendarLimits
     /// The largest feed document read (OPS-02).
     public var maxFeedBytes: Int
+    /// The live email, call and push adapters, used only for channels whose mode is live.
+    public var deliveryAdapters: DeliveryAdapterSettings
+    /// The longest a model request may take.
+    public var modelTimeoutSeconds: Int
 
     public init(
         dataDirectory: URL, applicationVersion: String, ownerSettings: OwnerSettings,
@@ -105,7 +134,8 @@ public struct HostSettings: Sendable {
         emailSender: EmailSender = EmailSender(address: "lisa@localhost.invalid", name: "Lisa"),
         idempotencyRetentionDays: Int = 30, requestsPerMinute: Int = 300, logMaxBytes: UInt64 = 5_000_000,
         logKeepFiles: Int = 3, dryRunCaptureLimit: Int = 2_000, messageLimits: MIMELimits = MIMELimits(),
-        calendarLimits: ICalendarLimits = ICalendarLimits(), maxFeedBytes: Int = 10_000_000
+        calendarLimits: ICalendarLimits = ICalendarLimits(), maxFeedBytes: Int = 10_000_000,
+        deliveryAdapters: DeliveryAdapterSettings = DeliveryAdapterSettings(), modelTimeoutSeconds: Int = 60
     ) {
         self.dataDirectory = dataDirectory
         self.applicationVersion = applicationVersion
@@ -127,6 +157,8 @@ public struct HostSettings: Sendable {
         self.messageLimits = messageLimits
         self.calendarLimits = calendarLimits
         self.maxFeedBytes = maxFeedBytes
+        self.deliveryAdapters = deliveryAdapters
+        self.modelTimeoutSeconds = modelTimeoutSeconds
     }
 }
 
@@ -139,16 +171,19 @@ public struct HostPlatform: Sendable {
     public var logToStandardError: Bool
     /// Who opened the host, recorded in the lock file (`serve`, `cli`, `demo`, `mac-app`).
     public var mode: String
+    /// How adapters reach the network: libcurl with the system trust store, unless a harness substitutes it.
+    public var network: HostNetwork
 
     public init(
         clock: any WallClock = SystemWallClock(), secrets: any SecretStore,
         localNotifications: (any LocalNotificationTransport)? = nil,
-        logToStandardError: Bool = false, mode: String
+        logToStandardError: Bool = false, mode: String, network: HostNetwork = .libcurl(userAgent: "Lisa")
     ) {
         self.clock = clock
         self.secrets = secrets
         self.localNotifications = localNotifications
         self.logToStandardError = logToStandardError
         self.mode = mode
+        self.network = network
     }
 }
