@@ -86,7 +86,9 @@ struct CurlHTTPExchange {
         let easy: CurlEasy
         do { easy = try pool.take() } catch { return .failure(.unsupported(error.description)) }
         let transfer = CurlTransfer(maxBodyBytes: request.maxResponseBytes, maxHeaderBytes: request.maxHeaderBytes)
-        let gate = CurlAddressGate(policy: request.addresses)
+        // Only idempotent methods may be resent by libcurl's automatic retry on a new connection (RFC 9110 §9.2.2).
+        let idempotent = ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"].contains(request.method)
+        let gate = CurlAddressGate(policy: request.addresses, maxRequests: idempotent ? 0 : 1)
         let headerList: CurlStringList
         do {
             headerList = try configure(easy, transfer: transfer, gate: gate)
