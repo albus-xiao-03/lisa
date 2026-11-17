@@ -72,8 +72,10 @@ public enum URLPolicy {
 
     /// `localhost`, or a literal loopback address.
     static func isLoopbackName(_ host: String) -> Bool {
-        let name = host.lowercased()
+        var name = host.lowercased()
         if name == "localhost" || name == "localhost." { return true }
+        // URLComponents keeps the brackets of an IPv6 literal, as in http://[::1]:8080.
+        if name.hasPrefix("["), name.hasSuffix("]") { name = String(name.dropFirst().dropLast()) }
         return IPLiteral.parse(name).map { $0.addressClass == .loopback } ?? false
     }
 
