@@ -36,11 +36,13 @@ public struct HostSource: Hashable, Sendable {
     public var access: SourceAccess
     /// Lisa's own mailbox address, for mail sources.
     public var mailboxAddress: String?
+    /// The zone floating times and dates of a calendar source are read in (CAL-01); `nil` means the owner's zone.
+    public var floatingTimeZone: TimeZoneID?
 
     public init(
         key: String, name: String, kind: SourceKind, enabled: Bool = true, staleAfterSeconds: Int = 6 * 3600,
         syncIntervalSeconds: Int = 900, retainImportedOnDisable: Bool = true, access: SourceAccess,
-        mailboxAddress: String? = nil
+        mailboxAddress: String? = nil, floatingTimeZone: TimeZoneID? = nil
     ) {
         self.key = key
         self.name = name
@@ -51,6 +53,7 @@ public struct HostSource: Hashable, Sendable {
         self.retainImportedOnDisable = retainImportedOnDisable
         self.access = access
         self.mailboxAddress = mailboxAddress
+        self.floatingTimeZone = floatingTimeZone
     }
 }
 
