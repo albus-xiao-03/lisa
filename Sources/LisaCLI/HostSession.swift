@@ -56,14 +56,19 @@ enum HostSession {
         return settings
     }
 
+    /// The platform services of a command-line host.
+    static func platform(mode: String, logToStandardError: Bool = false) -> HostPlatform {
+        HostPlatform(secrets: CompositeSecretStore(), logToStandardError: logToStandardError, mode: mode)
+    }
+
     /// Opens the host directly. Exits with code 4 when another runtime owns the data directory and 6 when the host
     /// refuses to start.
-    static func open(_ options: HostOptions, mode: String = "cli") throws -> LisaHost {
+    static func open(_ options: HostOptions, mode: String = "cli", logToStandardError: Bool = false) throws -> LisaHost
+    {
         let settings = try settings(try configuration(options), options)
         do {
             return try LisaHost.open(
-                settings: settings,
-                platform: HostPlatform(secrets: CompositeSecretStore(), logToStandardError: false, mode: mode))
+                settings: settings, platform: platform(mode: mode, logToStandardError: logToStandardError))
         } catch let error as RuntimeError {
             Output.error(error.description)
             throw LisaExit.dataDirectoryInUse
@@ -73,14 +78,39 @@ enum HostSession {
         }
     }
 
-    /// Runs `body` with an open host and the owner's in-process client, closing the host afterwards.
-    static func withOwner<T>(_ options: HostOptions, _ body: (LisaHost, LisaAPIClient) async throws -> T) async throws
+    /// Runs `body` with the owner's API client, closing any host it opened afterwards.
+    ///
+    /// When no other runtime owns the data directory, the host is opened directly and `body` receives it. When `lisa
+    /// serve` owns it, the command connects to that host's loopback owner listener as a client instead (ARCH-03),
+    /// and `body` receives no host. Any other owner of the data directory makes the command exit with code 4.
+    static func withOwner<T>(_ options: HostOptions, _ body: (LisaHost?, LisaAPIClient) async throws -> T) async throws
         -> T
     {
-        let host = try open(options)
+        let settings = try settings(try configuration(options), options)
+        let platform = platform(mode: "cli")
+        let host: LisaHost
+        do {
+            host = try LisaHost.open(settings: settings, platform: platform)
+        } catch let error as RuntimeError {
+            guard case .dataDirectoryInUse(_, let owner) = error else {
+                Output.error(error.description)
+                throw LisaExit.dataDirectoryInUse
+            }
+            let client = try connectedClient(settings: settings, platform: platform, owner: owner, refusal: error)
+            return try await run(body, host: nil, client: client)
+        } catch let error as HostError {
+            Output.error(error.description)
+            throw LisaExit.hostRefused
+        }
         defer { host.close() }
         let client = LisaAPIClient(
             transport: host.ownerTransport, credentials: SessionCredentials(), requiresPairing: false)
+        return try await run(body, host: host, client: client)
+    }
+
+    private static func run<T>(
+        _ body: (LisaHost?, LisaAPIClient) async throws -> T, host: LisaHost?, client: LisaAPIClient
+    ) async throws -> T {
         do {
             return try await body(host, client)
         } catch let error as ClientError {
@@ -88,12 +118,46 @@ enum HostSession {
             throw LisaExit.failure
         }
     }
+
+    /// A client of the running host that owns the data directory, through its owner endpoint file. The endpoint must
+    /// belong to the process holding the lock, so a stale file from an earlier run is never used.
+    static func connectedClient(
+        settings: HostSettings, platform: HostPlatform, owner: LockOwner?, refusal: RuntimeError
+    ) throws -> LisaAPIClient {
+        let file = OwnerEndpointFile(dataDirectory: settings.dataDirectory)
+        let endpoint: OwnerEndpoint?
+        do {
+            endpoint = try file.read()
+        } catch {
+            Output.error("\(refusal.description); its owner endpoint cannot be read: \(error)")
+            throw LisaExit.dataDirectoryInUse
+        }
+        guard let endpoint, let owner, owner.processID == endpoint.processID else {
+            Output.error(
+                "\(refusal.description); it does not serve the network API, so this command cannot connect to it")
+            throw LisaExit.dataDirectoryInUse
+        }
+        let transport: LoopbackOwnerTransport
+        do {
+            transport = try LoopbackOwnerTransport(port: endpoint.port, network: platform.network)
+        } catch {
+            Output.error(error.description)
+            throw LisaExit.hostRefused
+        }
+        return LisaAPIClient(
+            transport: transport, credentials: SessionCredentials(credential: endpoint.credential),
+            requiresPairing: false)
+    }
 }
 
-/// The local owner's in-process session needs no stored credential; this keeps the installation identity for the
-/// length of one command.
+/// The local owner's session needs no stored credential: in process none is used, and in client mode the running
+/// host's owner credential is held for the length of one command only.
 final class SessionCredentials: CredentialStore {
-    private let identity = Mutex<ClientIdentity?>(ClientIdentity(installationID: "lisa-cli"))
+    private let identity: Mutex<ClientIdentity?>
+
+    init(credential: String? = nil) {
+        identity = Mutex(ClientIdentity(installationID: "lisa-cli", credential: credential))
+    }
 
     func load() throws -> ClientIdentity? { identity.withLock { $0 } }
     func save(_ value: ClientIdentity) throws { identity.withLock { $0 = value } }
