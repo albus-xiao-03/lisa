@@ -15,7 +15,7 @@
 | Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaLocalSources`, `LisaDemo`, `LisaFixtures`, `lisa` (`LisaCLI`) | Implemented (Phase 5; Linux) |
 | Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Phase 6 |
 | Network API | `LisaAPIServer`; `LisaClient`'s URLSession transport | Phase 7 |
-| Apple applications | `LisaPresentation`, `Apps/` | Phase 8 |
+| Apple applications | `LisaPresentation`, `Apps/` | Phase 8: view models implemented and tested on Linux; apps in progress |
 
 ## Time model
 
@@ -99,6 +99,17 @@ Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The
 
 - **Composition.** `lisa serve` opens the host, starts `HostAPIServer`, writes the owner endpoint file and runs the runtime loop. Shutdown runs in reverse: server, runtime, lock (plan §5.2). The server maps each connection to a `RequestOrigin`: device listener → `authenticateHeaders`; a local peer on the owner listener → `loopbackOwner`.
 - **Dependencies (REC-DEP-03/04).** `Package.resolved` now pins eight packages. The new ones are swift-nio 2.105.0, swift-nio-ssl 2.37.6 (with vendored BoringSSL), swift-atomics 1.3.1, swift-collections 1.7.6 and swift-system 1.9.0, all under the Apache License 2.0 (swift-atomics, swift-collections and swift-system with the Swift Runtime Library Exception). swift-nio-ssl's vendored BoringSSL is under a combination of the ISC and OpenSSL licenses, as its `NOTICE.txt` states. swift-certificates is not resolved, because only swift-nio-ssl's own tests use it.
+
+## Apple applications (Phase 8)
+
+`LisaPresentation` holds the screens' state and actions as `@MainActor @Observable` view models, so they build and are tested on Linux. It depends only on Foundation, Observation, LisaClient and LisaAPIContract. The SwiftUI apps in `Apps/` only display these models and add the Apple-specific adapters; Linux does not compile them (APPLE-01).
+
+| Part | Contents |
+|---|---|
+| Companion models | Rundown, brief and speech text, capture, tasks, reminders, pending actions and conflicts, connectivity and cache age, connection and pairing, this device's notification settings |
+| Mac models (D-47) | Inbox (proposals and possible tasks to review), ideas, memory (preferences), settings and health (runtime state, sources, delivery modes, model configuration, paired devices and their notification state), brief history |
+| Shared rules | Cached data is never shown as current (`LoadState`). Changes go through the durable queue with revision checks, and conflicts are recoverable. Outcomes are truthful: done, queued, unavailable, conflict or failed |
+| `Apps/` | XcodeGen definition (`Apps/project.yml`), configuration and entitlements (`Apps/Config/`); the shared adapters and the two apps follow |
 
 ## Trust boundaries (so far)
 
