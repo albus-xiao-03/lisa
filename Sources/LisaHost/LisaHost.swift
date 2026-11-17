@@ -98,7 +98,8 @@ public final class LisaHost: Sendable {
             extraction: ExtractionService(
                 store: store, clock: clock, logger: logger, settings: effective,
                 pipeline: ExtractionPipeline(
-                    provider: provider, sharing: settings.dataSharing, limits: settings.modelLimits)),
+                    provider: provider, sharing: settings.dataSharing, limits: settings.modelLimits,
+                    budget: Self.modelBudget(for: settings, clock: clock))),
             proposals: ProposalService(store: store, clock: clock, logger: logger, settings: effective),
             outbox: outbox, notifications: notifications,
             reminders: ReminderService(
@@ -221,6 +222,14 @@ public final class LisaHost: Sendable {
             current.updatedAt = now
             try tx.update(current)
         }
+    }
+
+    /// The persisted daily request count for a model endpoint (MODEL-01). The offline deterministic provider sends
+    /// nothing anywhere, so it is not counted.
+    static func modelBudget(for settings: HostSettings, clock: any WallClock) -> (any ModelRequestBudget)? {
+        guard case .openAICompatible = settings.model else { return nil }
+        return FileModelRequestBudget(
+            directory: settings.dataDirectory, clock: clock, zone: settings.ownerSettings.zone.timeZone)
     }
 
     /// A transport that acts as the local owner (the Mac app's embedded mode, the CLI, the demo).
