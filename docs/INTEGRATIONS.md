@@ -76,7 +76,12 @@ This document covers the Phase 6 adapters: MAIL-01, CAL-01 (HTTPS), NEWS-01 to N
   - https and public addresses only;
   - text only, with no scripts and no subresources.
 
-  Links found inside content are never fetched. Apple News items are kept as shared content and never fetched (NEWS-04). Connecting this retriever to the capture workflow is still pending.
+  Links found inside content are never fetched. Apple News items are kept as shared content and never fetched (NEWS-04).
+- **Reading a captured link (D-46).**
+  - The owner asks with `lisa capture --kind link --retrieve <url>`, or a device calls `POST /v1/captures/{id}/retrieve`. Only the local owner and paired devices may ask, and only for a link the owner captured. Each item is read once.
+  - The item then holds the page's text, bounded like a feed item's and labeled `pageText` (what an anonymous reader sees, which for a paywall may be only a teaser), plus the retrieval time, the final address and the page's title when it had only the link. The raw page is kept under raw-content retention.
+  - A page that needs signing in or payment, is not text, is too large or cannot be reached leaves the item title-only and reports why. Temporary failures can be retried with the same request ID.
+- **Verified.** Through the host and API with a scripted network (success, replay, second read refused, each failure class, refused addresses, permissions, no subresource requests), and the CLI in process and in client mode with links Lisa refuses before sending. A successful read through real libcurl is not verified, because the sandbox has no Internet access.
 
 ## X (NEWS-02)
 
