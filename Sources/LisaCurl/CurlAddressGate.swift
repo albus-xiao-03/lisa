@@ -12,10 +12,14 @@ final class CurlAddressGate {
     /// The C structure handed to libcurl; valid for the gate's lifetime.
     let cGate: UnsafeMutablePointer<lisa_curl_address_gate>
 
-    init(policy: AddressPolicy) {
+    /// `maxRequests` limits how often the request may be sent in one exchange (0: no limit); see `resendRefused`.
+    init(policy: AddressPolicy, maxRequests: Int32 = 0) {
         self.policy = policy
         cGate = UnsafeMutablePointer<lisa_curl_address_gate>.allocate(capacity: 1)
-        cGate.initialize(to: lisa_curl_address_gate(check: curlAddressCheck, context: nil, request_started: 0))
+        cGate.initialize(
+            to: lisa_curl_address_gate(
+                check: curlAddressCheck, context: nil, request_started: 0, max_requests: maxRequests,
+                request_count: 0, resend_refused: 0))
         cGate.pointee.context = Unmanaged.passUnretained(self).toOpaque()
     }
 
@@ -27,6 +31,10 @@ final class CurlAddressGate {
     /// Whether the pre-request check passed, after which request bytes may have reached the server. Read only after
     /// the transfer returns, on the thread that ran it.
     var requestStarted: Bool { cGate.pointee.request_started != 0 }
+
+    /// Whether libcurl tried to send the request again (on a new connection, after a reused one died without a
+    /// response) and the gate refused, so the request was sent at most once.
+    var resendRefused: Bool { cGate.pointee.resend_refused != 0 }
 
     /// The classes of the addresses refused so far.
     var refusedClasses: [AddressClass] { refused }
