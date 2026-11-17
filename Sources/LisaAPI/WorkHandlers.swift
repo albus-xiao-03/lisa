@@ -128,4 +128,11 @@ extension APIRouter {
             by: try principal(caller))
         return try json(DTOMapping.capture(result.capture, created: result.created), status: result.created ? 201 : 200)
     }
+
+    /// Reads the page behind a captured link. A page that cannot be read for a lasting reason is a `200` whose body
+    /// says why; temporary failures, conflicts and refusals are typed errors (`ErrorMapping`).
+    func retrieveCapture(_ id: String, _ caller: Caller) async throws -> APIResponse {
+        let outcome = try await application.retrieveCapturedPage(CaptureID(id), by: try principal(caller))
+        return try json(DTOMapping.captureRetrieval(outcome))
+    }
 }
