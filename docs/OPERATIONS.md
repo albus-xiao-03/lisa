@@ -9,8 +9,11 @@ This document covers ARCH-03, OPS-01, OPS-02, DATA-05 and the operational parts 
 - **Single writer.** Exactly one runtime may write a data directory.
   - The runtime takes an exclusive lock on `<data directory>/lisa.lock`; the operating system releases it if the process ends.
   - A second command that needs to write fails clearly, naming the process that holds the lock. It never starts a competing scheduler.
-  - From Phase 7, commands can instead connect to the running host as a client.
-- **Commands.** Commands that open the data directory directly, while no host is running: `doctor`, `run-once`, `import`, `capture`, `plan`, `brief`, `status`, `export`, `backup`, `restore`, and `device`.
+  - While `lisa serve` is the host, commands that read or change owner data connect to it as clients instead (see below).
+- **Commands.** With no host running, every command opens the data directory directly.
+  - While `lisa serve` runs, `capture`, `plan`, `brief`, `status`, `export`, `device`, `task`, `reminder`, `proposal` and `preference` connect to it as clients.
+  - `run-once`, `import`, `backup` and `restore` need the data directory itself. They exit with code 4 until the host stops.
+  - `doctor` and `demo` never need the lock.
 - **When the host is off.** While the host is stopped, asleep or disconnected:
   - nothing is ingested;
   - no reminder, notification, email or call is decided or sent.
@@ -71,12 +74,30 @@ When the host opens, it reconciles before doing anything else:
 - **Mail authentication.** libcurl chooses the SASL mechanism the server advertises, preferring GSSAPI, DIGEST-MD5, CRAM-MD5 and NTLM over PLAIN. It always does so inside verified TLS. A server that offers no AUTH receives the message without authentication.
 - **Details per integration** are in `docs/INTEGRATIONS.md`.
 
+## Serving the API (Phase 7)
+
+- **Starting.** `lisa serve --config <file>` opens the data directory and runs the processing loop and the network API until SIGINT or SIGTERM. It reports its listeners on standard output (`--json` for machine-readable output) and logs to standard error and `<data directory>/logs`.
+- **Listeners.**
+  - The device listener is at `api.bindAddress` and `api.port`, by default `127.0.0.1:8765`.
+  - The owner listener is on `127.0.0.1` with a free port. `lisa serve` writes that port and a credential issued for this run to `<data directory>/run/owner-endpoint.json` (mode 0600), and removes the file when it stops.
+- **Client mode.** A command run while `lisa serve` owns the data directory reads that file and connects over loopback as the local owner. It refuses the file if other users can read it, or if it names a process other than the lock's owner. The credential is revoked when the host stops, so a leftover file is useless.
+- **Reaching the host from devices (NOTIFY-07).**
+  - Loopback serves only this machine. For iPhone and iPad, bind to the address of the private route the device uses, such as the host's VPN or local-network address.
+  - Off loopback, Lisa requires TLS: either `api.tls.mode: "native"` with `certificateSecret` and `privateKeySecret` (PEM files with mode 0600, unencrypted key), or `api.tls.mode: "reverseProxy"` with a proxy that terminates TLS and reaches Lisa on a loopback or private address.
+  - The certificate must name the address or host name the devices use. Apple devices also need to trust its issuer (`docs/SETUP-APPLE.md`, Phase 8).
+  - There is no relay, public endpoint or cloud service. Push notifications do not need this route; current data and notification actions do.
+- **Troubleshooting.**
+  - Exit code 6 with "the network API could not be started": the address is in use (another process, or an earlier host still stopping), it is not an IP address, or the TLS identity is unusable. The message names which.
+  - A device gets 401: its credential was revoked or the host's data was restored from elsewhere; pair it again.
+  - Connections that send nothing for 20 seconds, or stall a body for 30 seconds, are closed by design.
+- **Stopping.** SIGINT or SIGTERM stops accepting connections, lets requests in progress finish for up to 5 seconds, completes the current cycle, then releases the lock. While the host is stopped, devices show cached data and queue their actions.
+
 ## Devices and connectivity
 
 - **Pairing codes.** A pairing code lives only in the running host's memory for 10 minutes. Restarting the host invalidates pending codes; create a new one with `lisa device pair-code`.
 - **Removing a device.** Removing a device revokes its credential and cancels its pending deliveries.
 - **When a device can't reach the host.** The app shows the cached brief and rundown with their age, and queues captures and actions until it reconnects. Push notifications still arrive while the host is running and online, because they travel host → Apple → device.
-- **Remote access.** The intended remote arrangement is an owner-configured private VPN route to the host's authenticated HTTPS API (Phase 7 and `docs/SETUP-APPLE.md`).
+- **Remote access.** The intended remote arrangement is an owner-configured private VPN route to the host's authenticated HTTPS API; see "Serving the API" above and `docs/SETUP-APPLE.md`.
 
 ## Retention (DATA-05)
 
