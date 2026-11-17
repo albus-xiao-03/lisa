@@ -2,6 +2,7 @@
 
 import Foundation
 import LisaAPIContract
+import LisaApplication
 import LisaDevices
 import LisaDomain
 import LisaPorts
@@ -77,10 +78,27 @@ enum ErrorMapping {
             case .invalidToken:
                 return APIErrorBody(code: .invalidRequest, message: device.description, field: "token")
             }
+        case let page as CapturedPageError:
+            return capturedPage(page)
         case is DecodingError:
             return APIErrorBody(code: .invalidRequest, message: "the request body does not match the documented schema")
         default:
             return APIErrorBody(code: .internalError, message: "the request could not be completed")
+        }
+    }
+
+    /// Refusals of a captured link's retrieval: the capture's state is a conflict; a retrieval in progress, a temporary
+    /// failure of the site and a host that cannot read links are temporary (not recorded, so a retry runs again).
+    static func capturedPage(_ error: CapturedPageError) -> APIErrorBody {
+        switch error {
+        case .notRetrievable, .itemMissing, .alreadyRetrieved:
+            APIErrorBody(code: .conflict, message: error.description)
+        case .inProgress:
+            APIErrorBody(code: .unavailable, message: error.description, retryAfterSeconds: 5)
+        case .temporarilyUnavailable(_, let seconds):
+            APIErrorBody(code: .unavailable, message: error.description, retryAfterSeconds: seconds)
+        case .unavailable:
+            APIErrorBody(code: .unavailable, message: error.description)
         }
     }
 
