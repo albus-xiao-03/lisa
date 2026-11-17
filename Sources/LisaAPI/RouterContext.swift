@@ -7,8 +7,12 @@ import LisaDomain
 public enum RequestOrigin: Hashable, Sendable {
     /// The host's own process (the Mac app's embedded mode, the CLI and the demo) acting as the local owner.
     case trustedLocalOwner
-    /// Any other caller; it must present a device credential or the owner credential.
+    /// A paired device or a device that is pairing; it must present a device credential. The owner credential is
+    /// refused here, whatever the peer's address.
     case authenticateHeaders(isLoopback: Bool)
+    /// A peer on this machine connected to the host's loopback owner listener, such as the CLI in client mode. Only
+    /// the owner credential is accepted.
+    case loopbackOwner
 }
 
 /// The runtime facts health reports. Supplied by the runtime; the router never reads them itself.
@@ -39,7 +43,8 @@ public struct RouterConfiguration: Sendable {
     public var idempotencyRetentionDays: Int
     /// Requests per principal per minute before throttling.
     public var requestsPerMinute: Int
-    /// Verifies the local owner's credential for loopback clients such as the CLI in client mode; `nil` disables it.
+    /// Verifies the owner credential presented on the loopback owner listener (`RequestOrigin.loopbackOwner`), which
+    /// the CLI uses in client mode; `nil` refuses every such request.
     public var ownerCredentialVerifier: (@Sendable (String) -> Bool)?
     /// Whether the host delivers local notifications itself (the Mac app), reported in health.
     public var localNotificationsLive: Bool
