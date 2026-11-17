@@ -85,6 +85,15 @@ public final class LisaHost: Sendable {
         var unavailable: [String] = []
         let (provider, modelNote) = adapters.modelProvider()
         if let modelNote { unavailable.append(modelNote) }
+        let capturedPages: CapturedPageService?
+        switch adapters.capturedPageRetrieval() {
+        case .success(let retrieval):
+            capturedPages = CapturedPageService(
+                store: store, raw: raw, clock: clock, logger: logger, retrieval: retrieval)
+        case .failure(let reason):
+            capturedPages = nil
+            unavailable.append("reading captured links is unavailable: \(reason)")
+        }
         let services = LisaServices(
             store: store, clock: clock, logger: logger, settings: effective,
             captures: CaptureService(store: store, clock: clock, logger: logger),
@@ -109,7 +118,7 @@ public final class LisaHost: Sendable {
             briefs: BriefService(
                 store: store, clock: clock, logger: logger, settings: effective, notifications: notifications,
                 outbox: outbox),
-            devices: devices)
+            devices: devices, capturedPages: capturedPages)
         let application = LisaApplication(services: services, pushPolicy: settings.pushPolicy)
         let (jobs, notes) = try Self.jobs(
             for: settings, adapters: adapters, services: services, store: store, raw: raw, settings: effective)
