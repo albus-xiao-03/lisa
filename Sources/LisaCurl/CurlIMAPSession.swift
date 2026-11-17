@@ -7,7 +7,8 @@ import CCurlShim
 import Foundation
 
 /// An authenticated IMAP connection. Not thread-safe: open, use and close it on one thread (for example inside
-/// `CurlWorkerThread.run`). Closing lets libcurl send its own tagged LOGOUT.
+/// `CurlWorkerThread.run`). libcurl 8.14.1 sends no LOGOUT when it cleans up a connect-only session (observed in
+/// milestone M6a), so the caller sends its own before closing.
 public final class CurlIMAPSession {
     /// The lines libcurl received while connecting: the greeting, capabilities and the authentication result.
     /// libcurl's commands, which carry the credentials, are never recorded.
@@ -25,11 +26,13 @@ public final class CurlIMAPSession {
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) throws(CurlMailFailure) -> CurlIMAPSession {
         guard !username.isEmpty else { throw .refused("an IMAP user name is required") }
+        guard server.isWellFormed else { throw .refused("the IMAP server's host name or port is not valid") }
         let easy: CurlEasy
         do { easy = try CurlEasy() } catch { throw .refused(error.description) }
         let transfer = CurlTransfer(maxBodyBytes: 0, maxHeaderBytes: 262_144, recordsLines: true)
         let gate = CurlAddressGate(policy: server.addresses, maxRequests: 1)
-        let cancellation = CurlCancellation()
+        // The caller's cancellation is checked by libcurl's progress callback, so cancelling during login stops it.
+        let cancellation = CurlCancellation(alsoCancelledWhen: isCancelled)
         do {
             try CurlMailOptions.apply(
                 to: easy, server: server, scheme: "imap", path: "", username: username, password: password, gate: gate,
@@ -122,7 +125,8 @@ public final class CurlIMAPSession {
         }
     }
 
-    /// Closes the connection. libcurl sends its own LOGOUT and waits at most the server response timeout.
+    /// Closes the connection without a protocol LOGOUT (the caller sends one first); waits are bounded by the server
+    /// response timeout.
     public func close() {
         guard let easy else { return }
         self.easy = nil
