@@ -123,6 +123,8 @@ public struct HostSettings: Sendable {
     public var deliveryAdapters: DeliveryAdapterSettings
     /// The longest a model request may take.
     public var modelTimeoutSeconds: Int
+    /// Where and how `lisa serve` offers the network API.
+    public var api: APIServerSettings
 
     public init(
         dataDirectory: URL, applicationVersion: String, ownerSettings: OwnerSettings,
@@ -135,7 +137,8 @@ public struct HostSettings: Sendable {
         idempotencyRetentionDays: Int = 30, requestsPerMinute: Int = 300, logMaxBytes: UInt64 = 5_000_000,
         logKeepFiles: Int = 3, dryRunCaptureLimit: Int = 2_000, messageLimits: MIMELimits = MIMELimits(),
         calendarLimits: ICalendarLimits = ICalendarLimits(), maxFeedBytes: Int = 10_000_000,
-        deliveryAdapters: DeliveryAdapterSettings = DeliveryAdapterSettings(), modelTimeoutSeconds: Int = 60
+        deliveryAdapters: DeliveryAdapterSettings = DeliveryAdapterSettings(), modelTimeoutSeconds: Int = 60,
+        api: APIServerSettings = APIServerSettings()
     ) {
         self.dataDirectory = dataDirectory
         self.applicationVersion = applicationVersion
@@ -158,6 +161,7 @@ public struct HostSettings: Sendable {
         self.calendarLimits = calendarLimits
         self.maxFeedBytes = maxFeedBytes
         self.deliveryAdapters = deliveryAdapters
+        self.api = api
         self.modelTimeoutSeconds = modelTimeoutSeconds
     }
 }
