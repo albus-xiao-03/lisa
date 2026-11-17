@@ -1,5 +1,5 @@
-// The brief screen and "read the brief": the host's brief or the cached copy with its age, plain spoken text, and
-// regeneration.
+// The brief screen and "read the brief": the host's brief or the cached copy with its age, plain spoken text,
+// regeneration and its status, and stepping back to earlier days' briefs.
 
 import Foundation
 import LisaAPIContract
@@ -11,7 +11,8 @@ import Observation
 /// While the host is unreachable the screen shows the cached brief with its age, never as current (UI-03).
 /// `spokenText` is the brief as plain sentences without markup; `speechText(at:)` adds a spoken notice when the brief
 /// is a saved copy, so a stale brief is never read out as current. Regeneration is a direct request to the host: it
-/// cannot be queued, so it is unavailable while the host cannot be reached.
+/// cannot be queued, so it is unavailable while the host cannot be reached. Earlier days' briefs are read one day at a
+/// time with `load(date:)`, using `previousDate` and `nextDate` (UI-01: current and previous briefs).
 @MainActor
 @Observable
 public final class BriefModel {
@@ -105,6 +106,35 @@ public final class BriefModel {
         let day = LocalDay.spokenEnglish(result.value.date)
         return "This is the saved brief for \(day), from \(AgePhrase.english(result.age(at: now))) ago. It may be out "
             + "of date. " + spoken
+    }
+
+    /// The day before the brief shown (`YYYY-MM-DD`), to read earlier briefs one day at a time with `load(date:)`;
+    /// `nil` while neither a date nor a brief is shown.
+    public var previousDate: String? {
+        guard let shown = date ?? state.value?.date else { return nil }
+        return LocalDay.adding(-1, to: shown)
+    }
+
+    /// The day after the one shown while an earlier day was chosen, to step forward again; `nil` while the host's
+    /// current brief is shown, which `load(date: nil)` returns to.
+    public var nextDate: String? {
+        date.flatMap { LocalDay.adding(1, to: $0) }
+    }
+
+    /// Where the brief shown stands, in words for the screen: being regenerated, kept after a failed regeneration,
+    /// possibly out of date, or composed from templates without a model; `nil` when there is nothing to say.
+    public var statusMessage: String? {
+        if isRegenerating { return "Lisa is preparing a new version of this brief." }
+        guard let brief = state.value else { return nil }
+        switch brief.state {
+        case "failed":
+            let reason = brief.lastFailure.map { ": \($0)" } ?? ""
+            return "The last attempt to prepare this brief failed\(reason). This is the last good version."
+        case "stale":
+            return "This brief may be out of date. Regenerate it to include the latest changes."
+        default:
+            return brief.templateOnly ? "Composed from templates; no language model was used." : nil
+        }
     }
 
     /// Whether the brief shown is a cached copy of a day before this device's current date, shown because the host
