@@ -1,0 +1,48 @@
+/*
+  Lisa's notification text (plan §6.5, §6.7, NOTIFY-06). The host's push payload carries only these localization
+  keys: aps.alert title-loc-key is <CATEGORY>_TITLE, loc-key is <CATEGORY>_BODY, or <CATEGORY>_BODY_TITLED with the
+  item's truncated title as %@ when this device opted in to "show titles". The text is generic and never contains the
+  owner's content. Action titles and the placeholders shown when previews are hidden are registered at launch.
+*/
+
+/* Reminder: an upcoming confirmed deadline. */
+"LISA_REMINDER_TITLE" = "Reminder";
+"LISA_REMINDER_BODY" = "Something you planned is coming up.";
+"LISA_REMINDER_BODY_TITLED" = "%@ is coming up.";
+"LISA_REMINDER_HIDDEN_PREVIEW" = "A reminder from Lisa";
+
+/* Overdue: a confirmed task past its deadline. */
+"LISA_OVERDUE_TITLE" = "Past due";
+"LISA_OVERDUE_BODY" = "A task is past its deadline.";
+"LISA_OVERDUE_BODY_TITLED" = "%@ is past its deadline.";
+"LISA_OVERDUE_HIDDEN_PREVIEW" = "A task past its deadline";
+
+/* Plan block: an accepted block of the plan is about to start. */
+"LISA_PLAN_BLOCK_TITLE" = "Up next";
+"LISA_PLAN_BLOCK_BODY" = "A planned block is about to start.";
+"LISA_PLAN_BLOCK_BODY_TITLED" = "Up next: %@";
+"LISA_PLAN_BLOCK_HIDDEN_PREVIEW" = "A planned block";
+
+/* Event proposal: an event Lisa found that waits for review in the app. */
+"LISA_EVENT_PROPOSAL_TITLE" = "Event to review";
+"LISA_EVENT_PROPOSAL_BODY" = "Lisa found an event for you to review.";
+"LISA_EVENT_PROPOSAL_BODY_TITLED" = "Lisa found an event to review: %@";
+"LISA_EVENT_PROPOSAL_HIDDEN_PREVIEW" = "An event to review";
+
+/* Commitment change: an important change to a confirmed commitment. */
+"LISA_COMMITMENT_CHANGE_TITLE" = "Commitment changed";
+"LISA_COMMITMENT_CHANGE_BODY" = "One of your commitments changed.";
+"LISA_COMMITMENT_CHANGE_BODY_TITLED" = "%@ changed.";
+"LISA_COMMITMENT_CHANGE_HIDDEN_PREVIEW" = "A change to a commitment";
+
+/* Brief: the daily brief is available. */
+"LISA_BRIEF_TITLE" = "Your brief is ready";
+"LISA_BRIEF_BODY" = "Open Lisa to read today's brief.";
+"LISA_BRIEF_BODY_TITLED" = "%@ is ready to read.";
+"LISA_BRIEF_HIDDEN_PREVIEW" = "Your brief is ready";
+
+/* Notification actions. Complete asks for the device to be unlocked first. */
+"LISA_ACTION_OPEN" = "Open";
+"LISA_ACTION_ACKNOWLEDGE" = "Acknowledge";
+"LISA_ACTION_SNOOZE" = "Snooze";
+"LISA_ACTION_COMPLETE" = "Complete";
