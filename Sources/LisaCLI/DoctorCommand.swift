@@ -39,42 +39,9 @@ struct DoctorCommand: AsyncParsableCommand {
         } catch {
             checks.append(Check(name: "data directory", ok: false, detail: String(describing: error)))
         }
-        let modes = configuration.delivery.modes
-        checks.append(
-            Check(
-                name: "delivery", ok: !configuration.hasLiveDelivery,
-                detail: "email \(modes.email.rawValue), calls \(modes.call.rawValue), push \(modes.push.rawValue)"
-                    + (configuration.hasLiveDelivery
-                        ? "; live delivery is configured, but this build has no live delivery adapter, so the host would refuse to start"
-                        : "; nothing is sent until a channel is set to live")))
-        for source in settings.sources {
-            switch source.access {
-            case .localDirectory(let url, _), .localFile(let url, _):
-                let exists = FileManager.default.fileExists(atPath: url.path)
-                checks.append(
-                    Check(
-                        name: "source \(source.key)", ok: exists,
-                        detail: exists ? "local files at \(url.path)" : "\(url.path) does not exist"))
-            case .adapter(let description):
-                checks.append(
-                    Check(
-                        name: "source \(source.key)", ok: false,
-                        detail:
-                            "the \(description) adapter is not in this build; the source will be reported unavailable"))
-            }
-        }
-        if case .openAICompatible = settings.model {
-            checks.append(
-                Check(
-                    name: "model", ok: false,
-                    detail: "the OpenAI-compatible adapter is not in this build; email waits for a model"))
-        } else {
-            checks.append(
-                Check(
-                    name: "model", ok: true,
-                    detail:
-                        "provider \(configuration.model.provider.rawValue), data sharing \(configuration.model.dataSharing.rawValue)"
-                ))
+        let platform = HostPlatform(secrets: CompositeSecretStore(), mode: "doctor")
+        checks += HostDiagnostics.check(settings: settings, platform: platform).map {
+            Check(name: $0.name, ok: $0.ok, detail: $0.detail)
         }
         let secrets = CompositeSecretStore()
         for secret in configuration.referencedSecrets {
