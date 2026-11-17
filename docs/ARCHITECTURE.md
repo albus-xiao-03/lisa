@@ -62,6 +62,30 @@ Services depend only on `RecordStore` (in `LisaPorts`); `LisaStore` implements i
 - **Configuration:** `LisaConfig` reads a versioned JSON5 file with its own bounded reader. Validation is strict and actionable, unknown keys are reported, secrets are references only, and every delivery channel defaults to a dry run.
 - **Offline demonstration:** `LisaDemo`, with `LisaFixtures` rooted at `Fixtures/`, runs DEMO-01 without accounts or network (D-39).
 
+## Network adapters (Phase 6)
+
+Implemented and verified on Linux against scripted test doubles and loopback servers; live services are not verified (`docs/INTEGRATIONS.md`).
+
+| Module | Role | Depends on |
+|---|---|---|
+| `LisaHTTP` | HTTP client protocol; URL, redirect and address policy; `Retry-After` | Foundation only |
+| `CCurl`, `CCurlShim` | System libcurl module map; typed C wrappers and the connect-time address gate | libcurl 8.14.1 |
+| `LisaCurl` | libcurl HTTP client (HTTP/1.1, HTTP/2-only), SMTP submission, IMAP session hand-over | LisaHTTP, CCurl, CCurlShim |
+| `LisaHTTPSources` | Shared, package-internal support for HTTP document sources (D-42) | LisaTime, LisaRedaction, LisaDomain, LisaSecrets, LisaPorts, LisaHTTP |
+| `LisaCalendarFeeds`, `LisaNewsFeeds` | HTTPS calendars; RSS/Atom feeds and owner-initiated page retrieval | LisaHTTPSources, LisaICalendar / LisaHTMLText, LisaPorts |
+| `LisaXSource`, `LisaDiscordSource` | X API v2 and Discord REST read adapters | LisaPorts, LisaSecrets, LisaHTTP |
+| `LisaIMAP` | Read-only IMAP subset over the libcurl session (M6a) | LisaCurl, LisaPorts, LisaSecrets |
+| `LisaSMTP`, `LisaTwilio`, `LisaAPNs` | Email, call and push transports | LisaCurl / LisaHTTP, LisaPorts; LisaMIME (SMTP); LisaCrypto and LisaAPIContract (APNs) |
+| `LisaOpenAICompatible` | Chat Completions model provider | LisaInference, LisaSecrets, LisaHTTP |
+
+- **Composition.** `LisaHost` builds the adapters through `HostAdapters`:
+  - connectors for every enabled source;
+  - the model provider;
+  - live transports only for channels set to live.
+
+  `HostDiagnostics` reports their readiness to `lisa doctor`. The platform supplies the network stack (`HostNetwork`), so a test harness can substitute a scripted client; configuration cannot.
+- **Dependencies.** No new third-party package. libcurl was already approved (REC-SYS-02), and `Package.resolved` is unchanged.
+
 ## Trust boundaries (so far)
 
 - **Secrets:** resolved only through `SecretStore`. Configuration and the database hold references, never values (D-08).
