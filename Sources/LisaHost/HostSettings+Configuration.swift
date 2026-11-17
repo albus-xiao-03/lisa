@@ -13,6 +13,7 @@ import LisaMIME
 import LisaOwnerData
 import LisaPorts
 import LisaRuntime
+import LisaTime
 
 extension HostSettings {
     /// Host settings for a validated configuration. Network sources whose adapters are not in this build are kept
@@ -75,6 +76,7 @@ extension HostSettings {
 
     static func source(_ source: SourceConfiguration) -> HostSource {
         var mailboxAddress: String?
+        var floatingTimeZone: TimeZoneID?
         let access: SourceAccess
         switch source.settings {
         case .localImport(let settings):
@@ -84,6 +86,7 @@ extension HostSettings {
             mailboxAddress = settings.mailboxAddress
             access = .adapter("IMAP mailbox")
         case .calendarFeed(let settings):
+            floatingTimeZone = settings.floatingTimeZone
             if case .file(let path) = settings.location {
                 access = .localFile(URL(fileURLWithPath: path), .calendar)
             } else {
@@ -103,6 +106,7 @@ extension HostSettings {
         return HostSource(
             key: source.key, name: source.name, kind: source.kind, enabled: source.enabled,
             staleAfterSeconds: source.staleAfterSeconds, syncIntervalSeconds: source.syncIntervalMinutes * 60,
-            retainImportedOnDisable: source.retainImportedOnDisable, access: access, mailboxAddress: mailboxAddress)
+            retainImportedOnDisable: source.retainImportedOnDisable, access: access, mailboxAddress: mailboxAddress,
+            floatingTimeZone: floatingTimeZone)
     }
 }
