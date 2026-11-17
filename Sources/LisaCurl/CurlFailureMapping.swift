@@ -20,6 +20,10 @@ enum CurlFailureMapping {
             return .notSent("the connection could not be established")
         case CURLE_ABORTED_BY_CALLBACK where cancelled:
             return .cancelled(requestSent: requestSent)
+        case CURLE_ABORTED_BY_CALLBACK where gate.resendRefused:
+            return .connectionLost(
+                requestSent: true,
+                "the connection failed after the request was sent; Lisa does not let libcurl send it a second time")
         case CURLE_ABORTED_BY_CALLBACK where !refusedClasses.isEmpty:
             return .refused("the connection is to an address Lisa does not connect to (\(describe(refusedClasses)))")
         case CURLE_WRITE_ERROR where transfer.bodyTooLarge:
