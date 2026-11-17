@@ -38,6 +38,7 @@ let package = Package(
         .library(name: "LisaAPIContract", targets: ["LisaAPIContract"]),
         .library(name: "LisaConfig", targets: ["LisaConfig"]),
         .library(name: "LisaClient", targets: ["LisaClient"]),
+        .library(name: "LisaPresentation", targets: ["LisaPresentation"]),
         .library(name: "LisaAPI", targets: ["LisaAPI"]),
         .library(name: "LisaAPIServer", targets: ["LisaAPIServer"]),
         .library(name: "LisaRuntime", targets: ["LisaRuntime"]),
@@ -130,6 +131,7 @@ let package = Package(
         .target(name: "LisaConfig", dependencies: ["LisaTime", "LisaDomain", "LisaSecrets"]),
         // Foundation and the contract only, so Apple apps can link it.
         .target(name: "LisaClient", dependencies: ["LisaAPIContract"]),
+        .target(name: "LisaPresentation", dependencies: ["LisaClient", "LisaAPIContract"]),
         .target(name: "LisaLocalSources", dependencies: ["LisaDomain", "LisaPorts"]),
         .target(
             name: "LisaRuntime",
