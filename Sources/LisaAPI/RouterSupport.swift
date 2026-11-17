@@ -18,6 +18,7 @@ extension APIRouter {
         case .brief: return try brief(request)
         case .regenerateBrief: return try regenerateBrief(request, caller)
         case .capture: return try capture(request, caller, requestID: requestID)
+        case .retrieveCapture(let id): return try await retrieveCapture(id, caller)
         case .listTasks: return try listTasks(request)
         case .createTask: return try createTask(request, caller)
         case .task(let id): return try task(id)
