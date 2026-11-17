@@ -24,7 +24,7 @@ import LisaXSource
 struct HostAdapters: Sendable {
     let settings: HostSettings
     let platform: HostPlatform
-    /// Shared by the feed, X and Discord connectors.
+    /// Shared by the feed, X and Discord connectors and the captured-page retriever.
     private let connectorClient: Result<any HTTPClient, AdapterUnavailable>
 
     /// Why an adapter cannot be built; the text contains no secret.
@@ -78,6 +78,14 @@ struct HostAdapters: Sendable {
             return connectorClient.map { client in
                 DiscordChannelConnector(configuration: configuration, secrets: secrets, http: client, clock: clock)
             }
+        }
+    }
+
+    /// The retriever of the pages behind links the owner captures, on the connectors' HTTP client (NEWS-01).
+    func capturedPageRetrieval() -> Result<any CapturedPageRetrieval, AdapterUnavailable> {
+        let clock = platform.clock
+        return connectorClient.map { client in
+            OwnerPageRetrievalAdapter(retriever: OwnerPageRetriever(client: client, clock: clock))
         }
     }
 
