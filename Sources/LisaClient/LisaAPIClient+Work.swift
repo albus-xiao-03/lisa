@@ -11,6 +11,17 @@ extension LisaAPIClient {
         try await call(.capture, body: encode(request), requestID: requestID, returning: CaptureDTO.self)
     }
 
+    /// `POST /v1/captures/{id}/retrieve`: asks the host to read the page behind a link the owner captured. A page is
+    /// read once: retrying with the same request ID returns the recorded answer, and asking again with another ID after
+    /// the page was read is a conflict (409), as is asking for an idea, text or an Apple News share. A page that cannot
+    /// be read for a lasting reason returns `retrieved == false` with the reason; a temporary failure is a 503 with
+    /// `retryAfterSeconds`, to retry with the same request ID.
+    public func retrieveCapturedPage(
+        captureID: String, requestID: String? = nil
+    ) async throws(ClientError) -> CaptureRetrievalDTO {
+        try await call(.retrieveCapture(id: captureID), requestID: requestID, returning: CaptureRetrievalDTO.self)
+    }
+
     /// `GET /v1/tasks`: a page of tasks, optionally only those with `status`.
     public func tasks(
         status: TaskStatusValue? = nil, limit: Int? = nil, cursor: String? = nil
