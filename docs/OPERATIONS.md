@@ -63,6 +63,14 @@ When the host opens, it reconciles before doing anything else:
   - Retries are bounded: 5 attempts by default, with exponential backoff, within the delivery's validity window.
   - Health reports pending, failed and uncertain deliveries.
 
+## Network adapters (Phase 6)
+
+- **Check first.** Run `lisa doctor` after configuring an adapter. It reports the network library (libcurl, with whether HTTP/2-only requests work), each source's configuration and secrets, the model endpoint, live delivery, and each APNs environment. It contacts no service and sends nothing.
+- **Going live.** Set one channel's mode to `live` only after doctor reports its adapter ready. If a live channel's adapter is missing or unusable, the host refuses to start, naming the reason, rather than pretending to deliver.
+- **Outcomes.** A delivery that may have reached a provider is recorded as `outcome unknown` and never resent automatically. Check the provider's own records, such as the mailbox's sent folder or Twilio's call log, before resending by hand.
+- **Mail authentication.** libcurl chooses the SASL mechanism the server advertises, preferring GSSAPI, DIGEST-MD5, CRAM-MD5 and NTLM over PLAIN. It always does so inside verified TLS. A server that offers no AUTH receives the message without authentication.
+- **Details per integration** are in `docs/INTEGRATIONS.md`.
+
 ## Devices and connectivity
 
 - **Pairing codes.** A pairing code lives only in the running host's memory for 10 minutes. Restarting the host invalidates pending codes; create a new one with `lisa device pair-code`.
