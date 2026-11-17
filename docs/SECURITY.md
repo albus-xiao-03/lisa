@@ -47,6 +47,7 @@ All owner data stays on the authoritative host, inside its data directory. The d
 
   A paired device, inference and source content can never change them. Inferred preferences take effect only after the owner confirms them (D-30).
 - **Mutations.** Every mutation has a stable request identity, and revision checks wherever concurrent edits matter.
+- **The local owner over the network.** A `lisa` command connected to a running `lisa serve` acts as the local owner only through the owner credential on the loopback owner listener (D-44). Paired devices never receive it.
 
 ## Untrusted content (SEC-02)
 
@@ -74,7 +75,13 @@ All owner data stays on the authoritative host, inside its data directory. The d
   - No redirects for authenticated APIs. Feed redirects are re-validated at every hop and never carry credentials to another origin.
 - **TLS.** TLS 1.2 or later, with peer and host verification against the system trust store. There is no option to disable verification. Proxy environment variables are ignored, so the destination's address is the one checked.
 - **No duplicate actions.** A POST is sent at most once per attempt. libcurl's automatic resend is refused, and the attempt is recorded as an unknown outcome.
-- **API exposure.** The API binds to loopback by default. Non-loopback access requires device authentication and TLS, either native or through a trusted reverse proxy. Certificate validation is never disabled.
+- **API exposure (API-01, D-44).**
+  - The API binds to loopback by default. Any other address requires TLS, either native or through a trusted reverse proxy on a loopback or private address. The configuration validator and the server both refuse plain HTTP off loopback, and certificate validation is never disabled.
+  - Native TLS allows only TLS 1.2 with ECDHE and AES-GCM or ChaCha20-Poly1305, and TLS 1.3. Encrypted private keys are refused rather than prompting for a passphrase.
+  - Every request on the device listener needs a device credential; only pairing uses a one-time code instead. Possessing a push token authenticates nothing.
+  - The owner listener exists only for command-line clients on the host. It is bound to 127.0.0.1, accepts only loopback peers (checked on the address bytes, including IPv4-mapped IPv6), and accepts only the owner credential. That credential is issued per `lisa serve` run, kept in memory only as a digest, written to an owner-only file, refused by the device listener, and revoked at shutdown.
+  - Behind a reverse proxy, no request counts as coming from this machine.
+  - The server bounds header size, body size, connection count and every wait for the client, and refuses ambiguous framing (request smuggling) and repeated credential headers. Responses forbid caching and content sniffing.
 
 ## What each provider receives (SEC-03)
 
