@@ -16,6 +16,16 @@ extension LisaApplication {
         try services.captures.capture(request, by: principal)
     }
 
+    /// Reads the page behind a link the owner captured, once, and keeps it on the capture's news item (NEWS-01). Only
+    /// the owner on the host and paired devices may ask; see `CapturedPageService`.
+    public func retrieveCapturedPage(_ id: CaptureID, by principal: Principal) async throws -> CapturedPageOutcome {
+        try CapturedPageService.authorize(principal)
+        guard let pages = services.capturedPages else {
+            throw CapturedPageError.unavailable("this host cannot read captured links")
+        }
+        return try await pages.retrieve(id, by: principal)
+    }
+
     public func createTask(_ draft: TaskDraft, by principal: Principal) throws -> LisaTask {
         let update = try services.tasks.create(draft, by: principal)
         try propagate(update.changes)
