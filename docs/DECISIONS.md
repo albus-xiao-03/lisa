@@ -436,3 +436,112 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **CRLF lines (MAIL-01).** Swift treats `"\r\n"` as one character, so `components(separatedBy: "\n")` did not split it. HTML-converted text kept CRLF, and a `Due:` line in an HTML paragraph never reached its task. HTML text and mail text are now normalized, and line-based readers split on any newline.
 - **Feed raw content (DATA-05).** The feed document was stored on every synchronization, even when every entry was already known. It is now kept only when an entry is new.
 - **Cross-source duplicates (L05).** Message-IDs were deduplicated per source, so importing a message through a second source stored it, and extracted its commitments, twice. They are now deduplicated across sources (D-32).
+
+## D-41 — HTTP boundary and the libcurl layer (ARCH-01, SEC-02, NOTIFY-04)
+
+- **Modules.**
+  - `LisaHTTP` holds the protocol and the policies: requests, responses, classified failures, URL, redirect and address policy, and `Retry-After`. It uses Foundation only; the plan allowed LisaTime, but nothing needed it.
+  - `LisaCurl` implements it with libcurl 8.14.1, and adds SMTP submission and the IMAP session hand-over.
+  - Adapters depend only on the protocol, so the same code runs against a scripted test double.
+- **C boundary.**
+  - `CCurl` is the system-library module map. It links `curl` directly, because SwiftPM drops pkg-config's `-isystem` flag.
+  - `CCurlShim` exposes plain C types only, so libcurl's declarations come from `CCurl` alone. It wraps the variadic `curl_easy_setopt` and `curl_easy_getinfo`, and holds the callbacks for address checks, cancellation and socket waits.
+- **Address checks (SEC-02).**
+  - Every resolved address is checked in `CURLOPT_OPENSOCKETFUNCTION` before a socket opens. The connected address is checked again in `CURLOPT_PREREQFUNCTION` before any request byte is sent, which also covers reused connections.
+  - Address classes follow RFC 6890. IPv6 is allowed only within `2000::/3`, minus documentation, 6to4 and protocol blocks. IPv4-mapped and NAT64 (RFC 6052) addresses are judged by their IPv4 part.
+  - `publicOnly` is the default. `allowLocalNetworks` applies only to an endpoint configured with a loopback or private literal or `localhost`. `loopbackOnly` is the only policy that allows plain http, for a model server on the same machine.
+  - Link-local addresses, including cloud metadata, are refused under every policy.
+  - The live IANA registry needed a sandbox approval, so RFC 6890 was used.
+- **No proxy.** `CURLOPT_PROXY` is the empty string, so proxy environment variables are ignored. Behind a proxy, the address Lisa checks would be the proxy's.
+- **TLS.**
+  - TLS 1.2 or later is required (libcurl 8.14.1 itself allows TLS 1.0). Peer and host verification are always on, against the system trust store.
+  - `trustStorePath` replaces the trust store only for loopback verification against a synthetic CA. The host never sets it from configuration.
+- **HTTP/2-only requests (NOTIFY-04).**
+  - They use `CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE` instead of the plan's `2TLS`. With `2TLS`, libcurl falls back to HTTP/1.1 and may already have sent the request before the version can be checked. With prior knowledge over HTTPS, libcurl 8.10.0 and later offer only `h2`.
+  - `CURLINFO_HTTP_VERSION` is checked after every exchange. HTTP/2-only requests need libcurl ≥ 8.10.0 with HTTP/2, checked at run time; without that they fail as unsupported before anything is sent.
+  - libcurl still speaks h2 to a TLS server that selects no ALPN protocol at all. Such an exchange fails and is reported as possibly sent (seen on loopback).
+- **Sent or not.**
+  - A failure counts as "may have been sent" once the pre-request check has passed or any response byte has arrived.
+  - libcurl silently resends a request on a new connection when a reused one dies without a response (curl 8.14.1 `transfer.c`). The gate therefore lets POST and PATCH go out at most once per exchange. A refused resend is reported as a lost connection after sending, so the outcome is unknown and never resent automatically.
+  - The harness shows that libcurl does resend a GET in that situation, and that a POST is sent once.
+- **Limits.**
+  - Body and header sizes are enforced in the write and header callbacks.
+  - Total and connect timeouts apply, and cancellation works through the progress callback.
+  - Headers containing CR, LF or NUL, and malformed header names, are refused, because libcurl sends header strings verbatim.
+- **Redirects.**
+  - libcurl never follows redirects itself. `HTTPRedirects` follows them only when the request allows it, and re-validates every hop with the URL policy.
+  - Methods are rewritten per RFC 9110 §15.4. Credentials are dropped when a hop leaves the origin.
+- **Threads.** Each blocking libcurl call runs on its own thread, never on Swift's cooperative pool. A handle is never shared between threads; idle handles and their connections are pooled and reset.
+- **Mail.**
+  - IMAP and SMTP use implicit TLS or required STARTTLS (`CURLUSESSL_ALL`); there is no plaintext mode.
+  - Authentication uses libcurl's negotiation over the verified connection. Forcing `AUTH=PLAIN` would remove IMAP's `LOGIN` fallback (`lib/imap.c`).
+  - libcurl sends no LOGOUT when cleaning up a connect-only session (M6a), so LisaIMAP sends its own. The EHLO name is always set, so this machine's host name is never sent.
+
+## D-42 — Network adapters (CAL-01, NEWS-01–NEWS-03, MAIL-01, MAIL-02, EMAIL-01, CALL-01, MODEL-01, NOTIFY-04)
+
+- **Shared source support.** `LisaHTTPSources` is a module added to the plan, with `package` access. It holds the address resolution (public URL or a secret read at use time), the conditional-request cursor, representation headers, status classification and the pass deadline. Its first versions were duplicated in both feed modules; one copy replaced both.
+- **Calendar and news feeds.**
+  - Requests are conditional GETs (ETag and Last-Modified), limited to public addresses, following at most three re-validated redirects.
+  - A 304 changes nothing: it is never a snapshot, so no event is removed.
+  - Validators expire after 6 hours (calendars) and 24 hours (news), forcing a full download.
+  - Content is checked before ingestion. Private addresses never appear in errors.
+- **Owner-initiated retrieval (NEWS-01, SEC-02).**
+  - `OwnerPageRetriever` fetches a link the owner or a paired device captured: one https GET, public addresses only, text through LisaHTMLText, no subresources.
+  - Apple News items and links found in content are never fetched.
+  - It is not yet connected to the capture workflow.
+- **X.**
+  - Reads a selected account through API v2 with an app bearer token, with a `since_id` cursor and bounded pagination.
+  - The OpenAPI spec names the fields parameter `post.fields`, while the guides and changelog say `tweet.fields`. Lisa sends `tweet.fields` from one place; this needs a live check.
+  - The first synchronization reads only the newest page.
+- **Discord.**
+  - Reads a channel through REST API v10 as a bot, with an `after` cursor and rate-limit gates.
+  - Messages withheld by the `MESSAGE_CONTENT` intent are never stored as empty posts. A capability note explains them, or the source fails as `capabilityDenied` when nothing is readable.
+- **IMAP (M6a passed: option C).**
+  - Lisa sends only `EXAMINE`, windowed `UID SEARCH`, a size-only `UID FETCH`, `UID FETCH … BODY.PEEK[]` and `LOGOUT`. The size probe and LOGOUT were added to the plan's list.
+  - EXAMINE must report `READ-ONLY`. The cursor is (UIDVALIDITY, last UID); a UIDVALIDITY change resynchronizes, with duplicates removed by Message-ID.
+  - Oversized messages are named, not downloaded. A message missing in the middle of a pass stops the cursor before it.
+  - All seven checks of plan §7.3 passed against a synthetic loopback server. A live mailbox is not tested.
+- **SMTP.**
+  - Messages are composed with LisaMIME and submitted with `CurlSMTPSubmission`.
+  - Results:
+    - authentication failure → `rejected`, because repeated failed logins risk lockouts;
+    - missing or failed TLS, or a connection failure → `notSent`;
+    - 4xx → `temporarilyUnavailable`;
+    - 5xx → `rejected`;
+    - any failure after the complete message was handed over → `unknown`.
+  - Non-ASCII subjects are shortened to about 39 bytes, because LisaMIME writes one unfolded encoded word.
+- **Twilio.**
+  - One Calls request with inline TwiML: escaped `<Say>`, never `Url`, at most 4,000 characters.
+  - Results: 2xx → `accepted` with the call SID; 429 → `throttled`, which Twilio documents as unprocessed; other 4xx → `rejected`; 408 → `temporarilyUnavailable`.
+  - 5xx and failures after the request was sent are `unknown`, because call creation has no idempotency key.
+- **APNs (M6b passed).** The plan's §6 details were checked against Apple's pages. The differences, now implemented:
+  - only `ExpiredProviderToken` regenerates the token (`InvalidProviderToken` is a configuration rejection);
+  - 5xx responses are retried no sooner than 15 minutes later (`temporarilyUnavailable`);
+  - every 410 invalidates the token, and its timestamp is in milliseconds;
+  - priority is 10 for time-sensitive or actionable categories and 5 otherwise;
+  - each environment may have its own key;
+  - offline storage keeps one notification per app, "in most cases" the latest.
+
+  On loopback, a real HTTP/2 exchange with nghttpd and the transport's exact headers and body were verified, and the JWT was checked with `openssl dgst -verify`.
+- **OpenAI-compatible model.**
+  - Sends Chat Completions with `model`, `messages`, `max_tokens` (switchable to `max_completion_tokens`), a clamped `temperature`, the `json_object` response format and `stream: false`.
+  - The address policy and the model's location come from the endpoint, and no redirects are followed.
+  - Minimization and validation stay in the extraction pipeline, as before.
+- **Host composition.**
+  - `SourceAccess` names each network source.
+  - `HostAdapters` builds connectors, the model provider, and live transports only for channels set to live. A live channel whose adapter is missing or unusable stops startup.
+  - `HostDiagnostics` reports readiness for `lisa doctor` without contacting any service.
+  - The platform supplies the network stack (`HostNetwork`); harnesses inject a scripted client this way.
+
+## D-43 — Defects found and fixed in Phase 6
+
+- **Floating times (CAL-01).** Calendar reconciliation ignored each source's configured floating zone and always used the owner's zone. The processor now takes the source's zone.
+- **Unchanged feeds.** An empty, non-snapshot batch (a 304) added the warning "not a complete snapshot"; it no longer does.
+- **Secret store reflection (SEC-01).** Printing or dumping an `EnvironmentSecretStore` could show every environment value. Its description and mirror now show nothing.
+- **Loopback policy.** `loopbackOnly` refused loopback and allowed public addresses; IPv6 literals kept their brackets, so `http://[::1]` was refused. Both are fixed.
+- **Duplicate sends (external actions).** libcurl's automatic resend of POST requests is refused (D-41).
+- **SMTP outcome.** A connection lost after the whole message was sent was reported as "not complete". It is now unknown.
+- **Temporary provider failures.** APNs 5xx responses were recorded as "throttled by the provider". `TransportResult.temporarilyUnavailable` now carries the provider's reason and retry time.
+- **Device tokens.** Registration assumed 32–200 characters and accepted fullwidth digits. It now accepts ASCII hexadecimal of any even length up to 1,024.
+- **Private data in descriptions.** HTTP requests and headers now redact credentials and show only method, origin and header names. MIME's invalid-address error no longer contains the address.
+- **libcurl cleanup.** libcurl can call back into Lisa from `curl_easy_cleanup`, so cleanup is now explicit while the callback state is still alive. Returned handles are reset first.
