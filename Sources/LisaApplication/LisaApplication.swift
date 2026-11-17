@@ -34,6 +34,8 @@ public struct LisaServices: Sendable {
     public var plans: PlanService
     public var briefs: BriefService
     public var devices: DeviceService
+    /// Reads captured links' pages at the owner's request; `nil` when this host cannot (no network library).
+    public var capturedPages: CapturedPageService?
 
     public init(
         store: any RecordStore, clock: any WallClock, logger: Logger, settings: any SettingsSource,
@@ -41,7 +43,7 @@ public struct LisaServices: Sendable {
         deletion: DeletionService, export: ExportService, sources: SourceRegistry, retention: RetentionService,
         extraction: ExtractionService, proposals: ProposalService, outbox: DeliveryOutbox,
         notifications: NotificationService, reminders: ReminderService, plans: PlanService, briefs: BriefService,
-        devices: DeviceService
+        devices: DeviceService, capturedPages: CapturedPageService? = nil
     ) {
         self.store = store
         self.clock = clock
@@ -63,6 +65,7 @@ public struct LisaServices: Sendable {
         self.plans = plans
         self.briefs = briefs
         self.devices = devices
+        self.capturedPages = capturedPages
     }
 }
 
