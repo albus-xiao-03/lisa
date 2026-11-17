@@ -44,6 +44,18 @@ let package = Package(
         .library(name: "LisaHost", targets: ["LisaHost"]),
         .library(name: "LisaFixtures", targets: ["LisaFixtures"]),
         .library(name: "LisaDemo", targets: ["LisaDemo"]),
+        .library(name: "LisaHTTP", targets: ["LisaHTTP"]),
+        .library(name: "LisaCurl", targets: ["LisaCurl"]),
+        .library(name: "LisaHTTPSources", targets: ["LisaHTTPSources"]),
+        .library(name: "LisaCalendarFeeds", targets: ["LisaCalendarFeeds"]),
+        .library(name: "LisaNewsFeeds", targets: ["LisaNewsFeeds"]),
+        .library(name: "LisaXSource", targets: ["LisaXSource"]),
+        .library(name: "LisaDiscordSource", targets: ["LisaDiscordSource"]),
+        .library(name: "LisaIMAP", targets: ["LisaIMAP"]),
+        .library(name: "LisaSMTP", targets: ["LisaSMTP"]),
+        .library(name: "LisaTwilio", targets: ["LisaTwilio"]),
+        .library(name: "LisaAPNs", targets: ["LisaAPNs"]),
+        .library(name: "LisaOpenAICompatible", targets: ["LisaOpenAICompatible"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -127,7 +139,8 @@ let package = Package(
                 "LisaTime", "LisaDomain", "LisaSecrets", "LisaLogging", "LisaPorts", "LisaStore", "LisaInference",
                 "LisaIngestion", "LisaReview", "LisaDelivery", "LisaAgenda", "LisaDevices", "LisaOwnerData",
                 "LisaApplication", "LisaRuntime", "LisaAPI", "LisaAPIContract", "LisaLocalSources", "LisaConfig",
-                "LisaMIME", "LisaICalendar",
+                "LisaMIME", "LisaICalendar", "LisaHTTP", "LisaCurl", "LisaCalendarFeeds", "LisaNewsFeeds", "LisaXSource",
+                "LisaDiscordSource", "LisaIMAP", "LisaSMTP", "LisaTwilio", "LisaAPNs", "LisaOpenAICompatible",
             ]),
         // Synthetic demonstration data, rooted at Fixtures/ (plan §5.1 row 50).
         .target(
@@ -140,6 +153,55 @@ let package = Package(
                 "LisaLocalSources", "LisaApplication", "LisaRuntime", "LisaAPIContract", "LisaClient", "LisaHost",
                 "LisaFixtures",
             ]),
+        // Phase 6: the HTTP client boundary and its libcurl implementation (plan §5.1 rows 21, 32 and 33).
+        .target(name: "LisaHTTP"),
+        .systemLibrary(name: "CCurl", path: "Sources/CCurl", providers: [.apt(["libcurl4-openssl-dev"])]),
+        .target(name: "CCurlShim", dependencies: ["CCurl"]),
+        .target(name: "LisaCurl", dependencies: ["CCurl", "CCurlShim", "LisaHTTP"]),
+        // Phase 6 connectors and transports (plan §5.1 rows 34–42).
+        // Shared, package-internal support for HTTP document sources: address resolution, conditional requests,
+        // representation headers, status classification and the pass deadline.
+        .target(
+            name: "LisaHTTPSources",
+            dependencies: ["LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaHTTP"]),
+        .target(
+            name: "LisaCalendarFeeds",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaSecrets", "LisaICalendar", "LisaPorts", "LisaHTTP", "LisaHTTPSources",
+            ]),
+        .target(
+            name: "LisaNewsFeeds",
+            dependencies: [
+                "LisaTime", "LisaDomain", "LisaSecrets", "LisaHTMLText", "LisaPorts", "LisaHTTP", "LisaHTTPSources",
+            ]),
+        .target(
+            name: "LisaXSource",
+            dependencies: ["LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaHTTP"]),
+        .target(
+            name: "LisaDiscordSource",
+            dependencies: ["LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaHTTP"]),
+        .target(
+            name: "LisaIMAP",
+            dependencies: [
+                "LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaHTTP", "LisaCurl",
+            ]),
+        .target(
+            name: "LisaSMTP",
+            dependencies: [
+                "LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaMIME", "LisaPorts", "LisaHTTP",
+                "LisaCurl",
+            ]),
+        .target(
+            name: "LisaTwilio",
+            dependencies: ["LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaPorts", "LisaHTTP"]),
+        .target(
+            name: "LisaAPNs",
+            dependencies: [
+                "LisaTime", "LisaRedaction", "LisaDomain", "LisaSecrets", "LisaCrypto", "LisaPorts", "LisaAPIContract",
+                "LisaHTTP",
+            ]),
+        .target(
+            name: "LisaOpenAICompatible", dependencies: ["LisaRedaction", "LisaSecrets", "LisaInference", "LisaHTTP"]),
         // The `lisa` executable (plan §5.1 row 52).
         .executableTarget(
             name: "LisaCLI",
