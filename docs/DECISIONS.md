@@ -711,3 +711,17 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - The queue is sent on foreground return and on Send Now, with no network-change trigger.
   - Some display logic lives in the views and is untested on Linux: which screen a notification opens, words for states, and the changed-fields check. Moving it into LisaPresentation is follow-up work.
 - **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
+
+## D-50 — The Mac app outside the sandbox, and local-network transport security (APPLE-01, API-01, ARCH-03)
+
+- **Not sandboxed.** The Mac app embeds the host. The host:
+  - reads the owner's configuration and data directory at the same paths `lisa` uses, so the app, `lisa serve` and the CLI share one data directory under one lock (ARCH-03);
+  - binds the API listeners and opens outbound connections through libcurl;
+  - reads `file:` secrets from owner-only files;
+  - writes the owner endpoint file in the data directory.
+
+  A sandboxed app sees only its container and security-scoped bookmarks, so the app and the CLI could no longer share a data directory. The app uses the hardened runtime instead, with no entitlement that weakens it. Sandboxing becomes a separate decision if the app is ever distributed beyond the owner's own Macs.
+- **`NSAllowsLocalNetworking`.** Both apps set it, and no other App Transport Security exception; in particular there is no `NSAllowsArbitraryLoads`.
+  - It lets a device reach the host by a `.local` or unqualified name with the owner's own certificate.
+  - It does not allow plain HTTP: Lisa's endpoint rules still require `https` except on loopback, and the host refuses plain HTTP off loopback.
+  - The companion's trust rules (D-48) still apply.
