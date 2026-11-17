@@ -28,7 +28,7 @@ public final class CurlIMAPSession {
         let easy: CurlEasy
         do { easy = try CurlEasy() } catch { throw .refused(error.description) }
         let transfer = CurlTransfer(maxBodyBytes: 0, maxHeaderBytes: 262_144, recordsLines: true)
-        let gate = CurlAddressGate(policy: server.addresses)
+        let gate = CurlAddressGate(policy: server.addresses, maxRequests: 1)
         let cancellation = CurlCancellation()
         do {
             try CurlMailOptions.apply(
