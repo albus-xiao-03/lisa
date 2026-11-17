@@ -663,3 +663,35 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - No route reads one idea or proposal, so after a conflict the screens look for it in the list, within a bound.
   - Tasks cannot be filtered by origin or confirmation, so the inbox filters open tasks itself.
   - No route lists preference keys: the app names the R1 keys itself and shows unknown keys by name.
+
+## D-48 — The apps' shared Apple adapters (SEC-01, NOTIFY-05, NOTIFY-06, SIRI-01, UI-02, UI-03)
+
+- **One process, one set of services.** `LisaClientEnvironment` holds the process's client, durable queue and response cache, and the app configures it once in `App.init`.
+  - The App Intents live in the app targets, not in an extension. They run in the app's process and use the same queue, so each storage file has one writer.
+  - An intent that runs before Lisa is set up reports that Lisa is unavailable.
+- **Keychain.** These are generic-password items: the device's pairing identity, plus the embedded host's `keychain:` secrets on the Mac.
+  - They are available after first unlock, on this device only, and are never synchronized.
+  - On the Mac they use the data-protection keychain. That needs a signed build with a provisioning profile; otherwise it fails with `errSecMissingEntitlement`, with no fallback to the login keychain.
+  - Service names derive from the bundle identifier: `<bundleID>.client-identity` and `<bundleID>.secrets.<service>`.
+- **Files.** The queue, the cache and the connection settings live in `Application Support/<bundleID>/Client`.
+  - The connection settings (the host address and any owner-supplied trust) are in `connection.json`, not UserDefaults.
+  - The directory has mode 0700, is protected until first unlock on iOS and iPadOS, and is excluded from backups.
+- **Host trust.** The owner can supply the host's certificate or its authority. `PinnedServerTrustEvaluator` then:
+  - anchors only to that certificate, checks the host name and fetches nothing from the network;
+  - can also pin the host certificate's SHA-256;
+  - refuses anything else.
+
+  Without owner-supplied trust, the system trust store and App Transport Security decide. Certificate validation can never be turned off.
+- **Notifications.**
+  - Categories and actions follow plan §6.5, with an explicit Open action and a hidden-preview placeholder per category. "Complete" needs the device unlocked.
+  - A response goes to `NotificationActionHandler`: it is queued durably first, then submitted within 10 seconds.
+  - Receipts are recorded only on paired devices, once per notification.
+  - Authorization (alerts and sounds) is requested only when pairing offers it.
+  - Push registration runs at each launch once the device is paired. The APNs environment follows the build configuration (`DEBUG`), matching the entitlements.
+  - `Localizable.strings` holds every key the host sends, with generic text only.
+- **Siri and Shortcuts (SIRI-01).** There are six intents. Tasks and reminders are entities keyed by the host's stable identifiers, and a spoken name with several matches asks which one is meant.
+  - Replies are truthful: done, queued until Lisa is reachable, unavailable, or failed. A cached brief states its age.
+  - Completing a task requires authentication.
+  - Reading the brief or rundown, capturing, saving and snoozing can run while the device is locked, so an alarm automation can speak the brief (SIRI-02). The system's "Allow Siri When Locked" setting governs this.
+  - "Read the brief" in the app speaks only while the app is in use. The brief and rundown intents return their text for Shortcuts to speak.
+- **Evidence.** The pure logic is in LisaPresentation and is tested on Linux against a real in-process host: Siri replies, entity matching, token text, receipts and connection settings. The Apple adapters are only syntax-checked with `swiftc -parse`. Type-checking, Keychain entitlements, background time for actions, Siri timeouts and lock-screen behavior need an Apple build and devices.
