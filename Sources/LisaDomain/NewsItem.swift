@@ -8,6 +8,10 @@ public enum ContentBoundary: String, Codable, Sendable {
     case feedSummary
     case fullText
     case sharedText
+    /// The visible text of the page behind a link the owner captured, read once at the owner's request as an
+    /// anonymous reader is served it, with no scripts run. For a paywalled or sign-in page that can be only the public
+    /// part, so it is never presented as the full article.
+    case pageText
 }
 
 /// The owner's feedback on an item.
@@ -39,6 +43,9 @@ public struct NewsItem: Entity {
     public var relevanceReason: String?
     public var feedback: NewsFeedback?
     public var evidenceID: EvidenceID
+    /// The address that served the page Lisa read for this item at the owner's request, after any redirects; `nil`
+    /// until then. A captured link's page is read once.
+    public var pageURL: String?
 
     public init(
         id: NewsID = .random(), sourceID: SourceID, originalURL: String?, title: String, accessibleText: String?,
@@ -63,5 +70,6 @@ public struct NewsItem: Entity {
         self.relevanceReason = nil
         self.feedback = nil
         self.evidenceID = evidenceID
+        self.pageURL = nil
     }
 }
