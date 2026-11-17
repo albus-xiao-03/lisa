@@ -71,6 +71,8 @@ struct ServeCommand: AsyncParsableCommand {
             (summary.listeners.map { "listening (\($0.role)): \($0.address):\($0.port) \($0.transport)" }
                 + summary.recovery.map { "recovery: \($0)" }).joined(separator: "\n")
         }
+        // A supervisor reading standard output must see the listeners now, not when the host exits.
+        fflush(nil)
         let runtime = Task { await lisa.runtime.run() }
         for await _ in signals { break }
         // Reverse order of start-up (plan §5.2): the network server, then the runtime, then the lock.
