@@ -1,6 +1,8 @@
-// Who is calling and how the router is configured: trusted in-process callers, credentials and runtime status.
+// Who is calling and how the router is configured: trusted in-process callers, credentials, runtime status and the
+// model configuration that health reports.
 
 import Foundation
+import LisaAPIContract
 import LisaDomain
 
 /// How a request reached the router.
@@ -48,11 +50,15 @@ public struct RouterConfiguration: Sendable {
     public var ownerCredentialVerifier: (@Sendable (String) -> Bool)?
     /// Whether the host delivers local notifications itself (the Mac app), reported in health.
     public var localNotificationsLive: Bool
+    /// The model configuration reported in health; `nil` reports none. It never holds an endpoint address, a key
+    /// reference or a credential.
+    public var model: ModelStatusDTO?
 
     public init(
         applicationVersion: String, schemaVersion: Int, idempotencyRetentionDays: Int = 30,
         requestsPerMinute: Int = 300,
-        ownerCredentialVerifier: (@Sendable (String) -> Bool)? = nil, localNotificationsLive: Bool = false
+        ownerCredentialVerifier: (@Sendable (String) -> Bool)? = nil, localNotificationsLive: Bool = false,
+        model: ModelStatusDTO? = nil
     ) {
         self.applicationVersion = applicationVersion
         self.schemaVersion = schemaVersion
@@ -60,6 +66,7 @@ public struct RouterConfiguration: Sendable {
         self.requestsPerMinute = requestsPerMinute
         self.ownerCredentialVerifier = ownerCredentialVerifier
         self.localNotificationsLive = localNotificationsLive
+        self.model = model
     }
 }
 
