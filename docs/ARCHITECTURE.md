@@ -14,7 +14,7 @@
 | Application services | `LisaIngestion`, `LisaReview`, `LisaDelivery`, `LisaAgenda`, `LisaDevices`, `LisaOwnerData`, `LisaApplication`, `LisaCrypto` | Implemented (Phase 4) |
 | Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaLocalSources`, `LisaDemo`, `LisaFixtures`, `lisa` (`LisaCLI`) | Implemented (Phase 5; Linux) |
 | Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Phase 6 |
-| Network API | `LisaAPIServer` | Phase 7 |
+| Network API | `LisaAPIServer`; `LisaClient`'s URLSession transport | Phase 7 |
 | Apple applications | `LisaPresentation`, `Apps/` | Phase 8 |
 
 ## Time model
@@ -85,6 +85,19 @@ Implemented and verified on Linux against scripted test doubles and loopback ser
 
   `HostDiagnostics` reports their readiness to `lisa doctor`. The platform supplies the network stack (`HostNetwork`), so a test harness can substitute a scripted client; configuration cannot.
 - **Dependencies.** No new third-party package. libcurl was already approved (REC-SYS-02), and `Package.resolved` is unchanged.
+
+## Network API (Phase 7)
+
+Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The companion transport's Apple behavior is unverified until Phase 8.
+
+| Module | Role | Depends on |
+|---|---|---|
+| `LisaAPIServer` | NIO HTTP/1.1 server: listeners, native TLS, limits, timeouts, framing rules, graceful shutdown | LisaAPIContract, LisaLogging, swift-nio (NIOCore, NIOPosix, NIOHTTP1), swift-nio-ssl (NIOSSL) |
+| `LisaClient` (additions) | `URLSessionTransport` and `HostEndpoint` for the companions; `OwnerEndpointFile` for the CLI's client mode | LisaAPIContract; FoundationNetworking on Linux |
+| `LisaHost` (additions) | `HostAPIServer` (device and owner listeners over the one router), `OwnerAccess`, `LoopbackOwnerTransport` (libcurl), `FileModelRequestBudget` | LisaAPIServer, LisaCurl, LisaCrypto |
+
+- **Composition.** `lisa serve` opens the host, starts `HostAPIServer`, writes the owner endpoint file and runs the runtime loop. Shutdown runs in reverse: server, runtime, lock (plan §5.2). The server maps each connection to a `RequestOrigin`: device listener → `authenticateHeaders`; a local peer on the owner listener → `loopbackOwner`.
+- **Dependencies (REC-DEP-03/04).** `Package.resolved` now pins eight packages. The new ones are swift-nio 2.105.0, swift-nio-ssl 2.37.6 (with vendored BoringSSL), swift-atomics 1.3.1, swift-collections 1.7.6 and swift-system 1.9.0, all under the Apache License 2.0 (swift-atomics, swift-collections and swift-system with the Swift Runtime Library Exception). swift-nio-ssl's vendored BoringSSL is under a combination of the ISC and OpenSSL licenses, as its `NOTICE.txt` states. swift-certificates is not resolved, because only swift-nio-ssl's own tests use it.
 
 ## Trust boundaries (so far)
 
