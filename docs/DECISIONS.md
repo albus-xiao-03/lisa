@@ -614,3 +614,25 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - `resourceTimeout` is ignored there.
   - FoundationNetworking's libcurl sends even loopback requests through a proxy named by `http_proxy`, `all_proxy` or `ALL_PROXY` unless `no_proxy` lists the host, and URLSession cannot turn that off. That is why the CLI reaches a running host with libcurl directly (D-44).
 - **Not verified on Apple platforms.** The delegate method signatures, the server-trust path, `resourceTimeout`, IPv6 literals and system proxy behavior are unverified until Phase 8 runs on a Mac and devices.
+
+## D-46 — Reading captured links (NEWS-01, SEC-02)
+
+- **Path.** The application's `CapturedPageService` calls the `CapturedPageRetrieval` port in LisaPorts. LisaHost adapts `OwnerPageRetriever` to that port, using the connectors' libcurl client. The core never imports an adapter.
+- **Who and what.**
+  - Only the local owner and paired devices may ask; the model, runtime and demonstration principals get 403.
+  - Only a `link` capture made by the owner is eligible. Ideas, text and Apple News shares are never fetched, and neither are links inside any content.
+  - `OwnerPageRequest` checks eligibility again before any request is made.
+- **Once per item.** `NewsItem.pageURL`, the final address after redirects, marks a page as read, so a second request is a 409 conflict. A read already in progress is a 503 with a 5-second retry.
+- **Boundary.**
+  - The new `ContentBoundary.pageText` labels what an anonymous reader sees, which for a paywall may be only the teaser. `fullText` would overclaim.
+  - Text is bounded like a feed item's (4,000 characters, marked "…" when cut).
+  - A page with a title but no readable text stays `titleOnly`. A title is replaced only when it was the bare link.
+- **Provenance and retention.**
+  - The item and its evidence are updated in one transaction: the evidence holds an excerpt and a reference to the raw page, which is stored as raw content kind `page` under raw-content retention.
+  - If the transaction fails, the raw page is removed again. Deleting the item removes both.
+  - Records are JSON bodies, so the new optional field needs no migration.
+- **Failures.**
+  - A lasting failure (sign-in or payment needed, not text, too large, refused address) is a 200 whose body says why, and leaves the item untouched.
+  - A temporary failure is a 503 with the site's `Retry-After`, or 60 seconds. It is not recorded, so a retry with the same request ID runs again.
+  - Each attempt is audited with its outcome and failure class only.
+- **CLI.** `lisa capture --kind link --retrieve` derives the retrieval's request ID from `--request-id`, so a rerun replays. `--retrieve` with another kind is a usage error.
