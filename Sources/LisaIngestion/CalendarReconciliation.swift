@@ -22,21 +22,25 @@ public struct CalendarBatchProcessor: BatchProcessor {
     private let pastDays: Int
     private let futureDays: Int
     private let limits: ICalendarLimits
+    private let floatingZone: TimeZoneID?
 
+    /// `floatingZone` is the source's configured zone for floating times and dates (CAL-01); without it, the
+    /// owner's zone is used.
     public init(
         settings: any SettingsSource, clock: any WallClock, pastDays: Int = 7, futureDays: Int = 120,
-        limits: ICalendarLimits = ICalendarLimits()
+        limits: ICalendarLimits = ICalendarLimits(), floatingZone: TimeZoneID? = nil
     ) {
         self.settings = settings
         self.clock = clock
         self.pastDays = pastDays
         self.futureDays = futureDays
         self.limits = limits
+        self.floatingZone = floatingZone
     }
 
     public func prepare(_ batch: FetchBatch, source: Source) throws -> PreparedCalendar {
         let now = clock.now()
-        let zone = try settings.currentSettings().zone.timeZone
+        let zone = try (floatingZone ?? settings.currentSettings().zone).timeZone
         let window = TimeRange(
             uncheckedStart: now.addingTimeInterval(-Double(pastDays) * 86_400),
             end: now.addingTimeInterval(Double(futureDays) * 86_400))
@@ -122,7 +126,8 @@ public struct CalendarBatchProcessor: BatchProcessor {
                 outcome.updated += 1
                 outcome.changes.append(.occurrenceRemoved(old.id))
             }
-        } else if !existing.isEmpty {
+        } else if !existing.isEmpty, !batch.items.isEmpty {
+            // An empty, non-snapshot batch means nothing changed (an HTTP "not modified" answer), not a partial read.
             outcome.warnings.append("the retrieval was not a complete snapshot, so missing events were not removed")
         }
         outcome.warnings += prepared.warnings.prefix(5).map { warning in
