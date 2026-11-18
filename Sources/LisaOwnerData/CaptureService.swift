@@ -1,4 +1,5 @@
-// Captures (IDEA-01, NEWS-04): saved immediately, idempotent by request ID, and linked to the idea or news item made.
+// Captures (IDEA-01, NEWS-04): saved immediately, idempotent per caller and request ID, and linked to the idea or
+// news item made.
 
 import Foundation
 import LisaDomain
@@ -14,7 +15,7 @@ public struct CaptureRequest: Hashable, Sendable {
     /// A title supplied with shared content (for example by the share sheet).
     public var title: String?
     public var channel: CaptureChannel
-    /// The client's stable request identity; repeating it returns the original capture.
+    /// The client's stable request identity; the same caller repeating it gets the original capture back.
     public var requestID: String?
 
     public init(
@@ -35,7 +36,7 @@ public struct CaptureResult: Sendable {
     public var capture: Capture
     public var idea: Idea?
     public var news: NewsItem?
-    /// False when the request ID matched an earlier capture, which is returned unchanged.
+    /// False when the request ID matched an earlier capture by the same caller, which is returned unchanged.
     public var created: Bool
 }
 
@@ -64,8 +65,12 @@ public final class CaptureService: Sendable {
         try Self.validate(request, text: text, url: url)
         let now = clock.now()
         let result = try store.write { tx -> CaptureResult in
+            // Request IDs are scoped by caller (D-35): another device's capture with the same ID is not a retry.
             if let requestID = request.requestID,
-                let existing = try tx.first(Capture.self, RecordQuery.all.filter("request_id", equals: requestID))
+                let existing = try tx.first(
+                    Capture.self,
+                    RecordQuery.all.filter(
+                        "request_id", equals: Capture.requestKey(principal: principal, requestID: requestID)))
             {
                 return CaptureResult(
                     capture: existing, idea: try existing.resultingIdeaID.flatMap { try tx.get(Idea.self, id: $0) },
