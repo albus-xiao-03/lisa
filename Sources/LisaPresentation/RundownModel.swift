@@ -1,5 +1,6 @@
 // The rundown screen: today's or a chosen date's plan from the host, or the cached copy with its age while offline;
-// the owner's actions on its blocks, queued durably against the plan revision shown; and the rundown read aloud.
+// the owner's actions on its blocks and moves of them, queued durably against the plan revision shown; and the
+// rundown read aloud.
 
 import Foundation
 import LisaAPIContract
@@ -11,10 +12,13 @@ import Observation
 /// - While the host is unreachable the screen shows the cached rundown with its age, never as current (UI-03); when no
 ///   date is chosen, that may be an earlier day's rundown (`showsEarlierDay`). A device that is not paired, or that the
 ///   host removed, shows no rundown. Refreshing is explicit: nothing polls the host.
-/// - The owner accepts, locks, declines, defers or completes a block (PLAN-04) with `act(_:on:)`, expecting the plan
-///   revision shown. `PlanBlockActions` says which actions a block offers; calendar events offer none. Each action is
-///   queued durably with a stable request ID and sent at once when possible; offline it stays pending
-///   (`pendingBlockActions`). Once the host applies it, the screen shows the plan as the host answered it.
+/// - The owner accepts, locks, declines, defers or completes a block (PLAN-04) with `act(_:on:)`, and moves one to a
+///   new start and end with `move(_:to:)`, expecting the plan revision shown. `PlanBlockActions` says which actions a
+///   block offers; calendar events offer none. Each action is queued durably with a stable request ID and sent at
+///   once when possible; offline it stays pending (`pendingBlockActions`, and the new times of a move in
+///   `requestedMoves`). Once the host applies it, the screen shows the plan as the host answered it. A move the host
+///   refuses, because the new time would overlap a busy calendar event or another block the owner holds or leave the
+///   rundown's day, is `.failed` with the host's reason, and nothing changed.
 /// - Every applied action gives the plan a new revision. An action that expects an earlier one, because the planner,
 ///   another device or an earlier queued action changed the plan first, is a recoverable conflict (`blockConflicts`),
 ///   shown with the block as the current plan has it. Two offline actions on one plan are not merged, so the second is
@@ -33,6 +37,10 @@ public final class RundownModel {
     public private(set) var pendingBlockActions: [String: PlanBlockActionKind] = [:]
     /// Actions on blocks of the plan shown that the host refused because the plan changed, by block identifier.
     public private(set) var blockConflicts: [String: PlanBlockConflict] = [:]
+    /// The new times that moves waiting in the queue or refused because the plan changed ask for, by block identifier.
+    /// A block's refused action counts before its waiting one, as `blockConflicts` and `pendingBlockActions` are
+    /// shown. The plan shown keeps the block's times until the host applies the move.
+    public private(set) var requestedMoves: [String: PlanBlockTimes] = [:]
     /// Blocks with an action being submitted.
     public private(set) var busyBlockIDs: Set<String> = []
     /// The outcome of the latest block action.
@@ -56,6 +64,7 @@ public final class RundownModel {
             state = .idle
             pendingBlockActions = [:]
             blockConflicts = [:]
+            requestedMoves = [:]
         }
         self.date = date
         await refresh()
@@ -103,29 +112,49 @@ public final class RundownModel {
 
     /// Applies `action` to `block` of the plan shown, expecting the plan revision shown. A block that is no longer
     /// shown, and an action the block does not offer (`PlanBlockActions.available(for:)`), are refused before anything
-    /// is sent.
+    /// is sent. A move needs the block's new times: `move(_:to:)`.
     @discardableResult
     public func act(_ action: PlanBlockActionKind, on block: PlanBlockDTO) async -> ActionOutcome {
         guard let plan = state.value, let shown = plan.blocks.first(where: { $0.blockID == block.blockID }) else {
             return refuse("this block isn't in the rundown shown; refresh the rundown and try again")
         }
         if let refusal = PlanBlockActions.refusal(of: action, on: shown) { return refuse(refusal) }
-        busyBlockIDs.insert(shown.blockID)
-        defer { busyBlockIDs.remove(shown.blockID) }
+        guard action != .move else { return refuse("choose the block's new start and end to move it") }
         let request = PlanBlockActionRequest(action: action, expectedRevision: plan.revision)
-        let submission = await ActionSubmitter(context: context).submit(
-            .planBlockAction(planID: plan.planID, blockID: shown.blockID, request))
-        return await finish(submission)
+        return await submit(request, on: shown, of: plan)
+    }
+
+    /// Moves `block` of the plan shown to `times`, taken to the minute as time pickers show them, expecting the plan
+    /// revision shown (PLAN-04).
+    ///
+    /// The host locks the block at its new time, so planning again keeps it there, and plans the rest of the day
+    /// around it; the screen then shows the plan as the host answered it. The host refuses a move that would overlap a
+    /// busy calendar event or another block the owner accepted, locked or completed, or that leaves the rundown's day:
+    /// the outcome is `.failed` with the host's reason, and nothing changed. A block that is no longer shown, one that
+    /// cannot be moved (`PlanBlockActions.canMove(_:)`) and times whose end is not after their start are refused before
+    /// anything is sent. Offline, the move waits in the queue like the other actions (`requestedMoves`).
+    @discardableResult
+    public func move(_ block: PlanBlockDTO, to times: PlanBlockTimes) async -> ActionOutcome {
+        guard let plan = state.value, let shown = plan.blocks.first(where: { $0.blockID == block.blockID }) else {
+            return refuse("this block isn't in the rundown shown; refresh the rundown and try again")
+        }
+        if let refusal = PlanBlockActions.refusal(of: .move, on: shown) { return refuse(refusal) }
+        let picked = times.toTheMinute
+        guard picked.isOrdered else { return refuse("the new end must be after the new start") }
+        let request = PlanBlockActionRequest(
+            action: .move, expectedRevision: plan.revision, start: picked.start, end: picked.end)
+        return await submit(request, on: shown, of: plan)
     }
 
     /// Applies a refused action again to the plan shown, after the owner has seen the block as that plan has it and
-    /// chosen to keep the action. It expects the revision shown, so a plan that changed again is another conflict.
+    /// chosen to keep the action. It expects the revision shown, so a plan that changed again is another conflict. A
+    /// refused move is applied again with the times the owner picked, which the host checks against the plan shown.
     @discardableResult
     public func applyAgain(blockID: String) async -> ActionOutcome {
         guard let refused = blockConflicts[blockID], let entryID = refused.conflict.entryID else {
             return refuse("there is no refused action for this block")
         }
-        guard refused.canApplyAgain, let plan = state.value, plan.planID == refused.planID else {
+        guard Self.canApplyAgain(refused), let plan = state.value, plan.planID == refused.planID else {
             return refuse("the block can no longer take this action; discard it")
         }
         busyBlockIDs.insert(blockID)
@@ -144,6 +173,31 @@ public final class RundownModel {
     }
 
     // MARK: - Internals
+
+    /// Queues `request` for `block` of `plan` and tries to send it now; the block is busy meanwhile.
+    private func submit(_ request: PlanBlockActionRequest, on block: PlanBlockDTO, of plan: RundownDTO) async
+        -> ActionOutcome
+    {
+        busyBlockIDs.insert(block.blockID)
+        defer { busyBlockIDs.remove(block.blockID) }
+        let submission = await ActionSubmitter(context: context).submit(
+            .planBlockAction(planID: plan.planID, blockID: block.blockID, request))
+        return await finish(submission)
+    }
+
+    /// Whether a refused action can be applied again: it is still queued, its block is still in the plan shown, and
+    /// the block still offers it (`PlanBlockActions.offers(_:on:)`, which includes moving). For the actions taken in
+    /// one step this is `PlanBlockConflict.canApplyAgain`.
+    private static func canApplyAgain(_ refused: PlanBlockConflict) -> Bool {
+        guard refused.conflict.entryID != nil, let current = refused.current else { return false }
+        return PlanBlockActions.offers(refused.action, on: current)
+    }
+
+    /// The new times a move asks for; `nil` for the other actions.
+    private static func times(of request: PlanBlockActionRequest) -> PlanBlockTimes? {
+        guard request.action == .move, let start = request.start, let end = request.end else { return nil }
+        return PlanBlockTimes(start: start, end: end)
+    }
 
     /// Records a submission: the connectivity it showed, the plan the host answered with, and the queue's pending
     /// actions and conflicts. A conflict reads the rundown again instead, so the owner sees the current plan.
@@ -204,16 +258,20 @@ public final class RundownModel {
         guard let plan = state.value else {
             pendingBlockActions = [:]
             blockConflicts = [:]
+            requestedMoves = [:]
             return
         }
         var pending: [String: PlanBlockActionKind] = [:]
+        var waitingMoves: [String: PlanBlockTimes] = [:]
         for entry in waiting where entry.kind == .planBlockAction {
             guard case .planBlockAction(let planID, let blockID, let request)? = try? entry.mutation(),
                 planID == plan.planID
             else { continue }
             pending[blockID] = request.action
+            waitingMoves[blockID] = Self.times(of: request)
         }
         var refused: [String: PlanBlockConflict] = [:]
+        var refusedMoves: [String: PlanBlockTimes] = [:]
         for entry in refusedEntries where entry.kind == .planBlockAction {
             guard case .planBlockAction(let planID, let blockID, let request)? = try? entry.mutation(),
                 planID == plan.planID, let conflict = ActionConflict(entry: entry)
@@ -221,8 +279,13 @@ public final class RundownModel {
             refused[blockID] = PlanBlockConflict(
                 planID: planID, blockID: blockID, action: request.action, conflict: conflict,
                 current: plan.blocks.first { $0.blockID == blockID })
+            refusedMoves[blockID] = Self.times(of: request)
         }
         pendingBlockActions = pending
         blockConflicts = refused
+        // A block's mark stands for its refused action when it has one, otherwise for its waiting one.
+        var moves = waitingMoves.filter { refused[$0.key] == nil }
+        moves.merge(refusedMoves) { _, refusedTimes in refusedTimes }
+        requestedMoves = moves
     }
 }
