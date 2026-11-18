@@ -7,6 +7,8 @@ This document covers the Phase 6 adapters: MAIL-01, CAL-01 (HTTPS), NEWS-01 to N
 - Every adapter was built and checked on Linux only, against scripted test doubles and local loopback servers with a synthetic certificate authority.
 - No real account, mailbox, feed, phone number, device or provider was contacted. Live checks are `NOT_RUN_CREDENTIALS`.
 - The Mac's own libcurl is `NOT_RUN_ENVIRONMENT`.
+- The persistent suite repeats these checks for every adapter (`Tests/LisaTests/Adapters/`, L18 and L27): success, authentication failure, timeout and throttling. IMAP, SMTP, the feeds, captured pages and the model run through the real libcurl over loopback TLS. X, Discord, Twilio and APNs run on a scripted transport, because their endpoints are fixed public hosts.
+- STARTTLS (IMAP in milestone M6a, SMTP in the Phase 6 checks) and APNs over real HTTP/2 (milestone M6b) were verified only by temporary checks: the persistent suite's loopback servers cannot upgrade a connection or speak HTTP/2.
 
 ## Rules every adapter follows
 
@@ -81,7 +83,7 @@ This document covers the Phase 6 adapters: MAIL-01, CAL-01 (HTTPS), NEWS-01 to N
   - The owner asks with `lisa capture --kind link --retrieve <url>`, or a device calls `POST /v1/captures/{id}/retrieve`. Only the local owner and paired devices may ask, and only for a link the owner captured. Each item is read once.
   - The item then holds the page's text, bounded like a feed item's and labeled `pageText` (what an anonymous reader sees, which for a paywall may be only a teaser), plus the retrieval time, the final address and the page's title when it had only the link. The raw page is kept under raw-content retention.
   - A page that needs signing in or payment, is not text, is too large or cannot be reached leaves the item title-only and reports why. Temporary failures can be retried with the same request ID.
-- **Verified.** Through the host and API with a scripted network (success, replay, second read refused, each failure class, refused addresses, permissions, no subresource requests), and the CLI in process and in client mode with links Lisa refuses before sending. A successful read through real libcurl is not verified, because the sandbox has no Internet access.
+- **Verified.** Through the host and API with a scripted network (success, replay, second read refused, each failure class, refused addresses, permissions, no subresource requests), and the CLI in process and in client mode with links Lisa refuses before sending. A successful read through the real libcurl over loopback TLS is verified by the persistent suite (L18); a read from a public site is not, because the sandbox has no Internet access.
 
 ## X (NEWS-02)
 
