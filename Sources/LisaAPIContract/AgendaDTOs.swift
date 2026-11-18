@@ -185,6 +185,9 @@ public struct BriefDTO: Codable, Hashable, Sendable {
     public var spokenText: String
     public var items: [BriefItemDTO]
     public var omittedCount: Int
+    /// The lower-priority items left out to meet the target length, for the full view (BRIEF-04). Hosts before this
+    /// field existed leave it out, and clients then have only `omittedCount`.
+    public var omittedItems: [BriefItemDTO]?
     public var generatedAt: Date
     public var estimatedSpokenSeconds: Int
     /// True when the brief was composed from templates without a model.
@@ -194,7 +197,7 @@ public struct BriefDTO: Codable, Hashable, Sendable {
     public init(
         briefID: String, revision: Int64, date: String, zone: String, version: Int, state: String, text: String,
         spokenText: String, items: [BriefItemDTO], omittedCount: Int, generatedAt: Date, estimatedSpokenSeconds: Int,
-        templateOnly: Bool, lastFailure: String?
+        templateOnly: Bool, lastFailure: String?, omittedItems: [BriefItemDTO]? = nil
     ) {
         self.briefID = briefID
         self.revision = revision
@@ -206,6 +209,7 @@ public struct BriefDTO: Codable, Hashable, Sendable {
         self.spokenText = spokenText
         self.items = items
         self.omittedCount = omittedCount
+        self.omittedItems = omittedItems
         self.generatedAt = generatedAt
         self.estimatedSpokenSeconds = estimatedSpokenSeconds
         self.templateOnly = templateOnly
