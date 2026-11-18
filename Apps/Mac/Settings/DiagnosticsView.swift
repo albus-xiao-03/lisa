@@ -43,7 +43,6 @@ struct DiagnosticsView: View {
         Section("App") {
             LabeledContent("Bundle identifier", value: ThisAppBuild.bundleIdentifier ?? "none")
             LabeledContent("Version", value: MacHostConfiguration.applicationVersion)
-            LabeledContent("Push environment of this build", value: ThisAppBuild.apnsEnvironment.rawValue)
             LabeledContent("Installation", value: session.credentials.installationID)
             if let problem = session.environment.setupProblem {
                 LabeledContent("Setup problem", value: problem)
