@@ -155,7 +155,9 @@ public final class BriefService: Sendable {
                 BriefNews(item: $0.item, reason: $0.reason, sourceName: sourceNames[$0.item.sourceID] ?? "source")
             },
             changes: changes,
-            sources: sources.filter(\.enabled).map { source in
+            // The owner's own shares are not a checked source: nothing synchronizes them, so they are never reported
+            // as unchecked (D-18, D-31).
+            sources: sources.filter { $0.enabled && $0.kind != .manualCapture }.map { source in
                 let freshness = source.freshness(at: now)
                 // A source whose latest check failed was not checked, however recent its last success (D-18).
                 return SourceStatusLine(
