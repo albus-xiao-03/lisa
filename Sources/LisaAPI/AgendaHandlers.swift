@@ -21,6 +21,11 @@ extension APIRouter {
         -> APIResponse
     {
         let body = try decode(PlanBlockActionRequest.self, request)
+        if body.action == .move { return try movePlanBlock(planID, blockID, body, caller) }
+        if body.start != nil || body.end != nil {
+            throw APIFailure.invalid(
+                "start and end are given only to move a block", field: body.start != nil ? "start" : "end")
+        }
         guard let action = PlanBlockAction(rawValue: body.action.rawValue) else {
             throw APIFailure.invalid("unknown action")
         }
@@ -28,6 +33,22 @@ extension APIRouter {
             action, planID: PlanID(planID), blockID: blockID, expectedRevision: Revision(body.expectedRevision),
             by: try principal(caller))
         return try json(DTOMapping.rundown(plan))
+    }
+
+    /// Moves a block to `start`–`end` (PLAN-04). A move that breaks a rule is a validation failure (400) with the
+    /// reason, naming `start` or `end` when one of them is at fault; nothing changes. The answer is the plan as stored
+    /// after the move, the replanning of its day and the reminder changes that follow it (D-47).
+    func movePlanBlock(_ planID: String, _ blockID: String, _ body: PlanBlockActionRequest, _ caller: Caller) throws
+        -> APIResponse
+    {
+        guard let start = body.start else {
+            throw APIFailure.invalid("start is required to move a block", field: "start")
+        }
+        guard let end = body.end else { throw APIFailure.invalid("end is required to move a block", field: "end") }
+        let moved = try application.movePlanBlock(
+            planID: PlanID(planID), blockID: blockID, start: start, end: end,
+            expectedRevision: Revision(body.expectedRevision), by: try principal(caller))
+        return try json(DTOMapping.rundown(moved))
     }
 
     func brief(_ request: APIRequest) throws -> APIResponse {
