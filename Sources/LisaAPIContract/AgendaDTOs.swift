@@ -111,6 +111,9 @@ public enum PlanBlockActionKind: String, Codable, Hashable, Sendable, CaseIterab
     case reject
     case complete
     case `defer`
+    /// Gives the block a new `start` and `end` on the plan's local day; it becomes `locked` there, and the host plans
+    /// the rest of the day around it. Hosts that predate it refuse it as a body that does not match the schema (400).
+    case move
 }
 
 /// `POST /v1/plans/{planID}/blocks/{blockID}/actions`.
@@ -118,10 +121,18 @@ public struct PlanBlockActionRequest: Codable, Hashable, Sendable {
     public var action: PlanBlockActionKind
     /// The plan revision the owner saw.
     public var expectedRevision: Int64
+    /// For `move`, and required by it: the block's new start, a whole minute on the plan's local day. Never sent with
+    /// other actions.
+    public var start: Date?
+    /// For `move`, and required by it: the block's new end, a whole minute after `start` on the same local day (at
+    /// the latest the midnight that ends it). Never sent with other actions.
+    public var end: Date?
 
-    public init(action: PlanBlockActionKind, expectedRevision: Int64) {
+    public init(action: PlanBlockActionKind, expectedRevision: Int64, start: Date? = nil, end: Date? = nil) {
         self.action = action
         self.expectedRevision = expectedRevision
+        self.start = start
+        self.end = end
     }
 }
 
