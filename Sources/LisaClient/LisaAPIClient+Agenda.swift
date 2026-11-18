@@ -14,8 +14,8 @@ extension LisaAPIClient {
         try await call(.rundown, query: RequestQuery.localDate(date), returning: RundownDTO.self)
     }
 
-    /// `POST /v1/plans/{planID}/blocks/{blockID}/actions`: accepts, locks, rejects, completes or defers a block of the
-    /// plan revision the owner saw. Returns the plan after the action.
+    /// `POST /v1/plans/{planID}/blocks/{blockID}/actions`: accepts, locks, rejects, completes, defers or moves a block of
+    /// the plan revision the owner saw (a move carries `start` and `end`). Returns the plan after the action.
     public func planBlockAction(
         planID: String, blockID: String, _ request: PlanBlockActionRequest, requestID: String? = nil
     ) async throws(ClientError) -> RundownDTO {
