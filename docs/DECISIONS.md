@@ -706,8 +706,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - Unpairing or a revoked credential hides every screen's data.
 - **Notifications.** Opening a notification shows its screen, not the item itself, because no route reads a single task or reminder. An event proposal says to review it on the Mac, since UI-02 has no review screen. Permission is requested only from the pairing offer.
 - **Known limits.**
-  - Editing a task cannot yet set a new deadline or remove an estimate.
-  - The rundown has no read-aloud of its own; the rundown intent speaks it.
+  - Editing a task cannot remove an estimate, because the API has no way to express it. Setting or removing a deadline was added later (D-51), as were block actions and reading the rundown aloud.
   - The queue is sent on foreground return and on Send Now, with no network-change trigger.
   - Some display logic lives in the views and is untested on Linux: which screen a notification opens, words for states, and the changed-fields check. Moving it into LisaPresentation is follow-up work.
 - **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
@@ -725,3 +724,26 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - It lets a device reach the host by a `.local` or unqualified name with the owner's own certificate.
   - It does not allow plain HTTP: Lisa's endpoint rules still require `https` except on loopback, and the host refuses plain HTTP off loopback.
   - The companion's trust rules (D-48) still apply.
+
+## D-51 — The Mac app (UI-01, ARCH-03, NOTIFY-05, PLAN-04)
+
+- **Layout.** One window with a sidebar: Today, Brief, Inbox, Ideas, Memory, and Settings and health. Menus and shortcuts cover the main actions: Command-N captures, Command-comma opens settings, Command-1 to 6 switch sections, and a Host menu holds the host commands.
+- **Embedded host.** The app opens LisaHost in its own process, in mode `mac-app`.
+  - It uses the CLI's configuration path (`$LISA_CONFIG`, otherwise `~/.config/lisa/config.json5`) and the CLI's secret stores, plus `KeychainSecretStore` for `keychain:` references.
+  - It serves the network API and writes the owner endpoint file, as `lisa serve` does.
+  - Quitting stops the server, removes the endpoint file, stops the runtime, and only then releases the lock. The app waits up to 20 seconds for this.
+- **Client fallback.** When a running `lisa serve` holds the data directory, the app reads the owner endpoint file, checks the process ID as the CLI does, and connects through `LoopbackOwnerTransport`. It never switches mode by itself; Try Again switches at the owner's request.
+- **Local notifications.**
+  - With the embedded host, a notification is posted at delivery time with no trigger, identified by its delivery ID.
+  - The transport reports one of three results: rejected, accepted, or confirmed delivered when Notification Center lists it.
+  - Permission is requested only from "Turn On Notifications…".
+  - The installation is registered through `LisaHost.registerLocalInstallation`, which reaches the host's store without an API route.
+- **Start at login** uses `SMAppService.mainApp`, with its status and approval shown in Settings and health.
+- **Keychain secrets.** Settings and health → Secrets stores values for `keychain:` references in a secure field. A stored value is never shown again.
+- **Plan blocks.** On the Mac's Today and on the companion's rundown, blocks can be accepted, locked, rejected, deferred or completed. Actions go through the durable queue with the plan's revision, and conflicts are recoverable. The rundown can also be read aloud, stating its age when it is not current.
+- **Gaps.**
+  - In client mode the Mac does not register for APNs. The owner listener refuses push registration, and pairing the Mac as a device would deliver twice once it embeds the host again. Until the owner decides, the Mac gets notifications only while it embeds the host.
+  - Moving a block (PLAN-04) is being added.
+  - A task's estimate cannot be removed, because the API has no way to express it.
+  - Some display logic is in the views and is not tested on Linux.
+- **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
