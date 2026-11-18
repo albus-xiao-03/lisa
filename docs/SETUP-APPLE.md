@@ -29,9 +29,9 @@ The generated project is not tracked by Git. Generate it again after pulling cha
 
 1. Create `Apps/Config/Signing.local.xcconfig` containing `DEVELOPMENT_TEAM = <your Team ID>`. Git ignores this file, and `Signing.xcconfig` includes it.
 2. Replace the placeholder bundle identifiers `org.example.lisa.companion` and `org.example.lisa.mac` in your local copy of `Apps/project.yml` with identifiers registered to your team. Do not commit real identifiers.
-3. Create one App ID per app. Enable Push Notifications and Time Sensitive Notifications on each.
+3. Create one App ID per app. Enable Time Sensitive Notifications on both, and Push Notifications on the companion's only: the Mac app never registers for push (D-51).
 4. Choose the configuration:
-   - **Debug** uses development signing, so devices get sandbox APNs tokens. Its entitlements use `development`.
+   - **Debug** uses development signing, so the companion gets sandbox APNs tokens. Its entitlements use `development`.
    - **Release** needs distribution signing (Ad Hoc or TestFlight), and its tokens are production tokens. An App Store release is out of scope.
 5. **The Mac app.** It uses the hardened runtime and is not sandboxed (D-50). Its Keychain items use the data-protection keychain. That needs a build signed with a provisioning profile; without one, Keychain calls fail with `errSecMissingEntitlement`, and there is no fallback.
 
@@ -41,7 +41,7 @@ The generated project is not tracked by Git. Generate it again after pulling cha
 2. Keep the key outside the repository. Refer to it from the host configuration by secret reference: `keychain:` in the Mac app, or `file:` with an owner-only file.
 3. Configure `notifications.apns` as `docs/INTEGRATIONS.md` describes:
    - `teamID`, `keyID`, `signingKeySecret`;
-   - `topics`, which are the bundle identifiers;
+   - `topics`, which is the companion's bundle identifier;
    - `environments`: `development` for Debug builds, `production` for Release builds.
 4. Push delivery stays a dry run, which records instead of sending, until you set `delivery.modes.push` to `"live"`. `lisa doctor` and Settings and health show the mode.
 
@@ -79,7 +79,7 @@ The generated project is not tracked by Git. Generate it again after pulling cha
 - **The Mac.**
   - With the embedded host, the Mac app posts a local notification at delivery time and handles its actions itself.
   - Turn notifications on with Settings and health → This Mac → Turn On Notifications…. The same section has Start at Login, and Secrets stores the values your configuration refers to as `keychain:`.
-  - When a running `lisa serve` owns the data directory, the Mac app connects to it as a client. In that mode the Mac does not receive notifications yet (D-51); they still reach your iPhone and iPad.
+  - When a running `lisa serve` owns the data directory, the Mac app connects to it as a client. In that mode the Mac receives no notifications, by design (D-51); they still reach your iPhone and iPad.
 
 ## 7. Siri, Shortcuts and the morning alarm (SIRI-01, SIRI-02)
 
