@@ -275,7 +275,9 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 ## D-28 — Call escalation (CALL-01, REM-01)
 
 - **Queueing:** an urgent confirmed deadline queues the call five minutes after the reminder notification, so an acknowledgement in that window suppresses the call.
-- **Gate at send time:** the whole CALL-01 gate is evaluated when the call is sent. The "earlier reminder outstanding" condition comes from stored reminder states, never from a missing push acknowledgement alone.
+- **Gate at send time:** the whole CALL-01 gate is evaluated when the call is sent. The "earlier reminder outstanding" condition comes from stored reminder states and delivery outcomes, never from a missing push acknowledgement alone:
+  - a reminder counts only if one of its notification or email deliveries was accepted by a provider or presented locally (D-17, plan §6.8);
+  - failed, unknown, pending and dry-run deliveries reached no one, so they never count. When every reminder channel is a dry run and nothing was presented locally, a call is refused.
 - **Classification:** the Time Sensitive level never authorizes a call.
 
 ## D-29 — Pairing and device credentials (NOTIFY-02, SEC-03)
@@ -283,7 +285,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Pairing codes:** live only in host memory for 10 minutes. Each is eight Crockford base-32 characters and single use. Five failed attempts discard every pending code.
 - **Credentials:** a 256-bit random credential is shown to the device once. The host stores its SHA-256 verifier and compares in constant time (swift-crypto, REC-DEP-06).
 - **Push tokens:**
-  - accepted only from an authenticated registration, for a configured topic and environment;
+  - accepted only from an authenticated registration, for a configured topic and environment, and only for the registration's own app: the topic must be the app identifier it paired with, never another configured app's (a 403);
   - the last five replaced tokens are kept;
   - provider "unregistered" reports apply only when their timestamp is newer than the token's registration.
 - **Mac app:** its embedded host registers as a local-notification installation.
