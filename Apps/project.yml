@@ -77,17 +77,14 @@ targets:
       - package: Lisa
         product: LisaRedaction
       # Imported directly by the embedded-host controller (configuration, lock and runtime) and the local-notification
-      # installation; all are already in LisaHost's dependency closure.
+      # content; all are already in LisaHost's dependency closure. The local-notification installation goes through
+      # LisaHost's own API, so the app imports neither LisaApplication nor LisaDevices.
       - package: Lisa
         product: LisaConfig
       - package: Lisa
         product: LisaRuntime
       - package: Lisa
         product: LisaDomain
-      - package: Lisa
-        product: LisaApplication
-      - package: Lisa
-        product: LisaDevices
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.mac
