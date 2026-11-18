@@ -3,7 +3,7 @@
 
 Required by R1 §16. Columns:
 - **Implementation:** modules or files.
-- **Automated evidence:** temporary implementation checks (in `.tmp/`, not committed) until the persistent Phase T suite exists in `Tests/`.
+- **Automated evidence:** temporary implementation checks (in `.tmp/`, not committed). Phase T adds the persistent suite in `Tests/LisaTests/`; the Linux acceptance table below records its results as each part completes.
 - **Manual / Apple:** checks that need a Mac, iPhone, iPad or live credentials.
 
 Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTIALS`, `OUT_OF_SCOPE`. "Planned (Pn)" marks work not yet done.
@@ -61,23 +61,46 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 
 ## Linux acceptance (R1 §16.1)
 
-L01–L33 are verified first by temporary checks in the phases shown in plan §9.1. They are then verified by the persistent Phase T suite in `Tests/`. The status of each test is recorded here as those runs complete.
+L01–L33 were first verified by temporary checks, in the phases shown in plan §9.1. The persistent Phase T suite in `Tests/LisaTests/` then verifies them, in debug and release, through public APIs only, and independently of the temporary checks.
+- **Temporary PASS:** only the temporary checks have run so far.
+- **PASS (unit):** the persistent suite verifies the whole observable result at the level plan §9.1 assigns.
+- **Partial:** some levels are still to come.
 
-| Test | Status |
-|---|---|
-| L01 | Partial: Phase 1–7 modules build in debug and release on Linux (aarch64, Swift 6.4.2) |
-| L04, L06, L08, L11, L14 | Temporary checks PASS (engine level); persistent tests in Phase T |
-| L03 | Temporary checks PASS (store level; restart across reopen) |
-| L05, L07, L09, L10, L15, L16, L19, L28, L32 | Temporary checks PASS (service level, Phase 4; L05 and L10 extended in process, Phase 5; L10 over loopback with the host stopped, Phase 7) |
-| L24 | Temporary checks PASS, and `lisa demo` on Linux: the full synthetic workflow across a restart (Phase 5) |
-| L20, L21, L30 | Temporary checks PASS: in process (Phase 5) and over loopback through the network server (Phase 7) |
-| L12, L13 | Temporary checks PASS (engine level P2; service recomputation and grounding P4) |
-| L17, L33 | Temporary checks PASS (policy P2; send-time gate, escalation and device levels P4) |
-| L22 | Partial: recurrence, message, document, model-output, delivery-retry, request-size and configuration limits checked (temporary) |
-| L23 | Temporary checks PASS (v1→v3 migration, failed migration, restore) |
-| L25, L26, L29, L31 | Partial: service parts PASS (temporary, P4); L25 and L29 over loopback PASS (temporary, P7); Apple parts in P8 |
-| L02 | Planned: the persistent offline suite is Phase T |
-| L18, L27 | Temporary checks PASS (Linux, Phase 6): adapters against scripted responses and loopback TLS servers; sources and APNs pushes through the host with a scripted network. Live services NOT_RUN_CREDENTIALS |
+All persistent results so far are from Linux aarch64 with Swift 6.4.2, with the same counts in debug and release.
+
+| Test | Temporary checks (`.tmp/`, not committed) | Persistent suite (`Tests/LisaTests/`) | Status |
+|---|---|---|---|
+| L01 | Phase 1–8 modules build in debug and release | The package and the suite build with `swift build --build-tests` and `swift build -c release --build-tests`, with 0 warnings | PASS (Linux) |
+| L02 | — | The unit suites (178 tests) run without credentials or network access. The integration, API and adapter suites follow (T2–T4) | Partial |
+| L03 | PASS (store level; restart across reopen) | Planned (T2) | Temporary PASS |
+| L04 | PASS (engine level) | `Unit/L04MailParsingTests.swift`, 17 tests: PASS. Found and fixed: a multipart part without a boundary produced no text | PASS (unit) |
+| L05 | PASS (service level, P4; in process, P5) | Planned (T2) | Temporary PASS |
+| L06 | PASS (engine level) | `Unit/L06CalendarSemanticsTests.swift`, 19 tests: PASS | PASS (unit) |
+| L07 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
+| L08 | PASS (engine level) | `Unit/L08EventMatchingTests.swift`, 13 engine tests: PASS. Integration planned (T2) | Partial: unit PASS |
+| L09 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
+| L10 | PASS (model unavailable, P4; in process, P5; host stopped, over loopback, P7) | Planned: model unavailable (T2), host unreachable (T3) | Temporary PASS |
+| L11 | PASS (engine level) | `Unit/L11PlanningFixtureTests.swift` (the §16.2 fixture, 6 tests), `Unit/L11PlanningTests.swift` (16), `Unit/L11HeldBlockTests.swift` (held parts, moves and the locked-overlap warning, D-52; 9): PASS | PASS (unit) |
+| L12 | PASS (engine level, P2; service recomputation, P4) | Planned (T2) | Temporary PASS |
+| L13 | PASS (engine level, P2; grounding, P4) | Planned (T2) | Temporary PASS |
+| L14 | PASS (engine level) | `Unit/L14InvalidInferenceTests.swift`, 19 tests: PASS. Found and fixed: an implausible end date was accepted, although D-19 bounds every date | PASS (unit) |
+| L15 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
+| L16 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
+| L17 | PASS (policy, P2; send-time gate and escalation, P4) | `Unit/L17CallPolicyTests.swift`, 7 rule-level tests: PASS. Integration planned (T2) | Partial: unit PASS |
+| L18 | PASS (P6): adapters against scripted responses and loopback TLS servers; sources through the host with a scripted network | Planned (T4) | Temporary PASS; live services NOT_RUN_CREDENTIALS |
+| L19 | PASS (service level, P4) | `Unit/L19InjectionResistanceTests.swift`, 10 rule-level tests: PASS. Integration planned (T2) | Partial: unit PASS |
+| L20, L21, L30 | PASS (in process, P5; over loopback through the network server, P7) | Planned (T3) | Temporary PASS |
+| L22 | Partial: recurrence, message, document, model-output, delivery-retry, request-size and configuration limits | `Unit/L22LimitsTests.swift`, 16 tests: PASS. Found and fixed: the header-field and total-occurrence limits each let one extra item through, and dropped header fields and parts were not reported. Retry exhaustion in the outbox planned (T2) | Partial: unit PASS |
+| L23 | PASS (v1→v3 migration, failed migration, restore) | Planned (T2) | Temporary PASS |
+| L24 | PASS, and `lisa demo` on Linux: the full synthetic workflow across a restart (P5) | Planned (T3) | Temporary PASS |
+| L25, L29 | Partial: services (P4); over loopback (P7) | Planned (T3) | Partial (temporary); Apple parts NOT_RUN_ENVIRONMENT |
+| L26 | Partial: services (P4) | `Unit/L26NotificationRoutingTests.swift`, 11 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS; Apple parts NOT_RUN_ENVIRONMENT |
+| L27 | PASS (P6): the APNs adapter against a scripted transport; pushes through the host with a scripted network | Planned (T4) | Temporary PASS; live APNs NOT_RUN_CREDENTIALS |
+| L28, L32 | PASS (service level, P4) | Planned: L28 (T4), L32 (T3) | Temporary PASS |
+| L31 | Partial: services (P4) | `Unit/L31NotificationPrivacyTests.swift`, 6 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS; Apple parts NOT_RUN_ENVIRONMENT |
+| L33 | PASS (policy, P2; send-time gate and device levels, P4) | `Unit/L33TimeSensitiveTests.swift`, 9 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS |
+| §16.2 | With L11 | `Unit/L11PlanningFixtureTests.swift`: the baseline plan and the added 09:00–09:30 event, exactly as specified: PASS | PASS (unit) |
+| §16.3 | Time cases (P1); recovery cases (P4) | `Unit/TimeCasesTests.swift`, 20 tests: spring-forward and fall-back, a date-only deadline, an ambiguous relative date, and a zone change after a plan exists: PASS. The five recovery cases planned (T2) | Partial: time cases PASS |
 
 ## Apple acceptance (R1 §16.4)
 
