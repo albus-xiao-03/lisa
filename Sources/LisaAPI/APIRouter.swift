@@ -42,12 +42,6 @@ public final class APIRouter: Sendable {
                         code: .notFound, message: "no route matches \(request.method.rawValue) \(request.path)"))
             }
             routeName = Self.name(of: route)
-            if let body = request.body, body.count > APIVersioning.maxRequestBytes {
-                throw APIFailure(
-                    body: APIErrorBody(
-                        code: .payloadTooLarge,
-                        message: "the request body exceeds \(APIVersioning.maxRequestBytes) bytes"))
-            }
             let caller = try authenticate(request, route: route, origin: origin)
             callerKind = caller.scope.split(separator: ":").first.map(String.init) ?? caller.scope
             if let retryAfter = limiter.admit(caller.scope, now: application.services.clock.now()) {
@@ -57,6 +51,7 @@ public final class APIRouter: Sendable {
             if route.isMutation, Self.usesLedger(route) {
                 response = try await idempotent(request, route: route, caller: caller)
             } else {
+                try Self.checkBodySize(request)
                 response = try await dispatch(route, request: request, caller: caller, requestID: nil)
             }
         } catch {
@@ -140,6 +135,8 @@ public final class APIRouter: Sendable {
         defer { _ = inFlight.withLock { $0.remove(scopedKey) } }
         let response: APIResponse
         do {
+            // Inside the ledger, so a 413 is a definite answer that a retry replays (D-35).
+            try Self.checkBodySize(request)
             response = try await dispatch(route, request: request, caller: caller, requestID: requestID)
         } catch {
             response = Self.error(ErrorMapping.body(for: error))
@@ -150,6 +147,16 @@ public final class APIRouter: Sendable {
                 retentionDays: configuration.idempotencyRetentionDays)
         }
         return response
+    }
+
+    /// Refuses a body over the API limit. The network server refuses such a body before reading it, so only
+    /// in-process callers reach this check with one.
+    static func checkBodySize(_ request: APIRequest) throws {
+        if let body = request.body, body.count > APIVersioning.maxRequestBytes {
+            throw APIFailure(
+                body: APIErrorBody(
+                    code: .payloadTooLarge, message: "the request body exceeds \(APIVersioning.maxRequestBytes) bytes"))
+        }
     }
 
     /// Definite answers are replayed; authentication, throttling and temporary failures are not.
