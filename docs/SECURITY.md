@@ -91,6 +91,18 @@ All owner data stays on the authoritative host, inside its data directory. The d
 - **Locked devices.** Completing a task, from a notification or from Siri, needs the device unlocked. With "Allow Siri When Locked" on, Siri can read the brief or rundown, capture, save and snooze on a locked device, so anyone who can speak to it can hear the brief. The owner decides with that system setting.
 - **Notification text.** It is generic localized text, with a hidden-preview placeholder per category. Item titles appear only on devices that opted in.
 
+## Notification data routing (NOTIFY-01–NOTIFY-07)
+
+- **Decided on the host.** Only the host decides what to notify and to whom (D-27). Every active paired registration gets a delivery record; a device that cannot receive the notification (permission denied, preferences, category turned off, no active token) gets a suppressed record with the reason. Quiet hours defer or expire the notification on every device.
+- **What leaves the host.**
+  - To APNs, for paired iPhones and iPads: the device token, the app topic and a payload under 4 KB. The payload holds generic localization keys, the category, a thread identifier built from opaque record identifiers, and a `lisa` object with only a schema version, the kind, and opaque notification and subject identifiers with the subject revision (D-38). A truncated item title is added only for a device that opted in to titles.
+  - On the Mac, the embedded host posts local notifications through the system with the same generic content; nothing for the Mac goes to APNs. In client mode the Mac shows no notifications (D-51).
+  - In dry-run mode, the capture records the intended notification but never a device token.
+- **What stays on the host.** Device tokens (the current one, plus the last five replaced ones), credential verifiers, notification occurrences and delivery records. Tokens never appear in API responses, exports or logs, where only fingerprints are shown. The APNs signing key is resolved only through `SecretStore`.
+- **Tokens.** A token is accepted only from an authenticated registration, for its own app identifier and an enabled environment, and is sent only to its own environment. A provider's "unregistered" report applies only to the current token, and only when it is newer than that token's registration (D-29).
+- **Actions coming back.** Acknowledge, snooze and complete come back through the API with the device credential. The request ID is derived from the installation, the notification and the action, so an action the system delivers twice is applied once. Completing a task needs the device unlocked.
+- **Authority.** A notification, or a missing acknowledgement, authorizes nothing by itself. A call needs every CALL-01 condition, and an earlier reminder counts only if it reached the owner (D-17, D-28). Time Sensitive is used only for urgent confirmed reminders with the owner's opt-in, and never bypasses quiet hours, recipients or limits.
+
 ## What each provider receives (SEC-03)
 
 | Provider | Receives | When |
