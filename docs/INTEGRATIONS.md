@@ -64,7 +64,7 @@ This document covers the Phase 6 adapters: MAIL-01, CAL-01 (HTTPS), NEWS-01 to N
 - **Setup.** In `sources`: `kind: "calendarFeed"` with exactly one of:
   - `url` (public https);
   - `urlSecret` (a private subscription address, kept as a secret);
-  - `file` (a local `.ics`).
+  - `file` (a local `.ics`). A missing or unreadable file fails the refresh with class `configuration`, and a file over the size limit fails it as partial. Neither cancels any event.
 
   `floatingTimeZone` sets the zone used for times written without one.
 - **Verified.** Loopback TLS with the real libcurl client, scripted responses, and the host's runtime with a scripted network.
