@@ -34,7 +34,9 @@ struct L31NotificationPrivacyTests {
         "By default every category carries only generic keys and an opaque thread identifier",
         arguments: NotificationCategory.allCases)
     func defaultContentIsGeneric(category: NotificationCategory) throws {
-        let notification = intent(category, title: privateTitle)
+        // A fixed identifier: the hex digits of a random one can spell "480" by chance.
+        let subject = NotificationSubject.task(TaskID("00000000-0000-4000-8000-000000000001"))
+        let notification = intent(category, title: privateTitle, subject: subject)
         let content = NotificationContentPolicy.content(for: notification, showTitle: false)
         let base = try #require(Self.expectedBase[category])
         #expect(content.titleKey == "\(base)_TITLE")
