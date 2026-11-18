@@ -137,19 +137,27 @@ public final class ExtractionService: Sendable {
         report = local
     }
 
-    /// Creates a task from an item, or updates the task previously extracted from the same evidence. Fields the owner
-    /// corrected are never changed.
+    /// Creates a task from an item, or updates the task previously extracted from the same evidence with the same
+    /// title. The title compared is the one the extraction gave the task, so a task the owner renamed is still
+    /// recognized (DATA-04, D-33). Fields the owner corrected are never changed.
     static func upsertTask(
         _ item: ValidatedItem, email: EmailMessage, zone: TimeZoneID, now: Date, in tx: any RecordWriting
     )
         throws -> (LisaTask, Bool)
     {
         let (deadline, unresolved) = Self.deadline(item.deadline, zone: zone)
+        let title = String(item.title.prefix(200))
         let existing = try tx.find(
             LisaTask.self, RecordQuery.all.filter("origin", equals: TaskOrigin.extracted.rawValue)
         )
-        .first { $0.evidenceIDs.contains(email.evidenceID) && $0.title.lowercased() == item.title.lowercased() }
+        .first {
+            $0.evidenceIDs.contains(email.evidenceID)
+                && ($0.extractedTitle ?? $0.title).lowercased() == title.lowercased()
+        }
         if var task = existing {
+            // A task stored before extracted titles were kept was matched by its current title, which is the
+            // extraction's own; record it so a later rename is recognized too.
+            if task.extractedTitle == nil { task.extractedTitle = title }
             var material = false
             if !task.ownerCorrected.contains(.deadline), task.deadline != deadline {
                 task.deadline = deadline
@@ -172,10 +180,11 @@ public final class ExtractionService: Sendable {
             return (try tx.update(task), false)
         }
         var task = LisaTask(
-            title: String(item.title.prefix(200)), notes: item.notes.joined(separator: "\n"), priority: item.priority,
+            title: title, notes: item.notes.joined(separator: "\n"), priority: item.priority,
             deadline: deadline, estimatedMinutes: item.durationMinutes, confirmation: item.confirmation,
             origin: .extracted, evidenceIDs: [email.evidenceID], now: now)
         task.unresolvedDeadlineText = unresolved
+        task.extractedTitle = title
         return (try tx.insert(task), true)
     }
 
