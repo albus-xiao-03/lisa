@@ -103,7 +103,7 @@ The network server itself answers a few requests before they reach the router, w
 |---|---|---|
 | Runtime health | `GET /v1/health` | Status, delivery modes (`dryRun`/`live`), outbox counts, source freshness, device warnings, and `model`: `{provider: none\|deterministic\|openAICompatible, name?, location?, deterministic, available, dailyRequestLimit?}`. `available` says whether the host could set the provider up, not that an endpoint answers. It never includes an endpoint address, a key reference or a credential; hosts that predate the field omit it (D-47) |
 | Rundown | `GET /v1/rundown?date=` | The stored plan, computed on first request for today or a later date |
-| Plan-block action | `POST /v1/plans/{planID}/blocks/{blockID}/actions` | `{action: accept\|lock\|reject\|complete\|defer, expectedRevision}` |
+| Plan-block action | `POST /v1/plans/{planID}/blocks/{blockID}/actions` | `{action: accept\|lock\|reject\|complete\|defer\|move, expectedRevision, start?, end?}`. `move` needs `start` and `end` on the plan's local day; the block becomes locked there. A move that would overlap a busy event or another held block, leave the day, touch a past day or a completed block is a `400` with the reason and field; a calendar event is a `403` (D-52) |
 | Brief | `GET /v1/brief?date=` | Generated on first request for today |
 | Regenerate brief | `POST /v1/briefs/regenerate` | `{date?}`; creates a new version; no second notification |
 | Capture | `POST /v1/captures` | `{kind: idea\|text\|link\|sharedAppleNews, text?, url?, title?, channel}`; `201` when created, `200` when the request ID matched an earlier capture |
