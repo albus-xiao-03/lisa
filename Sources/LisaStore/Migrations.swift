@@ -17,7 +17,7 @@ public struct Migration: Hashable, Sendable {
 
 /// Lisa's migrations, oldest first.
 public enum Migrations {
-    public static let all: [Migration] = [version1, version2, version3]
+    public static let all: [Migration] = [version1, version2, version3, version4]
 
     /// The newest schema version this build understands.
     public static var latestVersion: Int { all.map(\.version).max() ?? 0 }
@@ -120,4 +120,23 @@ public enum Migrations {
                 """,
                 "CREATE INDEX deliveries_payload_key ON deliveries(payload_key)",
             ])
+
+    /// A request ID identifies a capture only together with its caller (D-35), so two devices may use the same ID.
+    /// The unique `request_id` column now holds `Capture.requestKey`, `<principal>:<request ID>`, derived here from
+    /// each stored record exactly as `Principal.description` spells the caller.
+    static let version4 = Migration(
+        version: 4, summary: "capture request keys name the caller as well as the request ID",
+        statements: [
+            """
+            UPDATE captures SET request_id = (CASE
+                WHEN json_type(body, '$.principal.pairedDevice') IS NOT NULL
+                    THEN 'device:' || json_extract(body, '$.principal.pairedDevice._0')
+                WHEN json_type(body, '$.principal.localOwner') IS NOT NULL THEN 'local-owner'
+                WHEN json_type(body, '$.principal.runtime') IS NOT NULL THEN 'runtime'
+                WHEN json_type(body, '$.principal.model') IS NOT NULL THEN 'model'
+                WHEN json_type(body, '$.principal.demonstration') IS NOT NULL THEN 'demonstration'
+                END) || ':' || json_extract(body, '$.requestID')
+            WHERE json_extract(body, '$.requestID') IS NOT NULL
+            """
+        ])
 }
