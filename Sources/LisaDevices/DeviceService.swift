@@ -15,6 +15,8 @@ public enum DeviceError: Error, Hashable, Sendable, CustomStringConvertible {
     case unknownDevice
     case revoked
     case topicNotAllowed(String)
+    /// The topic is configured, but it is another app's: a registration may register tokens only for its own app.
+    case topicNotForApp(String)
     case environmentNotAllowed(String)
     case invalidToken
 
@@ -25,6 +27,7 @@ public enum DeviceError: Error, Hashable, Sendable, CustomStringConvertible {
         case .unknownDevice: "the device is not paired"
         case .revoked: "the device was removed"
         case .topicNotAllowed(let topic): "the app identifier \(topic) is not configured for notifications"
+        case .topicNotForApp(let topic): "the app identifier \(topic) is not the identifier of the paired app"
         case .environmentNotAllowed(let environment): "the APNs environment \(environment) is not enabled"
         case .invalidToken: "the push token is not a valid hexadecimal device token"
         }
@@ -183,7 +186,8 @@ public final class DeviceService: DeviceTokenFeedback {
         }
     }
 
-    /// Binds an APNs device token to an authenticated registration for an allowed topic and environment.
+    /// Binds an APNs device token to an authenticated registration for an allowed topic and environment. The topic
+    /// must also be the registration's own app identifier (NOTIFY-02), never another configured app's.
     public func registerPushToken(
         deviceID: DeviceID, token: String, environment: APNsEnvironment, topic: String, policy: PushRegistrationPolicy
     ) throws -> DeviceRegistration {
@@ -202,6 +206,7 @@ public final class DeviceService: DeviceTokenFeedback {
         return try store.write { tx in
             var device = try tx.require(DeviceRegistration.self, id: deviceID)
             guard device.state == .active else { throw DeviceError.revoked }
+            guard device.appBundleID == topic else { throw DeviceError.topicNotForApp(topic) }
             if device.pushToken?.token.revealed == cleaned, device.pushToken?.state == .active { return device }
             if var previous = device.pushToken {
                 previous.state = .replaced
