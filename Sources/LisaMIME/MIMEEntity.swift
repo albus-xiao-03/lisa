@@ -31,12 +31,15 @@ public enum MIMEParser {
         -> MIMEEntity
     {
         let (headerData, bodyData) = splitHeaderAndBody(data)
-        let headers = try HeaderFields.parse(headerData, limits: limits)
+        let (headers, headersTruncated) = try HeaderFields.parse(headerData, limits: limits)
         let contentType = headers.value("Content-Type").flatMap { ContentType($0) } ?? ContentType.defaultText
         var entity = MIMEEntity(
             headers: headers, contentType: contentType,
             disposition: ContentDisposition(headers.value("Content-Disposition")), body: Data(), parts: [],
             embedded: [], warnings: [])
+        if headersTruncated {
+            entity.warnings.append("the header has more than \(limits.maxHeaderFields) fields; the rest were not read")
+        }
         partCount += 1
         guard partCount <= limits.maxParts else {
             entity.warnings.append("the message has more than \(limits.maxParts) parts; the rest were not read")
@@ -49,12 +52,22 @@ public enum MIMEParser {
             }
             guard let boundary = contentType.boundary, !boundary.isEmpty else {
                 entity.warnings.append("a multipart part has no boundary; it was read as text")
-                entity.body = bodyData
+                entity.contentType = ContentType(
+                    type: "text", subtype: "plain", parameters: ["charset": contentType.charset ?? "us-ascii"])
+                entity.body = TransferDecoding.decode(bodyData, encoding: headers.value("Content-Transfer-Encoding"))
                 return entity
             }
             let (pieces, closed) = splitMultipart(bodyData, boundary: boundary)
             if !closed { entity.warnings.append("a multipart section is not properly closed") }
-            for piece in pieces where partCount < limits.maxParts {
+            for piece in pieces {
+                guard partCount < limits.maxParts else {
+                    if partCount == limits.maxParts {
+                        entity.warnings.append(
+                            "the message has more than \(limits.maxParts) parts; the rest were not read")
+                        partCount += 1  // Reported once: enclosing multiparts stop without repeating it.
+                    }
+                    break
+                }
                 entity.parts.append(try parseEntity(piece, depth: depth + 1, limits: limits, partCount: &partCount))
             }
         } else if contentType.mimeType == "message/rfc822", depth < limits.maxDepth {
