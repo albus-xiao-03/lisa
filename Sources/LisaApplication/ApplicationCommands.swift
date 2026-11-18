@@ -147,6 +147,18 @@ extension LisaApplication {
         return plan
     }
 
+    /// Moves a plan block to `start`–`end` (PLAN-04). The block becomes owner-held there, its day is replanned around it
+    /// and its reminders follow it. A move that breaks a rule throws `PlanBlockMoveRefusal` and changes nothing.
+    public func movePlanBlock(
+        planID: PlanID, blockID: String, start: Date, end: Date, expectedRevision: Revision, by principal: Principal
+    ) throws -> Plan {
+        let plan = try services.plans.move(
+            planID: planID, blockID: blockID, start: start, end: end, expectedRevision: expectedRevision,
+            by: principal)
+        try services.reminders.sync()
+        return try latest(plan)
+    }
+
     // MARK: - Preferences, deletion and export
 
     public func setPreference(
