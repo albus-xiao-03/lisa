@@ -15,14 +15,14 @@ Lisa is a single-owner personal secretary.
 
 ## How it is built
 
-- **A portable Swift package.** The engine, adapters, host runtime, API and command-line interface are a Swift package (Swift 6.4.2, Swift 6 language mode). It builds on Linux and macOS.
+- **A portable Swift package.** The engine, adapters, host runtime, API and command-line interface are a Swift package (Swift 6.4.2, Swift 6 language mode). It builds and is tested on Linux. It is written to build on macOS too, but no macOS build has been run yet.
 - **Apple apps.** The iPhone, iPad and Mac apps live in `Apps/`, outside the package graph, and reach the engine only through the versioned API.
 - **The authoritative host.** One host owns the data: the Mac app's embedded runtime, or the headless `lisa` executable. Everything is stored locally in SQLite.
 - **Dry run by default.** Delivery is a dry run until the owner deliberately enables a live channel.
 
 `docs/ARCHITECTURE.md` describes the components, and `docs/DECISIONS.md` records each design decision.
 
-## Quick start (Linux or macOS)
+## Quick start (Linux)
 
 ```sh
 swift build
@@ -40,14 +40,18 @@ The demo needs no accounts and no network. It uses synthetic, labeled data and s
 | `docs/SECURITY.md` | Secrets, authorization, untrusted content, network boundaries, what each provider receives |
 | `docs/API.md` | The version 1 API: authentication, request identities, errors, pagination, routes, push payload |
 | `docs/ARCHITECTURE.md` | Modules, boundaries and their implementation status |
+| `docs/INTEGRATIONS.md` | Each provider: setup, limits, failure classes and what was verified |
+| `docs/SETUP-APPLE.md` | Xcode build, signing, devices, push notifications, Siri and the alarm automation |
 | `docs/DECISIONS.md` | Design decisions with their reasons |
 | `docs/REQUIREMENTS-MATRIX.md` | Each requirement's implementation, evidence and verification status |
 | `config.example.json5` | A complete, commented configuration with safe defaults |
+| `IMPLEMENTATION-REPORT.md` | What R1 delivers, how it was verified, its known limitations and the owner's next steps |
 
 ## Status
 
-Implementation follows the plan's phases. `docs/REQUIREMENTS-MATRIX.md` records what each requirement's evidence actually covers, and on which platform.
+The R1 package is implemented and verified on Linux; the Apple applications are written but not yet built. `IMPLEMENTATION-REPORT.md` summarizes what was verified, and `docs/REQUIREMENTS-MATRIX.md` records the evidence for each requirement and on which platform it was gathered.
 
-Until the Apple platforms and the live integrations have actually been tested, nothing below counts as release-verified:
-- The Apple applications are compiled and tested only on a Mac and real devices.
-- Live integrations are checked only with the owner's credentials: mail, Apple's push service, Twilio, X, Discord and model endpoints.
+- **Linux handoff.** The persistent suite in `Tests/LisaTests/` (376 tests) passes every Linux acceptance test, L01 to L33, in debug and release, offline and with synthetic data only.
+- **Not yet verified, so not release-verified:**
+  - The Apple applications have been written and syntax-checked on Linux, but not compiled or tested on a Mac or on devices.
+  - Live integrations are checked only with the owner's credentials: mail, calendar subscriptions and feeds, Apple's push service, Twilio, X, Discord and model endpoints. None has been contacted.
