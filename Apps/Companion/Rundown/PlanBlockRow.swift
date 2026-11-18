@@ -1,27 +1,69 @@
-// One block of the rundown: its times, title and kind, and whether it is a suggestion, locked, done or set aside.
+// One block of the rundown: its times, title and kind, whether it is a suggestion, locked, done or set aside, and the
+// owner's actions on it, with a mark while an action waits to sync or was refused because the plan changed.
 
 import Foundation
 import LisaAPIContract
+import LisaPresentation
 import SwiftUI
 
-/// A planned block as the rundown shows it, in the rundown's own zone. At accessibility text sizes the times move
-/// above the title.
+/// A planned block as the rundown shows it, in the rundown's own zone, with the actions it offers
+/// (`PlanBlockActions.available(for:)`): the main one as a button and the rest in a menu. Calendar events offer none.
+/// While an action on the block waits to sync or was refused, or any block action is being sent, the actions are
+/// disabled; a refused action is resolved at the top of the rundown. At accessibility text sizes the times move above
+/// the title.
 struct PlanBlockRow: View {
     let block: PlanBlockDTO
     let zone: TimeZone
+    let model: RundownModel
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            details
+                .accessibilityElement(children: .combine)
+            if model.blockConflicts[block.blockID] != nil {
+                SyncBadge(kind: .conflict)
+            } else if let pending = model.pendingBlockActions[block.blockID] {
+                SyncBadge(kind: .waiting, action: PlanBlockActions.label(for: pending))
+            }
+            if let main = actions.first {
+                HStack(spacing: 8) {
+                    Button(PlanBlockActions.label(for: main)) { act(main) }
+                        .accessibilityLabel("\(PlanBlockActions.label(for: main)) \(title)")
+                    if actions.count > 1 {
+                        Menu(
+                            content: {
+                                ForEach(actions.dropFirst(), id: \.self) { action in
+                                    Button(PlanBlockActions.label(for: action)) { act(action) }
+                                }
+                            },
+                            label: { Label("More", systemImage: "ellipsis") }
+                        )
+                        .menuStyle(.button)
+                        .accessibilityLabel("More actions for \(title)")
+                    }
+                    if model.busyBlockIDs.contains(block.blockID) {
+                        ProgressView()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!canAct)
+            }
+        }
+    }
+
+    private var details: some View {
         let layout =
             typeSize.isAccessibilitySize
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
             : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
-        layout {
+        return layout {
             Text(times)
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Label(block.title.isEmpty ? "Untitled block" : block.title, systemImage: symbol)
+                Label(title, systemImage: symbol)
                 if let status {
                     Text(status)
                         .font(.caption)
@@ -35,7 +77,20 @@ struct PlanBlockRow: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
+    }
+
+    private var title: String { block.title.isEmpty ? "Untitled block" : block.title }
+
+    private var actions: [PlanBlockActionKind] { PlanBlockActions.available(for: block) }
+
+    /// Whether the owner can act now: nothing is being sent, and no action on this block waits or was refused.
+    private var canAct: Bool {
+        model.busyBlockIDs.isEmpty && model.pendingBlockActions[block.blockID] == nil
+            && model.blockConflicts[block.blockID] == nil
+    }
+
+    private func act(_ action: PlanBlockActionKind) {
+        Task { await model.act(action, on: block) }
     }
 
     private var times: String {
