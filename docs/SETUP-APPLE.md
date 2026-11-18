@@ -23,7 +23,7 @@ The generated project is not tracked by Git. Generate it again after pulling cha
 | Target | Platform | Sources | Lisa packages it links |
 |---|---|---|---|
 | LisaCompanion | iPhone and iPad | `Companion/`, `Shared/` | LisaAPIContract, LisaClient, LisaPresentation |
-| LisaMac | macOS | `Mac/`, `Shared/` | The same, plus LisaHost, LisaPorts, LisaSecrets, LisaRedaction |
+| LisaMac | macOS | `Mac/`, `Shared/` | The same, plus LisaHost, LisaPorts, LisaSecrets, LisaRedaction, LisaConfig, LisaRuntime, LisaDomain |
 
 ## 3. Signing and identifiers
 
@@ -78,7 +78,8 @@ The generated project is not tracked by Git. Generate it again after pulling cha
 - **Changed settings.** Changes made in Settings while the app is not running become known at its next launch or return to the foreground, and are reported to the host.
 - **The Mac.**
   - With the embedded host, the Mac app posts a local notification at delivery time and handles its actions itself.
-  - When a running `lisa serve` owns the data directory, the Mac app connects to it as a client and registers for APNs like a companion.
+  - Turn notifications on with Settings and health → This Mac → Turn On Notifications…. The same section has Start at Login, and Secrets stores the values your configuration refers to as `keychain:`.
+  - When a running `lisa serve` owns the data directory, the Mac app connects to it as a client. In that mode the Mac does not receive notifications yet (D-51); they still reach your iPhone and iPad.
 
 ## 7. Siri, Shortcuts and the morning alarm (SIRI-01, SIRI-02)
 
