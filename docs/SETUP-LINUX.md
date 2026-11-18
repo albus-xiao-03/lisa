@@ -26,13 +26,14 @@ The Swift driver links with `ld.gold`, so install `binutils-gold` if your distri
 | `libcurl4-openssl-dev` | 8.14.1, built with HTTP/2 through nghttp2 1.64.0 and OpenSSL 3.5.7 | Network adapters; APNs needs libcurl 8.10.0 or later with HTTP/2 (`lisa doctor` checks it) |
 | `pkg-config` | 1.8.1 | Locating the libraries |
 | `libicu-dev` | 76.1 | Foundation's text support |
+| `openssl` | 3.5.7 | The persistent tests: certificates, keys and the TLS relay for their loopback servers |
 | `nghttp2-server` (optional) | 1.64.0 | A local HTTP/2 test server for adapter verification |
 
 For example:
 
 ```sh
 sudo apt-get update
-sudo apt-get install --no-install-recommends libsqlite3-dev libxml2-dev libcurl4-openssl-dev pkg-config libicu-dev
+sudo apt-get install --no-install-recommends libsqlite3-dev libxml2-dev libcurl4-openssl-dev pkg-config libicu-dev openssl
 ```
 
 Cryptography comes from swift-crypto 5.1.1, which vendors BoringSSL, so no system cryptography package is needed for it. Every third-party Swift package is pinned in `Package.resolved`.
@@ -49,7 +50,16 @@ The `lisa` executable is at `.build/debug/lisa`, or at `.build/release/lisa` aft
 
 ## 4. Tests
 
-`swift test` runs the persistent package tests in `Tests/`. That suite is added in Phase T; it runs offline and uses synthetic data only (L02). Until then, verification uses temporary checks kept outside the repository.
+The persistent suite in `Tests/LisaTests/` (376 tests) runs offline and uses synthetic data only (L02). It needs the `openssl` command, which generates the certificates and keys for its loopback servers at run time. The recorded results come from these commands (on x86-64 the directories end in `x86_64`):
+
+```sh
+swift build --build-tests
+.build/out/Products/Debug-linux-aarch64/LisaTests-test-runner --testing-library swift-testing
+swift build -c release --build-tests
+.build/out/Products/Release-linux-aarch64/LisaTests-test-runner --testing-library swift-testing
+```
+
+Add `--filter <suite or test>` to run part of the suite, for example `--filter L20`. Suites are named by their acceptance test (R1 §16.1), and each test is tagged with its kind: unit, integration, recovery, acceptance or adapter.
 
 ## 5. The offline demonstration
 
