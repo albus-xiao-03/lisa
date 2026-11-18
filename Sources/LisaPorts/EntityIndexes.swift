@@ -128,10 +128,16 @@ extension Capture: StoredEntity {
         IndexDefinition("processing", .text),
     ]
 
+    /// The unique stored key of a request ID: the caller and the ID, so two callers may use the same ID (D-35).
+    /// It is persistent, and migration v4 derives the same text from stored records.
+    public static func requestKey(principal: Principal, requestID: String) -> String {
+        "\(principal.description):\(requestID)"
+    }
+
     public var indexValues: [String: IndexValue] {
         [
-            "request_id": requestID.map(IndexValue.text) ?? .null, "captured_at": .instant(capturedAt),
-            "processing": .text(processing.rawValue),
+            "request_id": requestID.map { .text(Self.requestKey(principal: principal, requestID: $0)) } ?? .null,
+            "captured_at": .instant(capturedAt), "processing": .text(processing.rawValue),
         ]
     }
 }
