@@ -160,8 +160,8 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 
 - **Construction:** a deterministic template. Both versions are rendered from the same items, so material items (commitments, deadlines, unresolved events, changes, source failures, uncertainty) always appear in both.
 - **Spoken version:** no URLs or identifiers.
-- **Source honesty:** "Could not check …" for failing or stale sources is distinct from "Checked, nothing new to report: …".
-- **Length:** optional items are dropped by priority to meet the target length (default 220 words); omitted items stay in the full view.
+- **Source honesty:** "Could not check …" for failing or stale sources is distinct from "Checked, nothing new to report: …". The owner's own shares ("Shared by the owner") are not a checked source, because nothing synchronizes them, so they appear in neither list (Phase 9).
+- **Length:** optional items are dropped by priority to meet the target length (default 220 words); omitted items stay in the full view: the API returns them as the brief's `omittedItems`, and the apps list them under the brief (Phase 9).
 - **Spoken duration:** an estimate, words ÷ words-per-minute (default 150).
 
 ## D-19 — Extraction validation (MODEL-02, MODEL-03, MAIL-02)
@@ -499,7 +499,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Owner-initiated retrieval (NEWS-01, SEC-02).**
   - `OwnerPageRetriever` fetches a link the owner or a paired device captured: one https GET, public addresses only, text through LisaHTMLText, no subresources.
   - Apple News items and links found in content are never fetched.
-  - It is not yet connected to the capture workflow.
+  - It was connected to the capture workflow in Phase 7 (D-46).
 - **X.**
   - Reads a selected account through API v2 with an app bearer token, with a `since_id` cursor and bounded pagination.
   - The OpenAPI spec names the fields parameter `post.fields`, while the guides and changelog say `tweet.fields`. Lisa sends `tweet.fields` from one place; this needs a live check.
@@ -624,7 +624,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - IPv6 literal hosts are refused when the transport is created, because swift-corelibs-foundation rejects every such URL.
   - `resourceTimeout` is ignored there.
   - FoundationNetworking's libcurl sends even loopback requests through a proxy named by `http_proxy`, `all_proxy` or `ALL_PROXY` unless `no_proxy` lists the host, and URLSession cannot turn that off. That is why the CLI reaches a running host with libcurl directly (D-44).
-- **Not verified on Apple platforms.** The delegate method signatures, the server-trust path, `resourceTimeout`, IPv6 literals and system proxy behavior are unverified until Phase 8 runs on a Mac and devices.
+- **Not verified on Apple platforms.** The delegate method signatures, the server-trust path, `resourceTimeout`, IPv6 literals and system proxy behavior stay unverified until the apps are built and run on a Mac and devices (`NOT_RUN_ENVIRONMENT`).
 
 ## D-46 — Reading captured links (NEWS-01, SEC-02)
 
@@ -756,7 +756,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Keychain secrets.** Settings and health → Secrets stores values for `keychain:` references in a secure field. A stored value is never shown again.
 - **Plan blocks.** On the Mac's Today and on the companion's rundown, blocks can be accepted, locked, rejected, deferred or completed. Actions go through the durable queue with the plan's revision, and conflicts are recoverable. The rundown can also be read aloud, stating its age when it is not current.
 - **Gaps.**
-  - Moving a block (PLAN-04) is being added.
+  - Moving a block (PLAN-04) was added later (D-52).
   - A task's estimate cannot be removed, because the API has no way to express it.
   - Some display logic is in the views and is not tested on Linux.
 - **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
