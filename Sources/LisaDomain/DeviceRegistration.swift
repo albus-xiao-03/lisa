@@ -109,7 +109,7 @@ public struct DeviceRegistration: Entity {
     public var revokedAt: Date?
     public var lastSeenAt: Date?
     public var pushToken: PushTokenRecord?
-    /// Earlier tokens, newest first, bounded; used to judge provider invalidation reports.
+    /// Earlier tokens, newest first, at most five. Provider reports are judged against the current token only.
     public var tokenHistory: [PushTokenRecord]
     public var authorization: NotificationAuthorization
     public var authorizationReportedAt: Date?
