@@ -47,9 +47,12 @@ public final class PlanService: Sendable {
                 rejected: previous?.rejectedSuggestions ?? [], in: tx)
             try Self.recordUnschedulable(output.unscheduled, previous: previous, now: now, in: tx)
             if var plan = previous {
+                // A recomputation that leaves the blocks, unscheduled items and availability as they are keeps the
+                // stored revision, so it never erases the explanation of the last change (PLAN-04, D-15): a warning
+                // that an accepted block was placed again is only produced by the computation that moved it. The
+                // planner's other warnings follow from the blocks and the availability, which are compared here.
                 guard
                     plan.blocks != output.blocks || plan.unscheduled != output.unscheduled
-                        || plan.warnings != output.warnings
                         || plan.basis.availabilityUncertain != basis.availabilityUncertain
                 else { return plan }
                 plan.changes = PlanDiff.explain(previous: plan.blocks, current: output.blocks, zone: zone)
@@ -103,9 +106,11 @@ public final class PlanService: Sendable {
             freshness[source.id.rawValue] = source.freshness(at: now)
             refreshed[source.id.rawValue] = source.lastSuccessAt
         }
+        // Only occurrences that still constrain the day make it uncertain. A cancelled one's notes, such as the removal
+        // note a successful complete refresh leaves, say why it is gone, not that the calendar is in doubt (CAL-02).
         let uncertain =
             freshness.values.contains { $0 != .fresh } || sources.contains { $0.enabled && $0.isFailing }
-            || occurrences.contains { !$0.warnings.isEmpty }
+            || occurrences.contains { $0.status != .cancelled && !$0.warnings.isEmpty }
         return (
             blocks,
             PlanBasis(
