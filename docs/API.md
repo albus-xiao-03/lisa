@@ -122,7 +122,7 @@ These answers are not recorded for replay, because the request never reaches the
 | Source status | `GET /v1/sources/status` | Freshness, last success, failure class |
 | Pairing code | `POST /v1/devices/pairing-codes` | Local owner only |
 | Pair a device | `POST /v1/devices/pair` | Returns the credential once |
-| Push registration | `PUT /v1/devices/current/push-registration` | `{token, environment, topic}`; only configured topics and environments are accepted |
+| Push registration | `PUT /v1/devices/current/push-registration` | `{token, environment, topic}`; only configured topics and environments are accepted, and the topic must be the app identifier the device paired with; otherwise `403` |
 | Notification permission | `PUT /v1/devices/current/notification-status` | `{authorization, settings}` |
 | Device notification preferences | `GET`/`PATCH /v1/devices/current/notification-preferences` | `{enabled, categories, showTitles, allowTimeSensitive}`; patches need `expectedRevision` |
 | Notification receipts | `POST /v1/devices/current/notification-receipts` | `{notificationIDs}`; the only evidence that a notification was presented; `204` |
