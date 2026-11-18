@@ -66,6 +66,13 @@ public struct LocalDirectoryConnector: SourceConnector {
 
     public func fetch(cursor: String?, limits: SyncLimits) async throws -> FetchBatch {
         let files = try candidates()
+        // A configured file that cannot be read is a failed refresh, never an empty snapshot: an empty complete
+        // snapshot would cancel every event the file held (CAL-02, D-32).
+        if let fileName, !files.contains(where: { $0.name == fileName }) {
+            throw ConnectorError(
+                .configuration,
+                "the configured file \(fileName) is missing or is not a regular \(format.rawValue) file")
+        }
         switch format {
         case .mail:
             let pending = files.filter { cursor == nil || $0.name > cursor! }
@@ -110,6 +117,13 @@ public struct LocalDirectoryConnector: SourceConnector {
         var lastTaken: String?
         for file in files {
             if file.size > limits.maxBytes {
+                // A snapshot without one of its files is not complete; read as complete, it would cancel every event
+                // or item that file held (CAL-02, D-32).
+                if snapshot {
+                    throw ConnectorError(
+                        .partial,
+                        "\(file.name) is larger than \(limits.maxBytes) bytes; the snapshot was not read in full")
+                }
                 notes.append("\(file.name) is larger than \(limits.maxBytes) bytes and was skipped")
                 lastTaken = file.name
                 continue
