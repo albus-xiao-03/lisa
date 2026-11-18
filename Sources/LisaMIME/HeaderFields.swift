@@ -26,8 +26,9 @@ public struct HeaderFields: Hashable, Sendable {
         fields.filter { $0.name.caseInsensitiveCompare(name) == .orderedSame }.map(\.value)
     }
 
-    /// Parses a header block. Raw 8-bit headers are read as UTF-8 when valid, otherwise as ISO-8859-1.
-    static func parse(_ data: Data, limits: MIMELimits) throws -> HeaderFields {
+    /// Parses a header block, keeping at most `limits.maxHeaderFields` fields; `truncated` says that more were present.
+    /// Raw 8-bit headers are read as UTF-8 when valid, otherwise as ISO-8859-1.
+    static func parse(_ data: Data, limits: MIMELimits) throws -> (fields: HeaderFields, truncated: Bool) {
         guard data.count <= limits.maxHeaderBytes else { throw MIMEError.headersTooLarge }
         let text = String(data: data, encoding: .utf8) ?? String(decoding: data.map { $0 }, as: Unicode.ASCII.self)
         let latin = String(data: data, encoding: .isoLatin1) ?? text
@@ -35,6 +36,7 @@ public struct HeaderFields: Hashable, Sendable {
         var fields: [HeaderField] = []
         var currentName: String?
         var currentValue = ""
+        var truncated = false
         func flush() {
             if let currentName { fields.append(HeaderField(name: currentName, value: currentValue)) }
         }
@@ -48,11 +50,15 @@ public struct HeaderFields: Hashable, Sendable {
             }
             guard let colon = line.firstIndex(of: ":") else { continue }
             flush()
+            guard fields.count < limits.maxHeaderFields else {
+                truncated = true
+                currentName = nil
+                break
+            }
             currentName = line[..<colon].trimmingCharacters(in: .whitespaces)
             currentValue = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            guard fields.count < limits.maxHeaderFields else { break }
         }
         flush()
-        return HeaderFields(fields)
+        return (HeaderFields(fields), truncated)
     }
 }
