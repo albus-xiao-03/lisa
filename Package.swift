@@ -233,6 +233,19 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ]),
+        // The R1 test suite (plan §9, §10; spec §16): every library through its public API, in debug and release.
+        .testTarget(
+            name: "LisaTests",
+            dependencies: [
+                "LisaAPI", "LisaAPIContract", "LisaAPIServer", "LisaAPNs", "LisaAgenda", "LisaApplication",
+                "LisaBriefComposer", "LisaCalendarFeeds", "LisaClient", "LisaConfig", "LisaCrypto", "LisaCurl",
+                "LisaDelivery", "LisaDemo", "LisaDevices", "LisaDiscordSource", "LisaDomain", "LisaFeeds",
+                "LisaFixtures", "LisaHTMLText", "LisaHTTP", "LisaHTTPSources", "LisaHost", "LisaICalendar", "LisaIMAP",
+                "LisaInference", "LisaIngestion", "LisaLocalSources", "LisaLogging", "LisaMIME", "LisaMatching",
+                "LisaNewsFeeds", "LisaOpenAICompatible", "LisaOwnerData", "LisaPlanning", "LisaPolicy", "LisaPorts",
+                "LisaPresentation", "LisaRanking", "LisaRedaction", "LisaReview", "LisaRuntime", "LisaSMTP",
+                "LisaSQLite", "LisaSecrets", "LisaStore", "LisaTime", "LisaTwilio", "LisaXML", "LisaXSource",
+            ]),
     ],
     swiftLanguageModes: [.v6]
 )
