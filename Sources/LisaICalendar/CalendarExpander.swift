@@ -57,6 +57,7 @@ public enum CalendarExpander {
         var occurrences: [ExpandedOccurrence] = []
         var warnings: [CalendarWarning] = []
         var warnedFloating = false
+        var reachedTotalLimit = false
 
         init(calendar: ICalComponent, options: CalendarExpansionOptions) {
             self.options = options
@@ -106,6 +107,7 @@ public enum CalendarExpander {
         }
 
         mutating func expandSeries(uid: String, master: ICalComponent, overrides: [String: ICalComponent]) {
+            guard !reachedTotalLimit else { return }
             guard let startLine = master.property("DTSTART"), let start = ICalValues.timeValue(startLine) else {
                 warn(uid, "an event has no valid DTSTART and was skipped", true)
                 return
@@ -149,6 +151,7 @@ public enum CalendarExpander {
             var seen = Set<String>()
             var consumedOverrides = Set<String>()
             for value in starts {
+                guard !reachedTotalLimit else { return }
                 guard let key = key(for: value), !seen.contains(key) else { continue }
                 seen.insert(key)
                 if excluded.contains(key) { continue }
@@ -158,13 +161,6 @@ public enum CalendarExpander {
                     addSingle(uid: uid, event: override, key: occurrenceKey)
                 } else {
                     addOccurrence(uid: uid, event: master, start: value, key: occurrenceKey, length: seriesLength)
-                }
-                guard occurrences.count < options.limits.maxTotalOccurrences else {
-                    warn(
-                        nil,
-                        "the calendar produced more than \(options.limits.maxTotalOccurrences) occurrences; later ones were not read",
-                        true)
-                    return
                 }
             }
             for (key, override) in overrides where !consumedOverrides.contains(key) {
@@ -241,7 +237,23 @@ public enum CalendarExpander {
                 times = .timed(start: instant, end: end, tzid: tzid, floating: floating)
             }
             let occurrence = makeOccurrence(uid: uid, event: event, times: times, key: key)
-            if overlapsWindow(occurrence) { occurrences.append(occurrence) }
+            if overlapsWindow(occurrence) { keep(occurrence) }
+        }
+
+        /// Keeps an occurrence while the calendar is under its total limit. The first one refused is warned about, which
+        /// makes availability uncertain; any later ones are dropped without repeating the warning.
+        mutating func keep(_ occurrence: ExpandedOccurrence) {
+            guard occurrences.count < options.limits.maxTotalOccurrences else {
+                if !reachedTotalLimit {
+                    reachedTotalLimit = true
+                    warn(
+                        nil,
+                        "the calendar produced more than \(options.limits.maxTotalOccurrences) occurrences; later ones were not read",
+                        true)
+                }
+                return
+            }
+            occurrences.append(occurrence)
         }
 
         mutating func addSingle(uid: String, event: ICalComponent, key: String?) {
