@@ -1,5 +1,6 @@
 // One block of the rundown: its times, title and kind, whether it is a suggestion, locked, done or set aside, and the
-// owner's actions on it, with a mark while an action waits to sync or was refused because the plan changed.
+// owner's actions on it, moving it included, with a mark while an action waits to sync or was refused because the plan
+// changed.
 
 import Foundation
 import LisaAPIContract
@@ -7,13 +8,16 @@ import LisaPresentation
 import SwiftUI
 
 /// A planned block as Today shows it, in the rundown's own time zone, with the actions it offers
-/// (`PlanBlockActions.available(for:)`): the main one as a button and the rest in a menu. Calendar events offer none.
+/// (`PlanBlockActions.available(for:)`): the main one as a button and the rest in a menu, with "Move…" there when the
+/// block can be moved (`PlanBlockActions.canMove(_:)`), which opens `PlanBlockMoveForm`. Calendar events offer none.
 /// While an action on the block waits to sync or was refused, or any block action is being sent, the actions are
-/// disabled; a refused action is resolved in Today's list of actions not applied.
+/// disabled; a waiting or refused move shows the times it asks for, and a refused action is resolved in Today's list
+/// of actions not applied.
 struct PlanBlockRow: View {
     let block: PlanBlockDTO
     let zone: TimeZone
     let model: RundownModel
+    @State private var isMoving = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -40,6 +44,11 @@ struct PlanBlockRow: View {
                     } else if model.pendingBlockActions[block.blockID] != nil {
                         SyncBadge(kind: .waiting)
                     }
+                    if let requested = model.requestedMoves[block.blockID] {
+                        Text("Move to \(format(requested))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .accessibilityElement(children: .combine)
@@ -50,20 +59,30 @@ struct PlanBlockRow: View {
             }
             actionControls
                 .disabled(!canAct)
+                .popover(isPresented: $isMoving, arrowEdge: .trailing) {
+                    PlanBlockMoveForm(block: block, zone: zone, model: model)
+                }
         }
     }
 
-    @ViewBuilder
     private var actionControls: some View {
-        if let main = actions.first {
-            Button(PlanBlockActions.label(for: main)) { act(main) }
-                .controlSize(.small)
-                .accessibilityLabel("\(PlanBlockActions.label(for: main)) \(title)")
-            if actions.count > 1 {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            if let main = actions.first {
+                Button(PlanBlockActions.label(for: main)) { act(main) }
+                    .controlSize(.small)
+                    .accessibilityLabel("\(PlanBlockActions.label(for: main)) \(title)")
+            }
+            if !menuActions.isEmpty || canMove {
                 Menu(
                     content: {
-                        ForEach(actions.dropFirst(), id: \.self) { action in
+                        ForEach(menuActions, id: \.self) { action in
                             Button(PlanBlockActions.label(for: action)) { act(action) }
+                        }
+                        if canMove {
+                            if !menuActions.isEmpty {
+                                Divider()
+                            }
+                            Button("Move…") { isMoving = true }
                         }
                     },
                     label: { Label("Actions", systemImage: "ellipsis.circle") }
@@ -81,6 +100,11 @@ struct PlanBlockRow: View {
 
     private var actions: [PlanBlockActionKind] { PlanBlockActions.available(for: block) }
 
+    /// The actions after the main one, for the menu.
+    private var menuActions: [PlanBlockActionKind] { Array(actions.dropFirst()) }
+
+    private var canMove: Bool { PlanBlockActions.canMove(block) }
+
     /// Whether the owner can act now: nothing is being sent, and no action on this block waits or was refused.
     private var canAct: Bool {
         model.busyBlockIDs.isEmpty && model.pendingBlockActions[block.blockID] == nil
@@ -92,8 +116,12 @@ struct PlanBlockRow: View {
     }
 
     private var times: String {
+        format(PlanBlockTimes(of: block))
+    }
+
+    private func format(_ times: PlanBlockTimes) -> String {
         let style = Date.FormatStyle(date: .omitted, time: .shortened, timeZone: zone)
-        return "\(block.start.formatted(style)) – \(block.end.formatted(style))"
+        return "\(times.start.formatted(style)) – \(times.end.formatted(style))"
     }
 
     private var symbol: String {
