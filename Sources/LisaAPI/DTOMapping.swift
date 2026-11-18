@@ -137,22 +137,20 @@ enum DTOMapping {
     }
 
     static func brief(_ brief: Brief) -> BriefDTO {
-        BriefDTO(
+        let item = { (item: BriefItem) in
+            BriefItemDTO(
+                section: item.section.rawValue, text: item.text, spokenText: item.spokenText,
+                references: item.references.map {
+                    SourceReferenceDTO(recordKind: $0.recordKind, recordID: $0.recordID, originalURL: $0.originalURL)
+                },
+                material: item.isMaterial, uncertainty: item.uncertainty)
+        }
+        return BriefDTO(
             briefID: brief.id.rawValue, revision: brief.revision.value, date: brief.localDate.iso,
             zone: brief.zone.identifier, version: brief.version, state: brief.state.rawValue, text: brief.text,
-            spokenText: brief.spokenText,
-            items: brief.items.map { item in
-                BriefItemDTO(
-                    section: item.section.rawValue, text: item.text, spokenText: item.spokenText,
-                    references: item.references.map {
-                        SourceReferenceDTO(
-                            recordKind: $0.recordKind, recordID: $0.recordID, originalURL: $0.originalURL)
-                    },
-                    material: item.isMaterial, uncertainty: item.uncertainty)
-            },
-            omittedCount: brief.omitted.count, generatedAt: brief.generatedAt,
-            estimatedSpokenSeconds: brief.estimatedSpokenSeconds, templateOnly: brief.templateOnly,
-            lastFailure: brief.lastFailure)
+            spokenText: brief.spokenText, items: brief.items.map(item), omittedCount: brief.omitted.count,
+            generatedAt: brief.generatedAt, estimatedSpokenSeconds: brief.estimatedSpokenSeconds,
+            templateOnly: brief.templateOnly, lastFailure: brief.lastFailure, omittedItems: brief.omitted.map(item))
     }
 
     static func preferenceValue(_ value: PreferenceValue) -> PreferenceValueDTO {
