@@ -18,10 +18,13 @@ public struct ReminderSpec: Hashable, Sendable {
 public enum ReminderPlanner {
     /// Deadline reminders for a confirmed, active task. Only reminders still in the future are created, so a newly
     /// discovered item never receives every reminder it would have had in the past. When every configured offset has
-    /// already passed but the deadline has not, a single reminder is due now.
-    public static func deadlineReminders(for task: LisaTask, settings: ReminderSettings, zone: TimeZone, now: Date)
-        -> [ReminderSpec]
-    {
+    /// already passed but the deadline has not, a single reminder is due now — unless an offset reminder already
+    /// exists for this deadline (`existingOccurrenceKeys` holds the occurrence keys of the task's stored reminders),
+    /// because then the commitment was not discovered late and that reminder is its last one (D-16).
+    public static func deadlineReminders(
+        for task: LisaTask, settings: ReminderSettings, zone: TimeZone, now: Date,
+        existingOccurrenceKeys: Set<String> = []
+    ) -> [ReminderSpec] {
         guard task.isConfirmedCommitment, task.status.isActive, let deadline = task.deadline else { return [] }
         let base = "task:\(task.id.rawValue):\(task.changeSequence)"
         switch deadline {
@@ -35,11 +38,12 @@ public enum ReminderPlanner {
                     occurrenceKey: "deadline:\(base):\(offset)",
                     subjectChangeSequence: task.changeSequence, title: task.title)
             }
-            if specs.isEmpty {
+            let soonKey = "deadline:\(base):soon"
+            let offsetScheduled = existingOccurrenceKeys.contains { $0.hasPrefix("deadline:\(base):") && $0 != soonKey }
+            if specs.isEmpty, !offsetScheduled {
                 specs.append(
                     ReminderSpec(
-                        subject: .task(task.id), rule: .deadlineAhead, dueAt: now,
-                        occurrenceKey: "deadline:\(base):soon",
+                        subject: .task(task.id), rule: .deadlineAhead, dueAt: now, occurrenceKey: soonKey,
                         subjectChangeSequence: task.changeSequence, title: task.title))
             }
             return specs
