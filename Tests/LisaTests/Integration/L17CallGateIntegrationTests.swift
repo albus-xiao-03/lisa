@@ -29,14 +29,18 @@ struct L17CallGateIntegrationTests {
     }
 
     /// A host with a high-priority confirmed task due at `deadline`, run until its 10-minute reminder has fired and
-    /// queued the call for five minutes later.
+    /// queued the call for five minutes later. The Mac is presented every reminder, so the earlier reminders reached
+    /// the owner, as a call requires (D-17, plan §6.8).
     private func queuedCall(
         _ scratch: ScratchDirectory, owner: OwnerSettings? = nil, deadline: String = "2026-11-16T10:00",
         priority: TaskPriority = .high
     ) async throws -> (TestHost, LisaHost, LisaTask) {
         let due = at(deadline)
-        let testHost = TestHost(scratch: scratch, now: due.addingTimeInterval(-90 * 60), owner: owner ?? self.owner())
+        let testHost = TestHost(
+            scratch: scratch, now: due.addingTimeInterval(-90 * 60), owner: owner ?? self.owner(),
+            localNotifications: ScriptedNotificationCenter())
         let host = try testHost.open()
+        try TestHost.registerMac(on: host)
         let task = try host.application.createTask(
             TaskDraft(title: "Synthetic court filing", priority: priority, deadline: SyntheticTask.due(due)),
             by: .localOwner)
