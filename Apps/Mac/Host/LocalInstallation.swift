@@ -2,9 +2,7 @@
 // the notification permission the Mac reports, so the host routes local notifications to it.
 
 import Foundation
-import LisaApplication
-import LisaDevices
-import LisaDomain
+import LisaAPIContract
 import LisaHost
 import LisaPresentation
 
@@ -12,8 +10,9 @@ import LisaPresentation
 ///
 /// The host creates one delivery for each active installation, and routes notifications to a local installation only
 /// while it reports that the system allows them. The installation has no device credential, so no API route reaches
-/// it: the app, which supplies the host's platform services, calls the host's device service and application facade
-/// directly. These calls write to the host's store, so callers make them off the main actor.
+/// it: the app, which supplies the host's platform services, registers it through the host's
+/// `registerLocalInstallation(installationID:name:appBundleID:status:)`. That call writes to the host's store, so
+/// callers make it off the main actor.
 struct LocalInstallation: Sendable {
     /// What the host records for the installation.
     struct Record: Hashable, Sendable {
@@ -35,17 +34,12 @@ struct LocalInstallation: Sendable {
     /// Registers the installation, or finds the one registered earlier, and records `permission` for it while it is
     /// active. A removed installation stays removed; registering again needs a new installation identifier.
     func register(name: String, appBundleID: String, permission: NotificationPermissionStatus) throws -> Record {
-        var registration = try host.application.services.devices.registerLocalInstallation(
-            installationID: installationID, name: name, appBundleID: appBundleID)
-        if registration.state == .active {
-            registration = try host.application.reportNotificationStatus(
-                deviceID: registration.id,
-                authorization: NotificationAuthorization(rawValue: permission.authorization.rawValue) ?? .unknown,
-                settings: permission.settings)
-        }
+        let record = try host.registerLocalInstallation(
+            installationID: installationID, name: name, appBundleID: appBundleID,
+            status: NotificationStatusRequest(authorization: permission.authorization, settings: permission.settings))
         return Record(
-            deviceID: registration.id.rawValue, isActive: registration.state == .active,
-            canReceiveNotifications: registration.canReceiveNotifications,
-            reportedAuthorization: registration.authorization.rawValue)
+            deviceID: record.deviceID, isActive: record.isActive,
+            canReceiveNotifications: record.canReceiveNotifications,
+            reportedAuthorization: record.authorization.rawValue)
     }
 }
