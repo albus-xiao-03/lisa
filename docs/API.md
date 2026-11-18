@@ -43,11 +43,13 @@ The contract types live in `Sources/LisaAPIContract/`. Clients never see the hos
 ### Request identities
 
 - **Required on every mutation.** Every `POST`, `PUT`, `PATCH` and `DELETE` carries `Lisa-Request-ID`: 8–128 characters from letters, digits and `._:-`. A mutation without one is rejected with `400`.
+- **Scoped to the caller.** The same ID from two devices names two separate requests, and for captures two separate captures.
 - **Retries replay.**
   - Retrying with the same ID returns the recorded response; the replay is marked `Lisa-Replayed: true`. The mutation is never applied twice.
   - Reusing an ID for a different request returns `422 requestIDReused`.
 - **Retention.**
   - Definite answers are kept for at least 30 days, the documented maximum offline retry period: `2xx`, `400`, `403`, `404`, `409` and `413`.
+  - The answers the network server gives before routing are never kept, including its `413`: the request never reaches the router, and a retry gets the same answer again (see below).
   - Retryable answers are not kept, so a retry runs again: `401`, `429` and `5xx`.
 - **Pairing routes.** Pairing and pairing-code responses are never recorded, because they contain a credential or a code. A failed pairing is repeated with a new code.
 - **Notification actions.** Devices derive the ID from the installation, the notification and the action (`na:<installation>:<notification>:<action>`). An action the system delivers twice is therefore applied once.
@@ -79,6 +81,8 @@ The network server itself answers a few requests before they reach the router, w
 | 417 | An expectation other than `100-continue` |
 | 431 | The request line and header fields exceed 16 KiB, or there are more than 100 fields |
 
+These answers are not recorded for replay, because the request never reaches the router. The server refuses an oversized body before reading it, so the body is never fingerprinted.
+
 ## Network server
 
 - **Listeners.**
@@ -106,7 +110,7 @@ The network server itself answers a few requests before they reach the router, w
 | Plan-block action | `POST /v1/plans/{planID}/blocks/{blockID}/actions` | `{action: accept\|lock\|reject\|complete\|defer\|move, expectedRevision, start?, end?}`. `move` needs `start` and `end` on the plan's local day; the block becomes locked there. A move that would overlap a busy event or another held block, leave the day, touch a past day or a completed block is a `400` with the reason and field; a calendar event is a `403` (D-52) |
 | Brief | `GET /v1/brief?date=` | Generated on first request for today |
 | Regenerate brief | `POST /v1/briefs/regenerate` | `{date?}`; creates a new version; no second notification |
-| Capture | `POST /v1/captures` | `{kind: idea\|text\|link\|sharedAppleNews, text?, url?, title?, channel}`; `201` when created, `200` when the request ID matched an earlier capture |
+| Capture | `POST /v1/captures` | `{kind: idea\|text\|link\|sharedAppleNews, text?, url?, title?, channel}`; `201` when created, `200` when the request ID matched an earlier capture by the same caller |
 | Read a captured link | `POST /v1/captures/{id}/retrieve` | No body; local owner and paired devices. `200` `{retrieved, item, characters, truncated, failureClass?, failureSummary?}`, including when the page could not be read for a lasting reason; `404` unknown capture; `409` not an owner-captured link, the item was deleted, or the page was already read; `503` with `retryAfterSeconds` for a temporary failure or a read already in progress (D-46) |
 | Tasks | `GET /v1/tasks?status=&limit=&cursor=`, `GET /v1/tasks/{id}`, `POST /v1/tasks`, `PATCH /v1/tasks/{id}` | Patches need `expectedRevision`; corrected fields are kept through later reprocessing |
 | Ideas | `GET /v1/ideas?lifecycle=`, `PATCH /v1/ideas/{id}` | The original capture is never changed |
