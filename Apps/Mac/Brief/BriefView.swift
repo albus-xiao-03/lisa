@@ -102,9 +102,18 @@ struct BriefView: View {
             }
             if brief.omittedCount > 0 {
                 Section {
-                    Text(omittedText(brief.omittedCount))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if let omitted = brief.omittedItems, !omitted.isEmpty {
+                        // The full view of the left-out items (BRIEF-04).
+                        DisclosureGroup(omittedText(brief.omittedCount)) {
+                            ForEach(Array(omitted.enumerated()), id: \.offset) { entry in
+                                BriefItemRow(item: entry.element)
+                            }
+                        }
+                    } else {
+                        Text(omittedText(brief.omittedCount))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
