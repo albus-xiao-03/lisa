@@ -119,6 +119,10 @@ public enum ExtractionValidator {
                 rejected.append("\(label): the start is outside the plausible range")
                 continue
             }
+            if let end, !withinBounds(end, context: context) {
+                rejected.append("\(label): the end is outside the plausible range")
+                continue
+            }
             let duration = raw.durationMinutes.flatMap { (1...1440).contains($0) ? $0 : nil }
             if raw.durationMinutes != nil, duration == nil { notes.append("an out-of-range duration was ignored") }
             items.append(
