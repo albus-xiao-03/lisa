@@ -73,7 +73,7 @@ enum ErrorMapping {
                 return APIErrorBody(code: .throttled, message: device.description, retryAfterSeconds: 60)
             case .unknownDevice:
                 return APIErrorBody(code: .notFound, message: device.description)
-            case .topicNotAllowed, .environmentNotAllowed:
+            case .topicNotAllowed, .topicNotForApp, .environmentNotAllowed:
                 return APIErrorBody(code: .forbidden, message: device.description)
             case .invalidToken:
                 return APIErrorBody(code: .invalidRequest, message: device.description, field: "token")
