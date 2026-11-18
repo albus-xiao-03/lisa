@@ -1,5 +1,7 @@
 # Lisa R1 — pause checkpoint after Phase 4
 
+> **Superseded on 2026-11-18.** This file records the pause after Phase 4 on 2026-11-15. The owner resumed development on 2026-11-16, and Phases 5 to 8, Phase T and Phase 9 followed. The current state is in `IMPLEMENTATION-REPORT.md`. The rest of this file is kept unchanged as a historical record.
+
 **Status: paused.** On 2026-11-15 the owner changed the full-run instruction: stop when Phase 4 is complete and verified, and wait for an explicit instruction to resume. Phase 4 is complete and verified on Linux. **Phase 5, the later phases and Phase T have not been started.** Do not resume without the owner's explicit instruction.
 
 ## Stopping point
