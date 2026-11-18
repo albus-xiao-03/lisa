@@ -1,7 +1,7 @@
 <!-- Components, ownership, data flow and trust boundaries of Lisa R1. -->
 # Lisa — Architecture
 
-> Living document. This version covers what exists so far and is completed in Phase 9. The full module table with direct dependencies is in `plans/R1.md` §5.1; this document describes the parts as built.
+> This document describes Lisa R1 as built at the end of Phase 9. The full module table with direct dependencies is in `plans/R1.md` §5.1. What was verified, and on which platform, is in `docs/REQUIREMENTS-MATRIX.md` and `IMPLEMENTATION-REPORT.md`.
 
 ## Components
 
@@ -13,9 +13,9 @@
 | Persistence | `LisaPorts`, `CSQLite`, `LisaSQLite`, `LisaStore` | Implemented (Phase 3) |
 | Application services | `LisaIngestion`, `LisaReview`, `LisaDelivery`, `LisaAgenda`, `LisaDevices`, `LisaOwnerData`, `LisaApplication`, `LisaCrypto` | Implemented (Phase 4) |
 | Runtime, API core, CLI | `LisaConfig`, `LisaRuntime`, `LisaAPIContract`, `LisaAPI`, `LisaClient`, `LisaHost`, `LisaLocalSources`, `LisaDemo`, `LisaFixtures`, `lisa` (`LisaCLI`) | Implemented (Phase 5; Linux) |
-| Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Phase 6 |
-| Network API | `LisaAPIServer`; `LisaClient`'s URLSession transport | Phase 7 |
-| Apple applications | `LisaPresentation`, `Apps/` | Phase 8: view models implemented and tested on Linux; apps in progress |
+| Integrations | `LisaHTTP`, `CCurl`, `LisaCurl`, connectors, `LisaIMAP`, `LisaSMTP`, `LisaTwilio`, `LisaAPNs`, `LisaOpenAICompatible` | Implemented (Phase 6; adapter contracts tested on Linux, live services not run) |
+| Network API | `LisaAPIServer`; `LisaClient`'s URLSession transport | Implemented (Phase 7; Linux) |
+| Apple applications | `LisaPresentation`, `Apps/` | View models implemented and tested on Linux (Phase 8); the apps are written and syntax-checked with `swiftc -parse` on Linux, not compiled for any Apple platform |
 
 ## Time model
 
@@ -88,7 +88,7 @@ Implemented and verified on Linux against scripted test doubles and loopback ser
 
 ## Network API (Phase 7)
 
-Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The companion transport's Apple behavior is unverified until Phase 8.
+Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The companion transport's Apple behavior is unverified, because no Apple build has run yet (`NOT_RUN_ENVIRONMENT`).
 
 | Module | Role | Depends on |
 |---|---|---|
@@ -113,11 +113,27 @@ Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The
 | `Apps/Shared/` (D-48) | Compiled into both apps: Keychain stores, protected storage, host trust (`PinnedServerTrustEvaluator`), the notification bridge, speech, the six App Intents with App Shortcuts, and the notification strings |
 | `Apps/` | XcodeGen definition (`Apps/project.yml`), configuration and entitlements (`Apps/Config/`); the SwiftUI apps in `Apps/Companion/` and `Apps/Mac/` |
 
-## Trust boundaries (so far)
+## Trust boundaries
 
 - **Secrets:** resolved only through `SecretStore`. Configuration and the database hold references, never values (D-08).
 - **Logs:** carry only classified metadata (D-09).
 - **Untrusted content:** XML and HTML are read by libxml2 with network access and external entities disabled and entity declarations refused (D-12); HTML becomes text with active content removed and links never fetched (D-14). Model prompts wrap source text as untrusted data, and every model result is validated before use (D-19).
 - **Outbound delivery:** recipients are enforced by the outbox at send time, independently of content: approved email addresses, the approved phone number after the full call gate, and active paired devices only (D-26, D-28).
-- **Devices:** a paired device authenticates with a 256-bit credential the host stores only as a SHA-256 verifier. A push token is accepted only from an authenticated registration and never authenticates anything itself (D-29).
+- **Devices:** a paired device authenticates with a 256-bit credential the host stores only as a SHA-256 verifier. A push token is accepted only from an authenticated registration, for its own app and an enabled environment, and never authenticates anything itself (D-29).
+- **API:** every caller goes through the one router, so authentication, validation, request identities (scoped to the caller) and revision checks are the same in process and over the network (D-35). The network server accepts plain HTTP only on loopback; the owner listener accepts only local peers (D-44).
 - **Model suggestions:** the domain treats a model suggestion as the `model` principal. That principal, like any paired device, can never change consequential settings: recipients, call and email enablement, model routing, or the Time Sensitive opt-in.
+
+## Dependencies
+
+`Package.resolved` pins eight packages, all approved in plan §11 (REC-DEP-01, -03, -04, -06) with their transitive dependencies:
+- `LisaCLI` uses swift-argument-parser 1.8.2.
+- `LisaCrypto` uses swift-crypto 5.1.1, which needs swift-asn1 1.7.4.
+- `LisaAPIServer` uses swift-nio 2.105.0 and swift-nio-ssl 2.37.6. swift-nio needs swift-atomics 1.3.1, swift-collections 1.7.6 and swift-system 1.9.0.
+
+All eight are under the Apache License 2.0. swift-argument-parser, swift-atomics, swift-collections and swift-system add the Swift Runtime Library Exception. The BoringSSL that swift-crypto and swift-nio-ssl each vendor is under a combination of the ISC and OpenSSL licenses. The system libraries are linked dynamically: SQLite, libxml2 and libcurl (`docs/SETUP-LINUX.md`).
+
+## Verification
+
+- **Persistent suite:** `Tests/LisaTests/` is one swift-testing target that uses public APIs only (no `@testable`). It imports most libraries directly and reaches the others through them. Its folders group the tests by kind (`Unit/`, `Integration/`, `Recovery/`, `Acceptance/`, `Adapters/`), with test-only helpers in `Support/`; every test is also tagged with its kind, and a few carry two. Each suite is named with its acceptance or requirement ID (R1 §16.1).
+- **Controlled substitutes (plan §10):** a scripted transport at the `LisaHTTP` boundary; loopback TLS servers and scripted IMAP and SMTP servers with certificates generated at run time by the `openssl` CLI; a scripted stand-in for Apple's push service under the real `LisaAPNs` adapter; synthetic P-256 keys; synthetic devices with random tokens. The test host's network refuses every other connection.
+- **Temporary checks:** the phase-by-phase verification packages stay outside the repository, in the ignored `.tmp/` directory.
