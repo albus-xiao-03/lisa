@@ -13,6 +13,7 @@ public enum Principal: Hashable, Codable, Sendable, CustomStringConvertible {
     /// The synthetic demonstration scenario.
     case demonstration
 
+    /// The principal's stable spelling. Capture request keys store it (D-35), so changing it needs a migration.
     public var description: String {
         switch self {
         case .localOwner: "local-owner"
