@@ -738,11 +738,13 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - The transport reports one of three results: rejected, accepted, or confirmed delivered when Notification Center lists it.
   - Permission is requested only from "Turn On Notifications…".
   - The installation is registered through `LisaHost.registerLocalInstallation`, which reaches the host's store without an API route.
+- **No notifications in client mode (owner decision, 2026-11-18).** While a running `lisa serve` holds the data directory, the Mac gets no Lisa notifications; the paired iPhone and iPad still get theirs.
+  - Registering for APNs would need the Mac to pair as a device through the device listener, since the owner listener refuses push registration. It would then get every notification twice once it embeds the host again.
+  - This replaces plan §6.5's statement that a Mac in client mode registers for APNs. Accordingly, the Mac app has no `com.apple.developer.aps-environment` entitlement, and only the companion's App ID needs Push Notifications (plan §6.9).
 - **Start at login** uses `SMAppService.mainApp`, with its status and approval shown in Settings and health.
 - **Keychain secrets.** Settings and health → Secrets stores values for `keychain:` references in a secure field. A stored value is never shown again.
 - **Plan blocks.** On the Mac's Today and on the companion's rundown, blocks can be accepted, locked, rejected, deferred or completed. Actions go through the durable queue with the plan's revision, and conflicts are recoverable. The rundown can also be read aloud, stating its age when it is not current.
 - **Gaps.**
-  - In client mode the Mac does not register for APNs. The owner listener refuses push registration, and pairing the Mac as a device would deliver twice once it embeds the host again. Until the owner decides, the Mac gets notifications only while it embeds the host.
   - Moving a block (PLAN-04) is being added.
   - A task's estimate cannot be removed, because the API has no way to express it.
   - Some display logic is in the views and is not tested on Linux.
