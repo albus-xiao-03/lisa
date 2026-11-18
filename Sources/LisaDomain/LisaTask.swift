@@ -85,6 +85,9 @@ public struct LisaTask: Entity {
     public var confirmation: Confirmation
     public var origin: TaskOrigin
     public var evidenceIDs: [EvidenceID]
+    /// For an extracted task, the title its extraction gave it. Reprocessing the same evidence recognizes the task by
+    /// this title rather than the current one, so a task the owner renamed is updated, never duplicated (D-33).
+    public var extractedTitle: String?
     public var ownerCorrected: Set<CorrectableField>
     public var createdAt: Date
     public var completedAt: Date?
@@ -110,6 +113,7 @@ public struct LisaTask: Entity {
         self.confirmation = confirmation
         self.origin = origin
         self.evidenceIDs = evidenceIDs
+        self.extractedTitle = nil
         self.ownerCorrected = []
         self.createdAt = now
         self.completedAt = nil
