@@ -61,7 +61,7 @@ public struct MailBatchProcessor: BatchProcessor {
                         != nil
                 }.map(\.externalID))
         }
-        let messages = try batch.items.map { item in
+        var messages = try batch.items.map { item in
             // Already stored: nothing is parsed or kept again; commit counts it as unchanged.
             if known.contains(item.externalID) { return PreparedMessage(item: item, problem: nil) }
             guard item.kind == .email else {
@@ -73,13 +73,36 @@ public struct MailBatchProcessor: BatchProcessor {
             }
             do {
                 let entity = try MIMEParser.parse(item.data, limits: limits)
-                let parsed = ParsedMail.from(entity, limits: limits) { HTMLText.convert($0).text }
-                let ref = try raw.put(item.data, kind: "email", now: now)
-                return PreparedMessage(item: item, parsed: parsed, rawRef: ref)
+                return PreparedMessage(
+                    item: item, parsed: ParsedMail.from(entity, limits: limits) { HTMLText.convert($0).text })
             } catch let error as StoreError {
                 throw error
             } catch {
                 return PreparedMessage(item: item, problem: "a message could not be parsed and was skipped")
+            }
+        }
+        // Message-IDs are global (D-32): a message already stored through any source, or earlier in this batch, is
+        // unchanged, so its content is not kept again. Storing it first would leave a copy that no message owns and
+        // that deleting the message could never remove (L05, D-31).
+        var seen = try store.read { tx in
+            try Set(
+                messages.compactMap { $0.parsed?.messageID }.filter {
+                    try tx.first(EmailMessage.self, RecordQuery.all.filter("message_id", equals: $0)) != nil
+                })
+        }
+        for index in messages.indices {
+            guard let parsed = messages[index].parsed else { continue }
+            let item = messages[index].item
+            if let messageID = parsed.messageID, !seen.insert(messageID).inserted {
+                messages[index] = PreparedMessage(item: item, problem: nil)
+                continue
+            }
+            do {
+                messages[index].rawRef = try raw.put(item.data, kind: "email", now: now)
+            } catch let error as StoreError {
+                throw error
+            } catch {
+                messages[index] = PreparedMessage(item: item, problem: "a message could not be parsed and was skipped")
             }
         }
         return PreparedMail(
