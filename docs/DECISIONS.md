@@ -130,14 +130,16 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - buffer 0 minutes, applied around busy events only when configured; travel time is never invented.
 - **Today:** time before `now`, rounded up to five minutes, is unavailable.
 - **Reason precedence:** an item that fits nowhere is reported as having no free interval (before its deadline, when it has one) rather than as hitting the allocation cap.
-- **Preserved blocks:** locked and completed blocks are kept exactly. Accepted blocks are kept unless they now conflict, in which case they are re-placed with a warning.
+- **Preserved blocks:** locked and completed blocks are kept exactly. Accepted blocks are kept unless they now conflict, in which case they are re-placed with a warning: the block is proposed again at its new time, and the reminder for the old time is cancelled.
+- **Revisions:** a recomputation that changes no block, unscheduled item or availability keeps the stored revision. So the warning and the explanation of the last change stay until the plan next changes. The planner's other warnings follow from the blocks, which include the calendar's events, and from availability (Phase T).
+- **Availability:** notes on a cancelled occurrence, such as the removal note a complete refresh leaves, do not make the day uncertain (Phase T).
 - **Rejections:** a rejected suggestion is remembered by subject plus a fingerprint of duration, deadline, priority and date.
 - **Evidence:** the §16.2 fixture produced task 09:00–09:30 and idea 09:30–10:00. After the 09:00–09:30 event was added, it produced task 09:30–10:00 and idea 11:00–11:30.
 
 ## D-16 — Reminder rules (REM-01, REM-02)
 
 - **Occurrence keys:** include the subject's change sequence, so changing a deadline yields new reminders and makes the old ones obsolete.
-- **Newly discovered commitments:** only receive reminders still in the future. If every offset has passed but the deadline has not, a single "soon" reminder is created instead.
+- **Newly discovered commitments:** only receive reminders still in the future. If every offset has passed but the deadline has not, a single "soon" reminder is created instead. This happens only when no offset reminder exists for the deadline, so a commitment whose last offset reminder is due never gets a second one (Phase T).
 - **Date-only deadlines:** reminded only at a configured local time.
 - **Once-per-day rules:** overdue reminders at most once per local day (default 09:00), and proposal follow-ups at most once per day.
 - **Plan blocks:** reminders 10 minutes before an accepted or locked block.
@@ -250,7 +252,9 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - calls: only to the approved number, after the full CALL-01 gate;
   - notifications: only to an active, eligible device on its own transport.
 - **Quiet hours:** notifications are deferred to the end of quiet hours if they are still valid then, and expire otherwise. Calls are refused by the call gate during quiet hours. Email is not an interruption and is not deferred.
-- **Attempts:** every claim that reaches content preparation counts toward the attempt limit, including attempts interrupted by a restart, so a crash loop cannot retry forever. A quiet-hours deferral removes its attempt because nothing was sent.
+- **Attempts:** every claim that reaches content preparation counts toward the attempt limit, including attempts interrupted by a restart, so a crash loop cannot retry forever. A quiet-hours deferral removes its attempt because nothing was sent. Both lease recovery and claiming enforce the limit (Phase T):
+  - a delivery whose interrupted attempt was its last fails with "the host stopped before it was sent; the attempt limit was reached";
+  - a pending delivery that has already used every attempt fails when claimed, with "the attempt limit was reached".
 - **Result classification:**
   - not sent and throttled: retried with exponential backoff and jitter, inside the attempt limit and the validity window;
   - rejected: failed. A rejection that invalidates the recipient deactivates the device token through `DeviceTokenFeedback`;
@@ -333,11 +337,13 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - deduplicated by the stable per-source message key, and by Message-ID across all sources (made global in Phase 5, so a message imported through a second source is never stored or extracted twice);
   - owner addressing comes from the owner's approved addresses: forwarded by the owner, sent by the owner, direct, carbon copy, or unknown sender;
   - the owner's own words (the note above a forward, or the body of a message the owner sent) are stored separately as the only text that can confirm a commitment;
-  - attached invitations become event proposals without a model.
+  - attached invitations become event proposals without a model;
+  - Message-ID duplicates, already stored or earlier in the same batch, are recognized before raw content is kept, so a duplicate leaves no copy that deleting the message could not remove (Phase T). Known limit: if the same message arrives through another source between preparation and commit, or the commit fails, its raw bytes stay until raw-content retention purges them, which never happens when that retention is zero.
 - **Calendar:**
   - additions and material changes increase the occurrence's change sequence;
   - only a complete snapshot can cancel missing occurrences, and only inside the expansion window (7 days back, 120 days ahead);
-  - a failed or partial retrieval changes nothing it did not see.
+  - a failed or partial retrieval changes nothing it did not see;
+  - a local source fails the refresh instead of returning an incomplete snapshot (Phase T): a configured file that is missing or unreadable fails with class `configuration`, and a snapshot file over the size limit fails with class `partial`. Nothing is cancelled either way. Mail directories are incremental, so an oversized message file is skipped there with a visible note.
 - **News:** keys are per source; cross-source duplicates are grouped by ranking.
 
 ## D-33 — Extraction results (MAIL-02, EVENT-01, MODEL-03, MODEL-04)
@@ -347,7 +353,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - requests also mark the email for attention;
   - meetings become event proposals with their uncertainty;
   - changes and information become attention notes for the brief.
-- **Reprocessing:** a task re-extracted from the same evidence with the same title is updated, never duplicated, and fields the owner corrected are left untouched.
+- **Reprocessing:** a task re-extracted from the same evidence with the same title is updated, never duplicated, and fields the owner corrected are left untouched. "The same title" is the title the extraction gave the task, which the task keeps as `extractedTitle`, so a task the owner renamed is still recognized (Phase T). Matching compares the stored title, which is at most 200 characters.
 - **Without a usable model:** the email waits as "awaiting model" instead of being guessed.
 
 ## D-34 — Transaction discipline (DATA-02, OPS-02)
