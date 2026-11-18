@@ -80,6 +80,8 @@ enum ErrorMapping {
             }
         case let page as CapturedPageError:
             return capturedPage(page)
+        case let refusal as PlanBlockMoveRefusal:
+            return APIErrorBody(code: .invalidRequest, message: refusal.message, field: refusal.field)
         case is DecodingError:
             return APIErrorBody(code: .invalidRequest, message: "the request body does not match the documented schema")
         default:
