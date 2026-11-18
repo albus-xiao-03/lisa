@@ -128,18 +128,17 @@ public struct AgendaContent: DeliveryContentProvider {
             return .email(subject: "Reminder: \(String(title.prefix(120)))", textBody: body)
         case .call:
             guard let task else { return .notEligible(reason: "calls are only placed for commitments") }
+            // The earlier reminders: this occurrence, delivered before the call's grace period and still not
+            // acknowledged (an acknowledgement would have suppressed this call), and the commitment's earlier ones.
             let earlier = try tx.find(
                 Reminder.self, RecordQuery.all.filter("subject_key", equals: reminder.subject.key)
             )
-            .contains { other in
-                guard other.id != reminder.id, other.dueAt < reminder.dueAt else { return false }
-                if case .delivered = other.state { return true }
-                return false
+            .filter { other in
+                guard case .delivered(let at) = other.state else { return false }
+                return other.id == reminder.id ? at <= now.addingTimeInterval(-60) : other.dueAt < reminder.dueAt
             }
-            // The notification for this occurrence went out before the call's grace period and is still not
-            // acknowledged (an acknowledgement would have suppressed this call).
-            var outstanding = earlier
-            if case .delivered(let at) = reminder.state, at <= now.addingTimeInterval(-60) { outstanding = true }
+            // One counts only if it reached the owner (D-17, plan §6.8).
+            let outstanding = try earlier.contains { try Self.reachedOwner($0, in: tx) }
             let spoken =
                 "This is Lisa with an urgent reminder. \(AgendaText.singleLine(task.title)) is due"
                 + (due.map { " at \($0)." } ?? ".")
@@ -153,6 +152,21 @@ public struct AgendaContent: DeliveryContentProvider {
         case .push, .localNotification:
             return .notEligible(reason: "reminder notifications are delivered through notification occurrences")
         }
+    }
+
+    /// Whether one of a reminder's notification or email deliveries was accepted by a provider or presented locally.
+    /// Failed, unknown, pending and dry-run deliveries reached no one, so they never count toward a call.
+    static func reachedOwner(_ reminder: Reminder, in tx: any RecordReading) throws -> Bool {
+        let notifications = try tx.find(
+            NotificationIntent.self,
+            RecordQuery.all.filter("subject_key", equals: NotificationSubject.reminder(reminder.id).key))
+        let payloadKeys = ["reminder:\(reminder.id.rawValue)"] + notifications.map { "notification:\($0.id.rawValue)" }
+        for payloadKey in payloadKeys {
+            let reached = try tx.find(Delivery.self, RecordQuery.all.filter("payload_key", equals: payloadKey))
+                .contains { $0.channel != .call && [.acceptedByProvider, .confirmedDelivered].contains($0.state) }
+            if reached { return true }
+        }
+        return false
     }
 
     func brief(_ id: BriefID, in tx: any RecordReading) throws -> PreparedDelivery {
