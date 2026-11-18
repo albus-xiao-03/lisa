@@ -60,6 +60,18 @@ struct BriefView: View {
                 }
                 Text(brief.text)
                     .textSelection(.enabled)
+                if let omitted = brief.omittedItems, !omitted.isEmpty {
+                    // The full view of the items left out to keep the brief short (BRIEF-04).
+                    DisclosureGroup("Left Out to Keep It Short (\(omitted.count))") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(omitted.enumerated()), id: \.offset) { entry in
+                                Text(entry.element.text)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
