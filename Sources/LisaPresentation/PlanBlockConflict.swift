@@ -31,9 +31,10 @@ public struct PlanBlockConflict: Hashable, Sendable {
     }
 
     /// Whether the action can be applied again: it is still queued, the block is still in the plan, and the block still
-    /// offers the action in its current state (`PlanBlockActions.available(for:)`). Otherwise it can only be discarded.
+    /// offers the action in its current state (`PlanBlockActions.offers(_:on:)`, which includes moving). Otherwise it can
+    /// only be discarded.
     public var canApplyAgain: Bool {
         guard conflict.entryID != nil, let current else { return false }
-        return PlanBlockActions.available(for: current).contains(action)
+        return PlanBlockActions.offers(action, on: current)
     }
 }
