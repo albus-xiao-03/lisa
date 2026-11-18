@@ -747,3 +747,23 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - A task's estimate cannot be removed, because the API has no way to express it.
   - Some display logic is in the views and is not tested on Linux.
 - **Evidence.** Syntax-checked with `swiftc -parse` on Linux only; not compiled for any Apple platform.
+
+## D-52 — Moving a plan block, and held parts of a task (PLAN-03, PLAN-04)
+
+- **Moving.** The owner gives a block a new start and end on the same local day. The block becomes `locked` there, the only state the planner keeps exactly (D-15), and keeps its ID, subject and title. Its day is replanned around it in the same transaction, and its reminders follow it: the old one is cancelled and a new one is due 10 minutes before the new start.
+- **What can be moved.** Proposed, accepted, locked, rejected and deferred blocks can be moved, on today's rundown or a later one in the owner's current zone.
+  - A completed block is a 400.
+  - A calendar event is a 403: it is changed in the calendar.
+  - An unknown block is a 404; a stale revision is the usual 409.
+- **Refused with 400, with the reason and the field.** Nothing changes when:
+  - the end is not after the start, or a time is not a whole minute;
+  - the block would leave the plan's local day (ending at the closing midnight is allowed);
+  - it would overlap a busy calendar event (entries marked free don't count), or another accepted, locked or completed block.
+
+  Planning windows, protected time and buffers shape Lisa's suggestions, but they do not limit where the owner puts a block.
+- **Later changes.** Replanning keeps a moved block where the owner put it. If a new busy event later overlaps a moved or locked block, the block stays, and the plan warns that it now overlaps a calendar commitment.
+- **Interfaces.** The API is `{action: "move", expectedRevision, start, end}`. `start` and `end` are left out of the JSON for other actions, so older clients are unaffected. The CLI is `lisa plan block move --block <id> --start HH:MM --end HH:MM [--date]`, in the rundown's zone; `24:00` is the closing midnight, and on a fall-back day a repeated time means its first occurrence. The Mac's Today and the companion's rundown offer "Move…".
+- **Held parts of a task.** Before this change, a block the owner held (locked, moved, completed, or accepted and still valid) marked its whole task as placed. A splittable task's remaining minutes then vanished, neither planned nor reported. Now:
+  - the remaining time is planned as further parts around the held one, with IDs that never repeat a held block's;
+  - when the remaining time does not fit, it is reported as unscheduled with the minutes left;
+  - a task that is not splittable stays as the owner placed it.
