@@ -44,7 +44,10 @@ public enum DeterministicPlanner {
         }
 
         // Owner-locked and completed blocks are preserved exactly; accepted ones are kept unless they now conflict.
+        // A preserved block holds its item: a splittable item's remaining time is planned as further parts below.
         var preserved = IntervalSet()
+        var heldSeconds: [String: TimeInterval] = [:]
+        var usedBlockIDs = Set<String>()
         for block in input.previousBlocks where block.kind != .fixedEvent {
             let keep: Bool
             switch block.state {
@@ -59,9 +62,17 @@ public enum DeterministicPlanner {
                 }
                 continue
             }
+            // A locked block stays where the owner put it, even when a calendar commitment now overlaps it (PLAN-04).
+            if block.state == .locked,
+                let event = input.calendar.first(where: { $0.blocksTime && $0.range.overlaps(block.range) })
+            {
+                warnings.append(
+                    "\"\(block.title)\" is locked at a time that now overlaps \"\(event.title)\" on the calendar")
+            }
             blocks.append(block)
             preserved.insert(block.range)
-            placedSubjects.insert(block.subject.key)
+            heldSeconds[block.subject.key, default: 0] += block.range.duration
+            usedBlockIDs.insert(block.blockID)
         }
 
         var free = windows.subtracting(busy).subtracting(protected).subtracting(preserved)
@@ -76,6 +87,12 @@ public enum DeterministicPlanner {
 
         for item in ordered(tasks: input.tasks, ideas: input.ideas, zone: zone) {
             guard !placedSubjects.contains(item.subject.key) else { continue }
+            let seconds = TimeInterval(max(5, item.minutes) * 60)
+            let held = heldSeconds[item.subject.key] ?? 0
+            // An item the owner holds in the plan is placed; only a splittable one gets more parts for the time left.
+            if held > 0, !item.splittable || held >= seconds { continue }
+            let needed = seconds - held
+            let neededMinutes = Int((needed / 60).rounded(.up))
             if rejected.contains("\(item.subject.key)#\(item.fingerprint(on: input.date))") {
                 unscheduled.append(
                     UnscheduledItem(
@@ -83,8 +100,7 @@ public enum DeterministicPlanner {
                         reason: "You rejected this suggestion; it returns when something relevant changes"))
                 continue
             }
-            let seconds = TimeInterval(max(5, item.minutes) * 60)
-            if item.kind == .idea, explorationUsed + item.minutes > input.settings.ideaExplorationBudgetMinutes {
+            if item.kind == .idea, explorationUsed + neededMinutes > input.settings.ideaExplorationBudgetMinutes {
                 unscheduled.append(
                     UnscheduledItem(
                         subject: item.subject, title: item.title,
@@ -99,16 +115,23 @@ public enum DeterministicPlanner {
                     UnscheduledItem(subject: item.subject, title: item.title, reason: "The deadline has passed"))
                 continue
             }
-            let ranges = place(seconds: seconds, splittable: item.splittable, in: free, latestEnd: latest)
+            let ranges = place(seconds: needed, splittable: item.splittable, in: free, latestEnd: latest)
             guard !ranges.isEmpty else {
-                let reason =
-                    latest == nil
-                    ? "No free interval of \(item.minutes) minutes is left in today's planning windows"
-                    : "No free interval of \(item.minutes) minutes is left before the deadline"
+                let reason: String
+                switch (latest == nil, held > 0) {
+                case (true, false):
+                    reason = "No free interval of \(item.minutes) minutes is left in today's planning windows"
+                case (false, false): reason = "No free interval of \(item.minutes) minutes is left before the deadline"
+                case (true, true):
+                    reason =
+                        "No free time is left in today's planning windows for the remaining \(neededMinutes) minutes"
+                case (false, true):
+                    reason = "No free time is left before the deadline for the remaining \(neededMinutes) minutes"
+                }
                 unscheduled.append(UnscheduledItem(subject: item.subject, title: item.title, reason: reason))
                 continue
             }
-            guard allocated + seconds <= capacity + 0.5 else {
+            guard allocated + needed <= capacity + 0.5 else {
                 unscheduled.append(
                     UnscheduledItem(
                         subject: item.subject, title: item.title,
@@ -117,19 +140,27 @@ public enum DeterministicPlanner {
                     ))
                 continue
             }
-            for (index, range) in ranges.enumerated() {
+            var reasonText = explanation(for: item, ranges: ranges, zone: zone, uncertain: input.availabilityUncertain)
+            if held > 0 {
+                reasonText += "; the remaining \(neededMinutes) minutes, around the part already in the plan"
+            }
+            var nextIndex = 0
+            for range in ranges {
+                while usedBlockIDs.contains("\(item.subject.key)#\(nextIndex)") { nextIndex += 1 }
+                let blockID = "\(item.subject.key)#\(nextIndex)"
+                usedBlockIDs.insert(blockID)
+                nextIndex += 1
                 blocks.append(
                     PlanBlock(
-                        blockID: "\(item.subject.key)#\(index)", kind: item.kind == .task ? .task : .idea,
+                        blockID: blockID, kind: item.kind == .task ? .task : .idea,
                         subject: item.subject, title: item.title, range: range, state: .proposed,
                         provisional: input.availabilityUncertain,
-                        explanation: explanation(
-                            for: item, ranges: ranges, zone: zone, uncertain: input.availabilityUncertain)))
+                        explanation: reasonText))
                 free = free.subtracting(IntervalSet([range]))
                 busy.insert(range)
             }
-            allocated += seconds
-            if item.kind == .idea { explorationUsed += item.minutes }
+            allocated += needed
+            if item.kind == .idea { explorationUsed += neededMinutes }
             placedSubjects.insert(item.subject.key)
         }
         if input.availabilityUncertain {
