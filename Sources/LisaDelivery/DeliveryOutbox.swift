@@ -178,11 +178,13 @@ public final class DeliveryOutbox: Sendable {
 
     // MARK: - Worker
 
-    /// Recovers deliveries whose lease expired: one still preparing is retried; one that was submitting becomes
-    /// outcome unknown and is never resent automatically.
+    /// Recovers deliveries whose lease expired: one still preparing is retried, or fails once the interrupted attempt
+    /// used the last one the limit allows (D-26); one that was submitting becomes outcome unknown and is never resent
+    /// automatically.
     @discardableResult
     public func recoverExpiredLeases() throws -> (retried: Int, outcomeUnknown: Int) {
         let now = clock.now()
+        let maxAttempts = max(1, try settings.currentSettings().delivery.maxAttempts)
         return try store.write { tx in
             let expired = try tx.find(
                 Delivery.self,
@@ -205,6 +207,11 @@ public final class DeliveryOutbox: Sendable {
                     delivery.stateReason = "the host stopped while the request was being submitted; it is not resent"
                     unknown += 1
                     try tx.insert(Self.audit(delivery, outcome: .failed, at: now))
+                } else if delivery.attempts.count >= maxAttempts {
+                    // The interrupted attempt counts toward the limit, so a crash loop cannot retry forever.
+                    delivery.state = .failed
+                    delivery.stateReason = "the host stopped before it was sent; the attempt limit was reached"
+                    try tx.insert(Self.audit(delivery, outcome: .failed, at: now))
                 } else {
                     delivery.state = .pending
                     delivery.nextAttemptAt = now
@@ -216,17 +223,28 @@ public final class DeliveryOutbox: Sendable {
         }
     }
 
-    /// Claims due pending deliveries under a lease and opens a *preparing* attempt for each.
+    /// Claims due pending deliveries under a lease and opens a *preparing* attempt for each. A delivery that already
+    /// used every attempt the limit allows (for example after the limit was lowered) fails instead (D-26).
     public func claimDue(limit: Int = 20) throws -> [Delivery] {
         let now = clock.now()
-        let leaseSeconds = max(30, try settings.currentSettings().delivery.leaseSeconds)
+        let limits = try settings.currentSettings().delivery
+        let leaseSeconds = max(30, limits.leaseSeconds)
+        let maxAttempts = max(1, limits.maxAttempts)
         return try store.write { tx in
             let due = try tx.find(
                 Delivery.self,
                 RecordQuery.all.filter("state", equals: DeliveryState.pending.rawValue)
                     .filter("next_attempt_at", .lessOrEqual, .instant(now)).sorted(by: "next_attempt_at")
                     .limited(to: limit))
-            return try due.map { delivery in
+            var exhausted = due.filter { $0.attempts.count >= maxAttempts }
+            for index in exhausted.indices {
+                exhausted[index].state = .failed
+                exhausted[index].stateReason = "the attempt limit was reached"
+                exhausted[index].updatedAt = now
+                let saved = try tx.update(exhausted[index])
+                try tx.insert(Self.audit(saved, outcome: .failed, at: now))
+            }
+            return try due.filter { $0.attempts.count < maxAttempts }.map { delivery in
                 var delivery = delivery
                 delivery.state = .inProgress
                 delivery.leaseExpiresAt = now.addingTimeInterval(TimeInterval(leaseSeconds))
