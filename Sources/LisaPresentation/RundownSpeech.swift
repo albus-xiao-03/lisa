@@ -5,8 +5,9 @@ import Foundation
 import LisaAPIContract
 import LisaClient
 
-/// What Siri says for "get today's rundown" (SIRI-01). A saved copy, read while the host is unreachable, starts with
-/// its day and age, so it is never read out as current (UI-03).
+/// What Siri says for "get today's rundown" (SIRI-01), and what the rundown screen reads aloud
+/// (`RundownModel.speechText(at:locale:)`). A saved copy, read while the host is unreachable, starts with its day and
+/// age, so it is never read out as current (UI-03).
 public enum RundownSpeech {
     /// The most blocks read out; the rest are counted.
     public static let maxSpokenBlocks = 8
@@ -24,10 +25,20 @@ public enum RundownSpeech {
     public static func text(
         for result: ReadResult<RundownDTO>, at now: Date, isEarlierDay: Bool, timeZone: TimeZone, locale: Locale
     ) -> String {
+        text(
+            for: result, at: now, isCurrent: result.source == .host && !isEarlierDay, timeZone: timeZone,
+            locale: locale)
+    }
+
+    /// The rundown in `result` as sentences, starting with its day and age unless `isCurrent` says it is the host's
+    /// current answer. A screen passes `false` for data it keeps after a refresh failed, too (`LoadState.isStale`).
+    static func text(
+        for result: ReadResult<RundownDTO>, at now: Date, isCurrent: Bool, timeZone: TimeZone, locale: Locale
+    ) -> String {
         let rundown = result.value
         let day = LocalDay.spokenEnglish(rundown.date)
         var sentences: [String] = []
-        if result.source == .cache || isEarlierDay {
+        if !isCurrent {
             sentences.append(
                 "This is the saved rundown for \(day), from \(AgePhrase.english(result.age(at: now))) ago. It may be "
                     + "out of date.")
