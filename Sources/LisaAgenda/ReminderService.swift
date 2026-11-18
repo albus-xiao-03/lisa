@@ -54,7 +54,16 @@ public final class ReminderService: Sendable {
                     "status", in: [TaskStatus.open, .inProgress, .blocked].map { .text($0.rawValue) }))
             var specs: [ReminderSpec] = []
             for task in active {
-                specs += ReminderPlanner.deadlineReminders(for: task, settings: owner.reminders, zone: zone, now: now)
+                let existing: Set<String> =
+                    task.deadline == nil
+                    ? []
+                    : Set(
+                        try tx.find(
+                            Reminder.self,
+                            RecordQuery.all.filter("subject_key", equals: ReminderSubject.task(task.id).key)
+                        ).map(\.occurrenceKey))
+                specs += ReminderPlanner.deadlineReminders(
+                    for: task, settings: owner.reminders, zone: zone, now: now, existingOccurrenceKeys: existing)
                 if let overdue = ReminderPlanner.overdueReminder(
                     for: task, settings: owner.reminders, zone: zone, now: now)
                 {
