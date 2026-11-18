@@ -63,7 +63,7 @@ Statuses follow R1 §1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTI
 
 L01–L33 were first verified by temporary checks, in the phases shown in plan §9.1. The persistent Phase T suite in `Tests/LisaTests/` then verifies them, in debug and release, through public APIs only, and independently of the temporary checks.
 - **Temporary PASS:** only the temporary checks have run so far.
-- **PASS (unit):** the persistent suite verifies the whole observable result at the level plan §9.1 assigns.
+- **PASS (levels):** the persistent suite verifies the whole observable result at the levels plan §9.1 assigns, named in brackets.
 - **Partial:** some levels are still to come.
 
 All persistent results so far are from Linux aarch64 with Swift 6.4.2, with the same counts in debug and release.
@@ -71,27 +71,27 @@ All persistent results so far are from Linux aarch64 with Swift 6.4.2, with the 
 | Test | Temporary checks (`.tmp/`, not committed) | Persistent suite (`Tests/LisaTests/`) | Status |
 |---|---|---|---|
 | L01 | Phase 1–8 modules build in debug and release | The package and the suite build with `swift build --build-tests` and `swift build -c release --build-tests`, with 0 warnings | PASS (Linux) |
-| L02 | — | The unit suites (178 tests) run without credentials or network access. The integration, API and adapter suites follow (T2–T4) | Partial |
-| L03 | PASS (store level; restart across reopen) | Planned (T2) | Temporary PASS |
+| L02 | — | The unit, integration and recovery suites (237 tests) run without credentials or network access; the test host's network refuses every connection. The API, device and adapter suites follow (T3, T4) | Partial |
+| L03 | PASS (store level; restart across reopen) | `Integration/L03PersistenceTests.swift`, 4 tests: tasks, ideas, preferences, source cursors and acknowledgements survive a restart of the real host: PASS | PASS (integration) |
 | L04 | PASS (engine level) | `Unit/L04MailParsingTests.swift`, 17 tests: PASS. Found and fixed: a multipart part without a boundary produced no text | PASS (unit) |
-| L05 | PASS (service level, P4; in process, P5) | Planned (T2) | Temporary PASS |
+| L05 | PASS (service level, P4; in process, P5) | `Integration/L05DeduplicationTests.swift`, 3 tests, including addressing and the owner's note: PASS. Found and fixed: a Message-ID duplicate still kept its raw content, which deleting the message could not remove | PASS (integration) |
 | L06 | PASS (engine level) | `Unit/L06CalendarSemanticsTests.swift`, 19 tests: PASS | PASS (unit) |
-| L07 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
-| L08 | PASS (engine level) | `Unit/L08EventMatchingTests.swift`, 13 engine tests: PASS. Integration planned (T2) | Partial: unit PASS |
-| L09 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
-| L10 | PASS (model unavailable, P4; in process, P5; host stopped, over loopback, P7) | Planned: model unavailable (T2), host unreachable (T3) | Temporary PASS |
+| L07 | PASS (service level, P4) | `Integration/L07IncompleteRefreshTests.swift`, 4 tests: PASS. Found and fixed: a missing configured calendar file was read as an empty complete snapshot and cancelled every event, and a cancelled event's note kept the day uncertain. Also fixed: a snapshot file over the size limit was skipped, but the snapshot still counted as complete (test planned, T4) | PASS (integration) |
+| L08 | PASS (engine level) | `Unit/L08EventMatchingTests.swift` (13 tests) and `Integration/L08EventMatchingIntegrationTests.swift` (1): PASS | PASS (unit, integration) |
+| L09 | PASS (service level, P4) | `Integration/L09PreferenceAuthorityTests.swift`, 4 tests: PASS. Found and fixed: reprocessing duplicated an extracted task the owner had renamed | PASS (integration) |
+| L10 | PASS (model unavailable, P4; in process, P5; host stopped, over loopback, P7) | Model unavailable: `Integration/L10IdeaCaptureModelUnavailableTests.swift`, 2 tests: PASS. Host unreachable planned (T3) | Partial: model unavailable PASS |
 | L11 | PASS (engine level) | `Unit/L11PlanningFixtureTests.swift` (the §16.2 fixture, 6 tests), `Unit/L11PlanningTests.swift` (16), `Unit/L11HeldBlockTests.swift` (held parts, moves and the locked-overlap warning, D-52; 9): PASS | PASS (unit) |
-| L12 | PASS (engine level, P2; service recomputation, P4) | Planned (T2) | Temporary PASS |
-| L13 | PASS (engine level, P2; grounding, P4) | Planned (T2) | Temporary PASS |
+| L12 | PASS (engine level, P2; service recomputation, P4) | `Integration/L12ReplanningTests.swift`, 3 tests, including the §16.2 fixture replanned from the store: PASS | PASS (integration) |
+| L13 | PASS (engine level, P2; grounding, P4) | `Integration/L13BriefGroundingTests.swift`, 2 tests: PASS. Found and fixed: a source whose latest check failed was reported as checked | PASS (integration) |
 | L14 | PASS (engine level) | `Unit/L14InvalidInferenceTests.swift`, 19 tests: PASS. Found and fixed: an implausible end date was accepted, although D-19 bounds every date | PASS (unit) |
-| L15 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
-| L16 | PASS (service level, P4) | Planned (T2) | Temporary PASS |
-| L17 | PASS (policy, P2; send-time gate and escalation, P4) | `Unit/L17CallPolicyTests.swift`, 7 rule-level tests: PASS. Integration planned (T2) | Partial: unit PASS |
+| L15 | PASS (service level, P4) | `Integration/L15ReminderLifecycleTests.swift`, 8 tests: PASS. Found and fixed: a deadline whose last offset reminder came due also got a "soon" reminder | PASS (integration) |
+| L16 | PASS (service level, P4) | `Recovery/L16DeliveryRecoveryTests.swift`, 5 tests, including quiet-hour deferral: PASS | PASS (recovery) |
+| L17 | PASS (policy, P2; send-time gate and escalation, P4) | `Unit/L17CallPolicyTests.swift` (7 rule-level tests) and `Integration/L17CallGateIntegrationTests.swift` (8: the send-time gate, including quiet hours): PASS | PASS (unit, integration) |
 | L18 | PASS (P6): adapters against scripted responses and loopback TLS servers; sources through the host with a scripted network | Planned (T4) | Temporary PASS; live services NOT_RUN_CREDENTIALS |
-| L19 | PASS (service level, P4) | `Unit/L19InjectionResistanceTests.swift`, 10 rule-level tests: PASS. Integration planned (T2) | Partial: unit PASS |
+| L19 | PASS (service level, P4) | `Unit/L19InjectionResistanceTests.swift` (10 rule-level tests) and `Integration/L19InjectionIntegrationTests.swift` (2: through ingestion and extraction with a scripted model): PASS | PASS (unit, integration) |
 | L20, L21, L30 | PASS (in process, P5; over loopback through the network server, P7) | Planned (T3) | Temporary PASS |
-| L22 | Partial: recurrence, message, document, model-output, delivery-retry, request-size and configuration limits | `Unit/L22LimitsTests.swift`, 16 tests: PASS. Found and fixed: the header-field and total-occurrence limits each let one extra item through, and dropped header fields and parts were not reported. Retry exhaustion in the outbox planned (T2) | Partial: unit PASS |
-| L23 | PASS (v1→v3 migration, failed migration, restore) | Planned (T2) | Temporary PASS |
+| L22 | Partial: recurrence, message, document, model-output, delivery-retry, request-size and configuration limits | `Unit/L22LimitsTests.swift` (16 tests) and `Integration/L22OutboxRetryLimitTests.swift` (3): PASS. Found and fixed: the header-field and total-occurrence limits each let one extra item through; dropped header fields and parts were not reported; a crash-and-restart loop retried a delivery past its attempt limit | PASS (unit, integration) |
+| L23 | PASS (v1→v3 migration, failed migration, restore) | `Recovery/L23MigrationRestoreTests.swift`, 4 tests: a v1 database the test builds migrates, and a restored backup is coherent: PASS | PASS (recovery) |
 | L24 | PASS, and `lisa demo` on Linux: the full synthetic workflow across a restart (P5) | Planned (T3) | Temporary PASS |
 | L25, L29 | Partial: services (P4); over loopback (P7) | Planned (T3) | Partial (temporary); Apple parts NOT_RUN_ENVIRONMENT |
 | L26 | Partial: services (P4) | `Unit/L26NotificationRoutingTests.swift`, 11 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS; Apple parts NOT_RUN_ENVIRONMENT |
@@ -100,7 +100,7 @@ All persistent results so far are from Linux aarch64 with Swift 6.4.2, with the 
 | L31 | Partial: services (P4) | `Unit/L31NotificationPrivacyTests.swift`, 6 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS; Apple parts NOT_RUN_ENVIRONMENT |
 | L33 | PASS (policy, P2; send-time gate and device levels, P4) | `Unit/L33TimeSensitiveTests.swift`, 9 policy-level tests: PASS. Integration planned (T3) | Partial: unit PASS |
 | §16.2 | With L11 | `Unit/L11PlanningFixtureTests.swift`: the baseline plan and the added 09:00–09:30 event, exactly as specified: PASS | PASS (unit) |
-| §16.3 | Time cases (P1); recovery cases (P4) | `Unit/TimeCasesTests.swift`, 20 tests: spring-forward and fall-back, a date-only deadline, an ambiguous relative date, and a zone change after a plan exists: PASS. The five recovery cases planned (T2) | Partial: time cases PASS |
+| §16.3 | Time cases (P1); recovery cases (P4) | `Unit/TimeCasesTests.swift` (20 tests): the four time cases. In `Recovery/`: `HostDowntimeRecoveryTests` (2, with REM-04), `SimultaneousBriefRequestsTests`, `CrashAfterSubmissionTests`, `ChangedOccurrenceReminderTests` and `StaleFeedRecoveryTests` (1 each): PASS. Found and fixed: a recomputation erased the warning and explanation for an accepted block placed again | PASS (unit, recovery) |
 
 ## Apple acceptance (R1 §16.4)
 
