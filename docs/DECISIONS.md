@@ -199,7 +199,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Deduplication:** unique natural keys enforce it. Examples:
   - per-source email key;
   - occurrence key (source, UID, original start);
-  - capture request ID;
+  - capture request key: the caller and the request ID (`<principal>:<request ID>`, since schema v4; D-35);
   - reminder and notification occurrence keys;
   - delivery idempotency key;
   - device installation and credential verifier.
@@ -213,6 +213,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - v1: core collections.
   - v2: devices and notification occurrences.
   - v3: idempotency records, plus a `deliveries.payload_key` column backfilled from stored JSON.
+  - v4: the unique capture `request_id` column holds the caller and the request ID, derived from each stored record, so two callers may use the same ID (D-35).
 - **Before migrating:** an existing database is copied to `<db>.pre-migration-v<n>-<ms>.sqlite`.
 - **Failures:** a failed migration rolls back and reports; the database is never recreated or discarded. A database with a newer schema is refused.
 - **Schema check:** at open, the code checks that every collection and indexed column it expects exists.
@@ -220,7 +221,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Restore:** checks the manifest format, schema version, integrity and the backup's own `user_version`, then moves the current database aside (`.before-restore-<ms>`, never deleted) before copying the backup into place.
 - **Evidence (temporary checks):**
   - a v1 database with a delivery migrated to v3, and the backfilled `payload_key` found the record;
-  - a broken v4 left the schema at v3, the data intact and no partial tables;
+  - a broken v4 left the schema at v3, the data intact and no partial tables (before the real v4 existed);
   - `user_version` 99 was refused;
   - restore returned the pre-backup state and kept the replaced file.
 
@@ -309,7 +310,7 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 ## D-31 — Captures, deletion, export and retention (IDEA-01, DATA-04, DATA-05)
 
 - **Captures:**
-  - idempotent by request ID;
+  - idempotent per caller and request ID: another device's capture with the same ID is a new capture (D-35);
   - an idea is stored verbatim at once, before any interpretation;
   - shared links and text become shared news items under the "Shared by the owner" source. Sharing the same address again (case-insensitive scheme and host, fragment ignored) links to the same item.
 - **Deletion:**
@@ -377,8 +378,10 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Request identities:**
   - every mutation carries `Lisa-Request-ID` (8–128 letters, digits or `._:-`);
   - the ledger keys requests by caller and ID, and fingerprints the method, path, query and body with SHA-256;
+  - captures are matched by caller and ID too, so the same ID from two devices makes two captures;
   - a retry replays the recorded answer; reusing an ID for a different request is a 422;
   - definite answers (2xx, 400, 403, 404, 409, 413) are kept for 30 days, while 401, 429 and 5xx are retried for real;
+  - the router checks the body size after authentication and inside the ledger, so its 413 is replayed. The network server refuses an oversized body before reading it, so that 413 never reaches the router and is not recorded;
   - concurrent duplicates wait for the first;
   - pairing responses carry a credential or a pairing code, so they are never recorded.
 - **Revision checks:** task and idea patches, proposal actions, plan-block actions and device preferences require the revision the client saw; a mismatch is a 409 with the current revision.
