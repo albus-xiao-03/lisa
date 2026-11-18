@@ -157,8 +157,10 @@ public final class BriefService: Sendable {
             changes: changes,
             sources: sources.filter(\.enabled).map { source in
                 let freshness = source.freshness(at: now)
+                // A source whose latest check failed was not checked, however recent its last success (D-18).
                 return SourceStatusLine(
-                    sourceID: source.id, name: source.name, kind: source.kind, checked: freshness == .fresh,
+                    sourceID: source.id, name: source.name, kind: source.kind,
+                    checked: freshness == .fresh && !source.isFailing,
                     detail: source.isFailing
                         ? source.lastFailure?.summary : (freshness == .fresh ? nil : "not refreshed recently"))
             },
