@@ -236,8 +236,9 @@
       // The 10-character Team ID and Key ID from the Apple Developer account.
       teamID: "ABCDE12345",
       keyID: "ABC123DEFG",
-      // The app bundle identifiers that may register for pushes. At most 10.
-      topics: ["com.example.lisa.companion", "com.example.lisa.mac"],
+      // The app bundle identifiers that may register for pushes, at most 10: the companion's. The Mac app never
+      // registers for push (D-51). Replace the placeholder with the identifier registered to your team.
+      topics: ["org.example.lisa.companion"],
     },
   },
 
