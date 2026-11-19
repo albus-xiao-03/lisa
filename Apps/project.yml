@@ -1,0 +1,98 @@
+# Lisa's Apple applications (APPLE-01), generated with XcodeGen 2.46.0 on a Mac:
+#   cd Apps && xcodegen generate --spec project.yml
+# The targets live outside Package.swift and link Lisa's Swift packages from the repository root. Signing values are
+# placeholders; put your own Team ID in Config/Signing.local.xcconfig, which git ignores (docs/SETUP-APPLE.md).
+name: Lisa
+options:
+  bundleIdPrefix: org.example.lisa
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Signing.xcconfig
+  Release: Config/Signing.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+packages:
+  Lisa:
+    path: ..
+targets:
+  LisaCompanion:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: Companion
+      - path: Shared
+    dependencies:
+      - package: Lisa
+        product: LisaAPIContract
+      - package: Lisa
+        product: LisaClient
+      - package: Lisa
+        product: LisaPresentation
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.companion
+        PRODUCT_NAME: Lisa
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_FILE: Config/Companion-Info.plist
+        SUPPORTS_MACCATALYST: NO
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/Companion-Debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Config/Companion-Release.entitlements
+  LisaMac:
+    type: application
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Mac
+      - path: Shared
+    dependencies:
+      - package: Lisa
+        product: LisaAPIContract
+      - package: Lisa
+        product: LisaClient
+      - package: Lisa
+        product: LisaPresentation
+      - package: Lisa
+        product: LisaHost
+      - package: Lisa
+        product: LisaPorts
+      - package: Lisa
+        product: LisaSecrets
+      - package: Lisa
+        product: LisaRedaction
+      # Imported directly by the embedded-host controller (configuration, lock and runtime) and the local-notification
+      # content; all are already in LisaHost's dependency closure. The local-notification installation goes through
+      # LisaHost's own API, so the app imports neither LisaApplication nor LisaDevices.
+      - package: Lisa
+        product: LisaConfig
+      - package: Lisa
+        product: LisaRuntime
+      - package: Lisa
+        product: LisaDomain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.mac
+        PRODUCT_NAME: Lisa
+        INFOPLIST_FILE: Config/Mac-Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Config/Mac-Debug.entitlements
+        Release:
+          CODE_SIGN_ENTITLEMENTS: Config/Mac-Release.entitlements

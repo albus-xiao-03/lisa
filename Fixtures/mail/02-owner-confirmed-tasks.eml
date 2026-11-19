@@ -1,0 +1,24 @@
+Message-ID: <demo-owner-tasks-20261116@example.com>
+Date: Mon, 16 Nov 2026 07:10:00 -0500
+From: Alex Demo <owner@example.com>
+To: Lisa <lisa@example.invalid>
+Subject: [Demo] Two commitments for this week
+X-Lisa-Demo: synthetic
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Lisa,
+
+I have committed to these two things. Please keep track of them for me.
+
+Task: Send the demo slides to Priya (confirmed)
+Due: November 16, 2026 at 8:45 am
+
+Task: Draft the demo quarterly summary (confirmed)
+Due: November 20, 2026 at 3:00 pm
+
+Alex
+
+--
+Synthetic demonstration message for Lisa. Not real correspondence.

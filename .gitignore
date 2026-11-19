@@ -67,3 +67,6 @@ fastlane/test_output
 .tmp/
 # Local SwiftPM/Xcode package state (e.g. .swiftpm/xcode/ created when Xcode opens Package.swift).
 .swiftpm/
+# Apple project: generated from Apps/project.yml with XcodeGen (APPLE-01), and the owner's local signing values.
+Apps/*.xcodeproj/
+Apps/Config/Signing.local.xcconfig

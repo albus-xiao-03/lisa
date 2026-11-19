@@ -1,0 +1,68 @@
+Message-ID: <demo-invite-design-review-20261116@example.org>
+Date: Mon, 16 Nov 2026 07:25:00 -0500
+From: Priya Sample <priya@example.org>
+To: Alex Demo <owner@example.com>
+Cc: Lisa <lisa@example.invalid>
+Subject: [Demo] Invitation: Demo design review (Wed Nov 18, 10:00 EST)
+X-Lisa-Demo: synthetic
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="demo-invite-boundary-0001"
+
+This is a multi-part message in MIME format.
+
+--demo-invite-boundary-0001
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Priya Sample has invited you to a demo event.
+
+Demo design review
+Wednesday, November 18, 2026, 10:00-10:30 (America/New_York)
+Location: Demo Room 3C
+
+This is a synthetic demonstration invitation for Lisa.
+
+--demo-invite-boundary-0001
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Lisa Demo//Synthetic Invitation//EN
+CALSCALE:GREGORIAN
+METHOD:REQUEST
+BEGIN:VTIMEZONE
+TZID:America/New_York
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:EDT
+DTSTART:20070311T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+DTSTART:20071104T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:demo-design-review-20261118@example.org
+DTSTAMP:20261116T122500Z
+DTSTART;TZID=America/New_York:20261118T100000
+DTEND;TZID=America/New_York:20261118T103000
+SUMMARY:Demo design review
+LOCATION:Demo Room 3C
+DESCRIPTION:Synthetic demonstration invitation for Lisa.
+ORGANIZER;CN=Priya Sample:mailto:priya@example.org
+ATTENDEE;CN=Alex Demo;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;
+ RSVP=TRUE:mailto:owner@example.com
+SEQUENCE:0
+STATUS:CONFIRMED
+TRANSP:OPAQUE
+END:VEVENT
+END:VCALENDAR
+
+--demo-invite-boundary-0001--

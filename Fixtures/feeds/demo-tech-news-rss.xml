@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Demo Tech News</title>
+    <link>https://news.example.com/demo/</link>
+    <description>Synthetic demonstration feed for Lisa. Not real news.</description>
+    <language>en-us</language>
+    <lastBuildDate>Mon, 16 Nov 2026 11:30:00 +0000</lastBuildDate>
+    <item>
+      <title>Swift concurrency checklist for demo app teams</title>
+      <link>https://news.example.com/demo/swift-concurrency-checklist</link>
+      <guid isPermaLink="true">https://news.example.com/demo/swift-concurrency-checklist</guid>
+      <pubDate>Mon, 16 Nov 2026 11:30:00 +0000</pubDate>
+      <category>swift</category>
+      <description>A synthetic checklist covering actors, sendable types and structured tasks.</description>
+    </item>
+    <item>
+      <title>Five productivity habits for calmer mornings</title>
+      <link>https://news.example.com/demo/calmer-mornings</link>
+      <guid isPermaLink="true">https://news.example.com/demo/calmer-mornings</guid>
+      <pubDate>Sun, 15 Nov 2026 18:00:00 +0000</pubDate>
+      <category>productivity</category>
+      <description>Synthetic tips: plan the day the evening before, batch email and protect one focus block.</description>
+    </item>
+    <item>
+      <title>Demo City Rovers win the regional cup final</title>
+      <link>https://news.example.com/demo/rovers-cup-final</link>
+      <guid isPermaLink="true">https://news.example.com/demo/rovers-cup-final</guid>
+      <pubDate>Sun, 15 Nov 2026 21:15:00 +0000</pubDate>
+      <category>sports</category>
+      <description>The Rovers beat the Harbor Hawks 2-1 in a synthetic demo match.</description>
+    </item>
+    <item>
+      <title>Server-side Swift meetup recap: structured concurrency in practice</title>
+      <link>https://blog.example.org/demo/server-side-swift-meetup-recap</link>
+      <guid isPermaLink="true">https://blog.example.org/demo/server-side-swift-meetup-recap</guid>
+      <pubDate>Sun, 15 Nov 2026 16:10:00 +0000</pubDate>
+      <category>swift</category>
+      <description>Republished from the Demo Developer Blog.</description>
+    </item>
+    <item>
+      <title>Weekend weather: clear skies for the demo marathon</title>
+      <link>https://news.example.com/demo/weekend-weather</link>
+      <guid isPermaLink="true">https://news.example.com/demo/weekend-weather</guid>
+      <pubDate>Sat, 14 Nov 2026 15:00:00 +0000</pubDate>
+      <category>weather</category>
+      <description>Synthetic forecast: dry and mild, with a light breeze along the demo marathon route.</description>
+    </item>
+  </channel>
+</rss>
