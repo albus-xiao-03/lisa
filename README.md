@@ -1,7 +1,16 @@
 <!-- Lisa: a single-owner personal secretary. What it does, how it is built, its current verification status and where to start. -->
-# Lisa
+<p align="center">
+  <img src="assets/logo.png" alt="Lisa — connected orbital intelligence" width="420" />
+</p>
 
-Lisa is a single-owner personal secretary.
+<h1 align="center">Lisa</h1>
+
+<p align="center">
+  <strong>An intelligent personal secretary, built for one owner.</strong><br />
+  Connecting information, commitments and ideas into a coherent daily plan.
+</p>
+
+Lisa is a single-owner personal secretary, designed to coordinate what matters without becoming another chatbot.
 
 ## What it does
 
