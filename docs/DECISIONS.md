@@ -827,3 +827,15 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   3. every other connection opened read-only (`SQLITE_OPEN_READONLY`), so it neither writes nor checkpoints, not even on close;
   4. offline commands (backup, restore, fence, migrate) take the same exclusive lock with the service stopped, so they are never a second writer.
 - **Verification.** M2's `LisaSQLite` additions give each connection a declared role. The temporary harness (S-17) shows that a second read-write open of a held database is refused, a read-only connection neither writes nor checkpoints (the WAL is unchanged by its reads and its close), and checkpoints run only on the writer. M2 and M3 durability results are accepted only with these checks passing. If a later library carries the fix (3.51.3 or a verified backport), the rule stays: it costs nothing and removes the dependency on the library's version.
+
+## D-56 — LisaReplicaStore uses LisaTrust and LisaCrypto directly (R2 M2, run 20261124-r2-5462; plan §7.2.1, §8.2.1, §8.6.1)
+
+- **The plan's table** lists LisaReplicaStore's direct dependencies as LisaSQLite, LisaDomain, LisaMerge, LisaSyncProtocol and LisaArchive. LisaArchive already depends on LisaTrust and LisaCrypto, so the graph doesn't change; only the edge becomes direct.
+- **Why the store needs them.** The duplicate rules hold on every replica with no exception (R2-SYNC-02).
+  - So the store computes each operation's digest itself: SHA-256 over the exact signed body, LisaTrust's `OperationDigest`. It does this for the operations it creates and for those that arrive.
+  - Before applying an arriving operation, it verifies the dataset, the origin key and the signature with `OperationSigning.verify` (R2-L16). The roster's keys reach it as LisaCrypto's `P256Verifier`.
+  - A port for these would only re-wrap LisaTrust.
+- **What stays as planned:**
+  - Signing stays behind the `ReplicaSigning` port: a Keychain or Secure Enclave key on Apple devices, `SoftwareReplicaSigner` in harnesses.
+  - LisaMerge, LisaDomain and LisaArchive join when the effective view, the record projections and export assembly use them.
+  - No module outside the plan's set is added, and the graph stays acyclic: LisaTrust and LisaCrypto depend on neither the store nor anything that uses it.
