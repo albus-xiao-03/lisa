@@ -32,6 +32,7 @@ enum FixtureCaseRunner {
         case "OV-HARNESS-RUN-02": checks = try context.observationAndPairs()
         case "OV-HARNESS-EXPORT-01": checks = try context.exportCanaries()
         case "OV-HARNESS-CLEANUP-01": checks = try context.cleanupOwnRunOnly()
+        case "OV-HARNESS-PREFLIGHT-01": checks = try context.signedEntitlements()
         default: throw VerifyError.unknownCase(verifyCase.id.text)
         }
         let passed = checks.allSatisfy { $0.status == .pass }
@@ -369,6 +370,100 @@ enum FixtureCaseRunner {
                 check(
                     "no-planted-canary-survives", surviving.isEmpty, "\(surviving.count) of \(canaries.count) survived"),
                 check("export-refused-when-a-canary-would-survive", refused, refused ? "refused" : "written"),
+            ]
+        }
+
+        // MARK: Signed entitlements and profiles
+
+        func signedEntitlements() throws -> [Check] {
+            func plist(_ object: [String: Any]) throws -> Data {
+                try PropertyListSerialization.data(fromPropertyList: object, format: .xml, options: 0)
+            }
+            let bundle = "org.example.lisa.companion"
+            let later = Date().addingTimeInterval(86_400 * 90)
+            func product(
+                _ platform: ApplePlatform, entitlements: [String: Any], profileAPS: String?,
+                devices: [String]? = ["UDID-1"],
+                expiration: Date? = nil, sandbox: Bool = false
+            ) throws -> AppleSignedProduct {
+                var granted: [String: Any] = ["application-identifier": "TEAMID0000.\(bundle)", "get-task-allow": true]
+                if let profileAPS { granted[platform.apsEntitlementKey] = profileAPS }
+                var profile: [String: Any] = [
+                    "TeamIdentifier": ["TEAMID0000"], "Entitlements": granted, "ExpirationDate": expiration ?? later,
+                ]
+                if let devices { profile["ProvisionedDevices"] = devices }
+                var signed = entitlements
+                if sandbox { signed["com.apple.security.app-sandbox"] = true }
+                return try AppleSignedProduct.parse(
+                    platform: platform, infoPlist: try plist(["CFBundleIdentifier": bundle]),
+                    entitlementsPlist: try plist(signed), profilePlist: try plist(profile))
+            }
+            let push = ApplePushRequirement(environment: "development", topic: bundle)
+            let mac = try product(
+                .macOS, entitlements: ["com.apple.developer.aps-environment": "development"], profileAPS: "development")
+            let phone = try product(.iOS, entitlements: ["aps-environment": "development"], profileAPS: "development")
+            let macWithIOSKey = try product(.macOS, entitlements: ["aps-environment": "development"], profileAPS: nil)
+            let phoneWithMacKey = try product(
+                .iOS, entitlements: ["com.apple.developer.aps-environment": "development"], profileAPS: nil)
+            let missing = try product(.iOS, entitlements: [:], profileAPS: nil)
+            let production = try product(
+                .iOS, entitlements: ["aps-environment": "production"], profileAPS: "production")
+            let expired = try product(
+                .macOS, entitlements: ["com.apple.developer.aps-environment": "development"], profileAPS: "development",
+                expiration: Date(timeIntervalSince1970: 1_700_000_000))
+            let sandboxed = try product(.macOS, entitlements: [:], profileAPS: nil, sandbox: true)
+            func refused(_ reasons: [String], containing text: String) -> Bool {
+                reasons.contains { $0.contains(text) }
+            }
+            return [
+                check(
+                    "each-platform-key-with-matching-environment-passes",
+                    ApplePreflight.refusals(mac, push: push, deviceUDID: nil).isEmpty
+                        && ApplePreflight.refusals(phone, push: push, deviceUDID: "UDID-1").isEmpty,
+                    "macOS \(ApplePreflight.refusals(mac, push: push, deviceUDID: nil)); iOS "
+                        + "\(ApplePreflight.refusals(phone, push: push, deviceUDID: "UDID-1"))"),
+                check(
+                    "other-platform-key-only-stops",
+                    refused(
+                        ApplePreflight.refusals(macWithIOSKey, push: push, deviceUDID: nil),
+                        containing: "only aps-environment")
+                        && refused(
+                            ApplePreflight.refusals(phoneWithMacKey, push: push, deviceUDID: "UDID-1"),
+                            containing: "only com.apple.developer.aps-environment"),
+                    "both platforms refuse the other's key"),
+                check(
+                    "missing-key-stops",
+                    refused(
+                        ApplePreflight.refusals(missing, push: push, deviceUDID: "UDID-1"),
+                        containing: "no aps-environment"),
+                    "\(ApplePreflight.refusals(missing, push: push, deviceUDID: "UDID-1"))"),
+                check(
+                    "mismatched-environment-or-topic-stops",
+                    refused(
+                        ApplePreflight.refusals(production, push: push, deviceUDID: "UDID-1"),
+                        containing: "is production")
+                        && refused(
+                            ApplePreflight.refusals(
+                                phone,
+                                push: ApplePushRequirement(environment: "development", topic: "org.example.other"),
+                                deviceUDID: "UDID-1"), containing: "isn't the bundle identifier"),
+                    "environment and topic mismatches refused"),
+                check(
+                    "unlisted-device-and-expired-profile-stop",
+                    refused(
+                        ApplePreflight.refusals(phone, push: push, deviceUDID: "UDID-9"),
+                        containing: "doesn't list this device")
+                        && refused(ApplePreflight.refusals(expired, push: push, deviceUDID: nil), containing: "expired"),
+                    "unlisted device and expired profile refused"),
+                check(
+                    "identifiers-derive-from-the-bundle-id",
+                    mac.apnsTopic == bundle && mac.keychainServices.clientIdentity == bundle + ".client-identity"
+                        && mac.r1ClientDirectory(home: "/Users/o")
+                            == "/Users/o/Library/Application Support/\(bundle)/Client"
+                        && sandboxed.r1ClientDirectory(home: "/Users/o")
+                            == "/Users/o/Library/Containers/\(bundle)/Data/Library/Application Support/\(bundle)/Client"
+                        && phone.profile?.kind == "development",
+                    "topic, Keychain service and client directory (plain and sandboxed) derived"),
             ]
         }
 
