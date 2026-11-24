@@ -30,4 +30,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let nearbyAuthentication = SigningDomain("lisa-nearby-auth-v1\n")
     /// The header of a paged artifact: rosters with key history, causal summaries, snapshot manifests (plan §8.1.3).
     public static let pagedArtifactHeader = SigningDomain("lisa-r2-paged-artifact-v1\n")
+    /// A protected archive, signed by its exporting device over the header and ciphertext digests (plan §8.6.6).
+    public static let archive = SigningDomain("lisa-r2-archive-v1\n")
 }
