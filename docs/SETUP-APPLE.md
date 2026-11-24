@@ -133,3 +133,7 @@ Each check is `NOT_RUN_ENVIRONMENT` until it runs on Apple hardware. A12–A14, 
 | A16 | Host asleep, stopped or unreachable behaves as `docs/OPERATIONS.md` describes | `NOT_RUN_ENVIRONMENT` |
 | A17 | Time Sensitive for an urgent deadline, with device settings and Focus respected | `NOT_RUN_CREDENTIALS` |
 | A18 | Over your VPN route, current data loads and actions synchronize promptly | `NOT_RUN_CREDENTIALS` |
+
+## 9. R2 owner verification
+
+R2's owner sessions (X1–X7) use the owner-verification harness in `Harness/`: its quick start is [Harness/README.md](../Harness/README.md), and session X1 (the proof app `LisaProof`) is set up in [Harness/docs/SETUP-APPLE.md](../Harness/docs/SETUP-APPLE.md).
