@@ -119,3 +119,33 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 ## 4. Collecting evidence outside the VM
 
 Run directories exist only in this sandbox. Tracked records like this file reach the host when the owner fetches the branch's commits. For the raw evidence, Claude builds a redacted bundle on request (or at each milestone): a `.tar.gz` with a SHA-256 manifest, after a scan that masks tokens, account identifiers and e-mail addresses. The owner copies it out through a port the owner publishes; the exact command is in `R2-CHECKPOINT.md`.
+
+### M1-2 LisaCrypto R2 primitives (plan §7.2.2; R2-L16 signature part)
+
+- **Code:** `ec3784d` … `2abce7e` (`LisaCrypto`: canonical-DER P-256 keys, raw signatures, agreement with HKDF, HKDF and HMAC, HPKE).
+- **Harness:** `.tmp/r2/20261124-r2-5462/m1/harness/` (target `CryptoTests`), copied unchanged into `m1/harness-v2/`.
+- **Vectors:** HKDF-SHA256 RFC 5869 test case 1 and HMAC-SHA256 RFC 4231 test case 1 reproduced; truncated HMAC codes verified and refused when altered or shorter than 16 bytes; raw signatures of 64 bytes that verify, and refusal of a tampered message, a 63-byte signature and another key; canonical 91-byte SPKI only, with an extra byte, a truncated key, a changed curve byte, a point off the curve and the compressed-point form of the same key refused; both sides of a key agreement deriving the same HKDF key; HPKE P256_SHA256_AES_GCM_256 round trip with a 65-byte encapsulated key, and refusal of a wrong key, wrong info, wrong authenticated data and an altered ciphertext.
+- **Result: PASS**, 6 tests.
+
+### M1-3 LisaTrust: token, owner texts, signatures, nearby session layer (plan §8.1.2 M1 acceptance, §8.7)
+
+- **Code:** `822ffe5` span (`LisaSyncProtocol` identifiers; `LisaTrust`).
+- **Harness:** `.tmp/r2/20261124-r2-5462/m1/harness-v2/` (target `TrustTests`; run with `swift test --force-resolved-versions --manifest-cache none`).
+- **Vectors:** the enrollment-token vector (`e74f49bf…13db`, `AAECAw…Hh8`) and refusal of other lengths and spellings; `lisa-pair:4:` round trips in `pin` and `ca` modes with the shared fixture of `docs/SYNC-PROTOCOL.md` §6, its SPKI parsed by OpenSSL as P-256 and its fingerprint, canonical payload and checksum reproduced in Python; every refusal vector listed there; `lisa-reanchor:2:` round trip, `lisa-reanchor:1:` refused as outdated and a pairing text refused as unknown; domain signatures that fail under another domain or with one byte added; Design A pair keys agreeing in both directions and the discovery-tag and rejoin vectors reproduced with Python's `hmac`; exporter-bound nearby authentication verifying for the genuine transcript and failing for another key, another exporter value (the relay case) and the other role, with identical devices, a short exporter and a short nonce refused.
+- **Result: PASS**, 11 tests in 3 suites.
+
+### M1-4 Operation envelope, digests, signatures and identity (R2-L05 codec part, R2-L16 signature and dataset part, R2-L32)
+
+- **Code:** `e7e5085` span (`LisaSyncProtocol` envelope types; `LisaTrust` digest, signing, legacy child identity).
+- **Harness:** `m1/harness-v2/`, targets `EnvelopeTests` and `EnvelopeTestsV2`.
+- **Vectors and cases:** byte-exact round trip and SHA-256 digest of the exact body; each malformed rule (device operation with `legacyParent` or without `createdAt`, legacy origin without `legacyParent`, 33 dependencies, unsorted and self dependencies, 257 observed pieces, an incarnation link on sequence 2, an unknown field, protocol version 1, an unknown type, an uppercase identifier, a body over 64 KiB); verification refusing another dataset, a signature from another body, a forged signature, an unknown origin and a device-signed legacy child, and accepting a Core-signed one; the duplicate, identity-reuse (a legacy child with another digest included), sequence-reuse and new verdicts; the legacy child-ID and set-digest vectors; the value budget for four types filling exactly 65,536 bytes with worst-case escaping, one byte more refused.
+- **Result: PASS** for every case of `EnvelopeTests` except its value-budget test, and **PASS** for `EnvelopeTestsV2`. The failing v1 test is a harness error, kept unchanged and recorded in `m1/harness-v2/NOTES.md`: it rebuilt only the device envelope, while the derivation takes the larger legacy envelope. `EnvelopeTestsV2` checks both variants.
+
+### M1-5 Merkle paging (M1 "Merkle paging vectors"; R2-L16 part)
+
+- **Code:** `bfe0efd` … `13ce72c` (`PagedArtifact`, `MerkleTree`, `PagedArtifactVerification`, the header signing domain).
+- **Harness:** `m1/harness-v2/`, targets `MerkleTests` and `MerkleTestsV2`.
+- **Vectors and cases:** roots for 1, 2, 3, 5, 7 and 8 pages and two inclusion proofs from an independent Python RFC 6962 implementation; for every tree of 1 to 33 pages, each page verifying at its own index under the signed size and at no other index, with an altered page, an out-of-range index and a shortened proof refused; a whole artifact accepted in any arrival order and refused for a dropped, repeated, swapped or altered page, a forged header and another dataset; a header inflated by one page refused without a new Core signature.
+- **Result: PASS** for the roots, the artifact cases and `MerkleTestsV2`. `MerkleTests`' proof test fails with exactly 448 issues, a harness error recorded in `m1/harness-v2/NOTES-2.md`: it expected verification to refuse a proof under a tree size one larger, which RFC 9162's algorithm does not authenticate. The Python implementation accepts the same 448 cases, so the Swift verifier matches it exactly, and the product takes the size only from Core's signed header.
+
+**After each span:** a full debug build has 0 warnings, `swift format lint` reports no finding in the changed modules, and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2).
