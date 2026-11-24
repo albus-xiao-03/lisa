@@ -567,7 +567,11 @@ public final class ReplicaStore: Sendable {
             for partition in touched { counts[partition, default: 0] += 1 }
             guard let envelope else {
                 if let record = entry.record {
-                    try DerivedRows.apply(record, at: entry.position, through: touched, in: session)
+                    var through: [(partition: String, generation: Int64)] = []
+                    for partition in touched {
+                        through.append((partition, try CanonicalTables.publishedGeneration(partition, in: session)))
+                    }
+                    try DerivedRows.apply(record, at: entry.position, generation: 0, through: through, in: session)
                 }
                 continue
             }
