@@ -20,9 +20,9 @@ public final class ReplicaStore: Sendable {
     public let incarnationID: Identifier128
     /// The monitor of this replica's long reads: search, staging catch-up passes and export assembly (§8.15.2).
     public let readers: SQLiteReaderMonitor
-    private let database: SQLiteWALDatabase
+    let database: SQLiteWALDatabase
     private let signing: any ReplicaSigning
-    private let indexing: (any ReplicaIndexing)?
+    let indexing: (any ReplicaIndexing)?
     private let now: @Sendable () -> Int64
     private let freeSpace: @Sendable () -> Int64?
 
@@ -655,18 +655,25 @@ public final class ReplicaStore: Sendable {
     /// by `TaskMergeState`. Merging is a join, so the order of application doesn't change the result; causal order
     /// decides only what has entered the view.
     public static func taskView(_ entityID: Identifier128, in session: SQLiteSession) throws -> TaskView? {
+        try taskView(entityID, in: session, canonicalTable: "canonical_operations")
+    }
+
+    /// The task's view over the live canonical table or a staged one (§8.6.3).
+    static func taskView(_ entityID: Identifier128, in session: SQLiteSession, canonicalTable: String) throws
+        -> TaskView?
+    {
         let item = ReplicaItemKey(entityType: "task", entityID: entityID)
         let partition = CollectionPartition.name(forEntityType: "task") ?? "tasks"
         // Canonical operations first, then the journal's applied, unrejected ones not already canonical: each once.
         let canonical = try session.query(
-            "SELECT body, epoch_id, position FROM canonical_operations WHERE entity_type = ? AND entity_id = ?",
+            "SELECT body, epoch_id, position FROM \(canonicalTable) WHERE entity_type = ? AND entity_id = ?",
             [.text(item.entityType), ReplicaColumns.id(entityID)])
         let journal = try session.query(
             """
             SELECT o.body, o.commit_epoch, o.commit_position FROM operations o
             JOIN causal_decisions d ON d.operation_id = o.operation_id AND d.decision = 'applied'
             WHERE o.entity_type = ? AND o.entity_id = ? AND o.state != 'rejected'
-              AND NOT EXISTS (SELECT 1 FROM canonical_operations c WHERE c.operation_id = o.operation_id)
+              AND NOT EXISTS (SELECT 1 FROM \(canonicalTable) c WHERE c.operation_id = o.operation_id)
             """, [.text(item.entityType), ReplicaColumns.id(entityID)])
         let rows = canonical + journal
         let drafts = try DraftStore.held(for: item, in: session)
@@ -742,9 +749,16 @@ public final class ReplicaStore: Sendable {
     /// The texts of `item`'s effective view that a search finds it by, inside the caller's transaction: a task's
     /// surviving titles, notes and tags; nothing for a deleted item or one the replica doesn't hold.
     public static func searchableText(of item: ReplicaItemKey, in session: SQLiteSession) throws -> [String] {
+        try searchableText(of: item, in: session, canonicalTable: "canonical_operations")
+    }
+
+    static func searchableText(of item: ReplicaItemKey, in session: SQLiteSession, canonicalTable: String) throws
+        -> [String]
+    {
         switch item.entityType {
         case "task":
-            guard let view = try taskView(item.entityID, in: session), !view.isDeleted else { return [] }
+            guard let view = try taskView(item.entityID, in: session, canonicalTable: canonicalTable), !view.isDeleted
+            else { return [] }
             return view.title + view.notes + view.tags
         default:
             return []
@@ -804,7 +818,7 @@ public final class ReplicaStore: Sendable {
     }
 
     /// Calls the index port; its failure rolls the change back, a storage failure keeping its own classification.
-    private func reindex(_ item: ReplicaItemKey, in session: SQLiteSession) throws {
+    func reindex(_ item: ReplicaItemKey, in session: SQLiteSession) throws {
         guard let indexing else { return }
         do {
             try indexing.itemChanged(item, in: session)
@@ -816,7 +830,7 @@ public final class ReplicaStore: Sendable {
     }
 
     @discardableResult
-    private func write<T>(_ body: (SQLiteSession) throws -> T) throws(ReplicaStoreError) -> T {
+    func write<T>(_ body: (SQLiteSession) throws -> T) throws(ReplicaStoreError) -> T {
         do {
             return try database.writer.writeTransaction(body)
         } catch {
@@ -824,7 +838,7 @@ public final class ReplicaStore: Sendable {
         }
     }
 
-    private func read<T>(_ body: (SQLiteSession) throws -> T) throws(ReplicaStoreError) -> T {
+    func read<T>(_ body: (SQLiteSession) throws -> T) throws(ReplicaStoreError) -> T {
         do {
             return try database.writer.readTransaction(body)
         } catch {
