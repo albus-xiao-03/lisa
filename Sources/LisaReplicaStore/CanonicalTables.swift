@@ -16,6 +16,12 @@ enum CanonicalTables {
             position: try ReplicaColumns.integer(row[1]), isRepairing: try ReplicaColumns.integer(row[2]) == 1)
     }
 
+    /// The generation whose membership records `partition` reads (0 until a repair publishes one).
+    static func publishedGeneration(_ partition: String, in session: SQLiteSession) throws -> Int64 {
+        try session.query("SELECT published_generation FROM partition_cursors WHERE partition = ?", [.text(partition)])
+            .first?.first?.integer ?? 0
+    }
+
     /// Sets a cursor; within one epoch it never moves backward.
     static func setCursor(
         _ partition: String, epoch: Identifier128, position: Int64, repairing: Bool, in session: SQLiteSession
