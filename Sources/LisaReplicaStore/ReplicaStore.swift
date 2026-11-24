@@ -508,6 +508,81 @@ public final class ReplicaStore: Sendable {
         try read { session in try RevocationTables.all(in: session) }
     }
 
+    // MARK: - Peer custody (§8.6.1, R2-SYNC-04, R2-L15)
+
+    /// Records a peer's custody acknowledgement, "Also held by <device>", after verifying it against the holder's key
+    /// from the newest verified roster. It must name a journal entry by its exact digest and come from a device that
+    /// is neither this one nor revoked. It is kept apart from Core: it never changes the entry's state, receipt,
+    /// overlay or follow-ups, and the origin never discards an operation because of it. Returns whether it was new.
+    @discardableResult
+    public func recordCustody(
+        _ signed: SignedCustodyAcknowledgement, holderKey: (Identifier128) -> P256Verifier?
+    ) throws(ReplicaStoreError) -> Bool {
+        guard let datasetID = try identity().datasetID else { throw .notEnrolled }
+        let acknowledgement: CustodyAcknowledgement
+        do {
+            acknowledgement = try CustodySigning.verify(signed, dataset: datasetID, holderKey: holderKey)
+        } catch {
+            throw .unverifiedCustody(error)
+        }
+        return try write { session in
+            guard let entry = try OperationJournal.entry(acknowledgement.operationID, in: session) else {
+                throw ReplicaStoreError.unknownOperation(acknowledgement.operationID)
+            }
+            guard entry.digest == acknowledgement.digest else {
+                throw ReplicaStoreError.custodyRefused("other bytes than the journal's")
+            }
+            guard try Self.identity(in: session).deviceID != acknowledgement.holderDeviceID else {
+                throw ReplicaStoreError.custodyRefused("this device")
+            }
+            guard try !RevocationTables.isRevoked(acknowledgement.holderDeviceID, in: session) else {
+                throw ReplicaStoreError.custodyRefused("a revoked device")
+            }
+            let holder = ReplicaColumns.id(acknowledgement.holderDeviceID)
+            let operation = ReplicaColumns.id(acknowledgement.operationID)
+            guard
+                try session.query(
+                    "SELECT 1 FROM custody_acknowledgements WHERE operation_id = ? AND peer_device = ?",
+                    [operation, holder]
+                ).isEmpty
+            else { return false }
+            try session.query(
+                """
+                INSERT INTO custody_acknowledgements (operation_id, peer_device, digest, acknowledged_at, signature)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    operation, holder, ReplicaColumns.digest(acknowledgement.digest),
+                    .integer(acknowledgement.acknowledgedAt), ReplicaColumns.bytes(signed.signature),
+                ])
+            return true
+        }
+    }
+
+    /// The peers that acknowledged holding an operation's exact bytes, by device ID.
+    public func custody(of operationID: Identifier128) throws(ReplicaStoreError) -> [Identifier128] {
+        try read { session in try Self.holders(of: operationID, in: session) }
+    }
+
+    /// The three kinds of safety of one journal entry, never merged (§8.6.1): saved here, held by peers, and synced
+    /// with Core, which only a final Core acceptance gives. `nil` for an operation the journal doesn't hold.
+    public func safety(of operationID: Identifier128) throws(ReplicaStoreError) -> OperationSafety? {
+        try read { session in
+            guard let entry = try OperationJournal.entry(operationID, in: session) else { return nil }
+            let synced = entry.state == .accepted || entry.state == .acceptedWithConflict
+            return OperationSafety(
+                savedOnThisDevice: true, heldBy: try Self.holders(of: operationID, in: session), syncedWithCore: synced,
+                commitEpoch: synced ? entry.commitEpoch : nil, commitPosition: synced ? entry.commitPosition : nil)
+        }
+    }
+
+    static func holders(of operationID: Identifier128, in session: SQLiteSession) throws -> [Identifier128] {
+        try session.query(
+            "SELECT peer_device FROM custody_acknowledgements WHERE operation_id = ? ORDER BY peer_device",
+            [ReplicaColumns.id(operationID)]
+        ).map { try ReplicaColumns.identifier($0[0]) }
+    }
+
     // MARK: - Change pages and partition cursors (§8.4.2, §8.4.3)
 
     /// The cursor of `partition`, if the replica covers it.
