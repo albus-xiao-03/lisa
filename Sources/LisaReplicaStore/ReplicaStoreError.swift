@@ -36,6 +36,8 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case indexFailed(String)
     /// The reader monitor released this long read (its budget, or storage); retry it later (§8.15.2).
     case readerReleased(String)
+    /// The item reached an advisory aggregate limit (1,000 notes): the app asks the owner to archive (§8.3.2).
+    case aggregateLimit(String)
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
