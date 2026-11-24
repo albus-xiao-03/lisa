@@ -32,6 +32,9 @@ enum LocalChangeJournal {
                 ReplicaColumns.bytes(try encode(operations: operations, items: items)),
             ])
         try session.query("UPDATE replica_identity SET local_generation = ? WHERE singleton = 1", [.integer(next)])
+        // Staged partition repairs keep up with every local change (§8.4.3 step 3). Their derived rows have no local
+        // overlay yet, so keeping up is advancing the watermark; views and search entries joining them recompute here.
+        try session.query("UPDATE repairs SET overlay_watermark = ?", [.integer(next)])
         return next
     }
 
