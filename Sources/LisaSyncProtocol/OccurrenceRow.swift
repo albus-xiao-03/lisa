@@ -1,6 +1,7 @@
 // A calendar occurrence as Core derives it and replicas receive it (plan §8.4.2, §8.3.5: derived records replicate as
 // derived records, outside owner merge): its source, title and timing. A timed occurrence keeps its zone
-// classification (`utc`, `floating`, or an IANA zone) for re-expansion when the planning zone changes; an all-day one
+// classification — `utc`, an IANA zone, `floating`, or `unknown` (a TZID R1 didn't know, resolved like floating) — and,
+// when it moves with the zone, the zone it was expanded in and, when retained, its original civil times; an all-day one
 // keeps its dates, which every reader turns into instants in the current planning zone.
 
 /// One occurrence row.
@@ -12,11 +13,36 @@ public struct OccurrenceRow: Hashable, Sendable {
         case allDay(firstDate: String, endDate: String)
     }
 
+    /// The original civil start and end (`YYYY-MM-DDTHH:MM`) of an occurrence that moves with the zone, when retained
+    /// (§8.4.2 "Source time evidence"); a migrated row may lack them.
+    public struct Civil: Hashable, Sendable {
+        public let start: String
+        public let end: String
+
+        public init(start: String, end: String) throws(OperationEnvelopeError) {
+            for text in [start, end] {
+                let parts = text.split(separator: "T", omittingEmptySubsequences: false)
+                guard parts.count == 2, WireDeadline.isCalendarDate(String(parts[0])), parts[1].utf8.count == 5,
+                    parts[1].utf8.enumerated().allSatisfy({
+                        $0.offset == 2 ? $0.element == 0x3A : (0x30...0x39).contains($0.element)
+                    })
+                else { throw .invalidField("occurrence.civil") }
+            }
+            self.start = start
+            self.end = end
+        }
+    }
+
     public let sourceID: String
     public let title: String
     public let timing: Timing
+    /// For a floating or unknown-zone occurrence: the planning zone its instants were expanded in.
+    public let expandedZone: String?
+    public let civil: Civil?
 
-    public init(sourceID: String, title: String, timing: Timing) throws(OperationEnvelopeError) {
+    public init(sourceID: String, title: String, timing: Timing, expandedZone: String? = nil, civil: Civil? = nil)
+        throws(OperationEnvelopeError)
+    {
         guard !sourceID.isEmpty, sourceID.utf8.count <= 128 else { throw .invalidField("occurrence.sourceID") }
         guard title.count <= 1_000 else { throw .invalidField("occurrence.title") }
         switch timing {
@@ -27,9 +53,19 @@ public struct OccurrenceRow: Hashable, Sendable {
                 end > first
             else { throw .invalidField("occurrence.timing") }
         }
+        if let expandedZone, expandedZone.isEmpty || expandedZone.utf8.count > 64 {
+            throw .invalidField("occurrence.expandedZone")
+        }
         self.sourceID = sourceID
         self.title = title
         self.timing = timing
+        self.expandedZone = expandedZone
+        self.civil = civil
+    }
+
+    /// Whether its stored instants depend on the planning zone: a floating or unknown-zone timed occurrence.
+    public var movesWithZone: Bool {
+        if case .timed(_, _, let zone) = timing { zone == "floating" || zone == "unknown" } else { false }
     }
 
     /// The buckets the occurrence belongs to.
@@ -51,10 +87,18 @@ public struct OccurrenceRow: Hashable, Sendable {
                         ("kind", .string("allDay")), ("firstDate", .string(firstDate)), ("endDate", .string(endDate)),
                     ]))
             }
-            return .object(
-                try CanonicalObject([
-                    ("sourceID", .string(sourceID)), ("title", .string(title)), ("timing", timingValue),
-                ]))
+            var pairs: [(String, CanonicalValue)] = [
+                ("sourceID", .string(sourceID)), ("title", .string(title)), ("timing", timingValue),
+            ]
+            if let expandedZone { pairs.append(("expandedZone", .string(expandedZone))) }
+            if let civil {
+                pairs.append(
+                    (
+                        "civil",
+                        .object(try CanonicalObject([("start", .string(civil.start)), ("end", .string(civil.end))]))
+                    ))
+            }
+            return .object(try CanonicalObject(pairs))
         }
     }
 
@@ -75,8 +119,15 @@ public struct OccurrenceRow: Hashable, Sendable {
             try timing.finish()
             let sourceID = try reader.string("sourceID")
             let title = try reader.string("title")
+            let expandedZone = try reader.optionalString("expandedZone")
+            var civil: Civil?
+            if let object = try reader.optionalObject("civil") {
+                var fields = CanonicalFieldReader(object: object)
+                civil = try Civil(start: try fields.string("start"), end: try fields.string("end"))
+                try fields.finish()
+            }
             try reader.finish()
-            try self.init(sourceID: sourceID, title: title, timing: decoded)
+            try self.init(sourceID: sourceID, title: title, timing: decoded, expandedZone: expandedZone, civil: civil)
         } catch let error as OperationEnvelopeError {
             throw error
         } catch let error as CanonicalFieldError {
