@@ -28,4 +28,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let enrollmentRequest = SigningDomain("lisa-r2-enroll-request-v1\n")
     /// Nearby session authentication (plan §8.7).
     public static let nearbyAuthentication = SigningDomain("lisa-nearby-auth-v1\n")
+    /// The header of a paged artifact: rosters with key history, causal summaries, snapshot manifests (plan §8.1.3).
+    public static let pagedArtifactHeader = SigningDomain("lisa-r2-paged-artifact-v1\n")
 }
