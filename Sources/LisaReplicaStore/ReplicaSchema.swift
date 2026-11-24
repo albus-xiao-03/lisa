@@ -162,25 +162,22 @@ enum ReplicaSchema {
           PRIMARY KEY (entity_type, entity_id)
         ) STRICT, WITHOUT ROWID
         """,
-        // Bounded pieces with their authority, commit position and observed set (§8.3.2).
+        // Canonical state from Core (§8.4.2): every operation a change page or snapshot delivered as committed, at its
+        // epoch and position. It is kept apart from the journal, so an installation can replace it without touching
+        // local work (§8.6.3); the effective view merges it with the journal's pending operations.
         """
-        CREATE TABLE pieces (
-          piece_id BLOB PRIMARY KEY CHECK (length(piece_id) = 16),
+        CREATE TABLE canonical_operations (
+          operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
           entity_type TEXT NOT NULL,
           entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
-          field TEXT NOT NULL,
-          operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
-          authority TEXT NOT NULL CHECK (authority IN ('owner', 'model', 'source', 'ambiguous')),
-          value BLOB NOT NULL,
-          observed BLOB,
-          commit_epoch BLOB CHECK (commit_epoch IS NULL OR length(commit_epoch) = 16),
-          commit_partition TEXT,
-          commit_position INTEGER,
-          CHECK ((commit_epoch IS NULL) = (commit_position IS NULL)
-            AND (commit_epoch IS NULL) = (commit_partition IS NULL))
+          body BLOB NOT NULL,
+          signature BLOB NOT NULL CHECK (length(signature) = 64),
+          epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+          position INTEGER NOT NULL CHECK (position >= 1),
+          decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict'))
         ) STRICT
         """,
-        "CREATE INDEX pieces_by_field ON pieces (entity_type, entity_id, field)",
+        "CREATE INDEX canonical_operations_by_item ON canonical_operations (entity_type, entity_id)",
         // Partition cursors and repairs, membership records and deferred pages (§8.4.2, §8.4.3).
         """
         CREATE TABLE partition_cursors (
@@ -206,6 +203,7 @@ enum ReplicaSchema {
           from_position INTEGER NOT NULL CHECK (from_position >= 0),
           to_position INTEGER NOT NULL,
           page BLOB NOT NULL,
+          signature BLOB NOT NULL CHECK (length(signature) = 64),
           CHECK (to_position > from_position)
         ) STRICT
         """,
