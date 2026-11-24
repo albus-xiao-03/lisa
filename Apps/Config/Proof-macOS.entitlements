@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- PROOF ONLY: Lisa Proof for the Mac. Sandboxed like the R2 Mac app is to be checked (E-10), so X1 also observes
+     SecIdentity formation and listening in a sandbox: network client and server. The keychain access group gives the
+     data-protection Keychain (needed for Secure Enclave keys on the Mac) a provisioned application identifier. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)org.example.lisa.proof</string>
+	</array>
+</dict>
+</plist>
