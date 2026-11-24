@@ -479,3 +479,20 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m2/suite-after-resolution-groups-20261124T214107Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
 - **What this leaves of S-07:** the replica part's three cases (the largest values, concurrent maximum-size edits and notes, the four-page group) now have M2 evidence in M2-5 and M2-8. Exports (M5) and Core (M3) remain.
+
+### M2-9 LisaTime: the monotonic clock with boot time (plan §7.2.2, §7.2.3, §8.11.4)
+
+- **Code:** `6279859` → `437ca91`: `MonotonicInstant`, the `MonotonicClock` port, `BootTimeClock` (CLOCK_BOOTTIME on Linux, CLOCK_MONOTONIC on Apple platforms) and `ManualMonotonicClock`.
+- **Harness:** `m2/harness-v26/`.
+  - **First run:** 2 of 3 passed. The arithmetic test found a real bug: a move by a duration too large for 64-bit nanoseconds was capped at about 292 years instead of saturating at the largest instant.
+  - **Fix, in the product, before the commit:** moves now saturate on any overflow, never below boot and never past the largest instant.
+  - **Since then:** 3/3, with the harness unchanged.
+- **Cases:**
+  - The boot clock never went back over 100,000 reads.
+  - The boot clock read 4,685.2369 s, between two reads of `/proc/uptime` by another process (4,685.23 s both, at its 10 ms resolution). So it is the kernel's boot-time clock, shared across processes.
+  - Instant arithmetic saturates at both ends.
+  - The manual clock ignores a backward move.
+- **Not run here:** a wall-clock step. Changing this host's clock needs root, and the boot clock doesn't read the wall clock.
+- **Full build and R1 suite:** `m2/suite-after-monotonic-clock-20261124T214341Z/`: debug build 0 warnings, 376 tests in 66 suites passed. `LisaTime` is linked by R1, so this run exercised the change.
+  - **Correction to commit `437ca91`'s message:** the build relinked the suite's test library `LisaTests.so` (`443303a7…`, `testlib.sha256`). The runner launcher was rewritten but is byte-identical (`8816964d…`), because the suite's code is in the library.
+- **Result: PASS.** The clock's users (timeouts, backoff, freshness, `health.json`) adopt it at their milestones.
