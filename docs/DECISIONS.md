@@ -780,3 +780,16 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - the remaining time is planned as further parts around the held one, with IDs that never repeat a held block's;
   - when the remaining time does not fit, it is reported as unscheduled with the minutes left;
   - a task that is not splittable stays as the owner placed it.
+
+## D-53 — Dependency versions after the R1 freeze (R2 M0, run 20261124-r2-5462)
+
+- **Permission.** The owner's start instruction of 2026-11-24 allows existing dependency versions to change after R1 is frozen, when necessary or beneficial: swift-crypto 5.1.2 first, an assessment of SwiftNIO 2.105.1, and any other change justified against the project's actual use (`DEVELOPMENT-ENVIRONMENT-REPORT.md` §13). P-08 (swift-certificates) is unchanged. The frozen R1 artifacts keep R1's own lockfile (SHA-256 `9608e8e0…a37494`), so this change never reaches them.
+- **swift-crypto 5.1.1 → 5.1.2: adopted.**
+  - Revision `f8fad2f95ad67b45f6340c0960e2396094d67e07` → `3280a5f72874d2f73bf25551bbb64f524c76d834`, the commit of the upstream 5.1.2 tag.
+  - Why: 5.1.2 fixes GHSA-rch3-xxjq-365j (critical: X25519 key agreement accepted low-order public keys and returned the all-zero shared secret) and GHSA-c24m-vphm-p22w (medium: `KDF.Scrypt.deriveKey` did not enforce `maxMemory`). R1 calls neither, but the code is linked into every product that links `LisaCrypto`, and R2's `LisaCrypto` adds key agreement and HPKE helpers (plan §7.2.2).
+  - Compatibility: the manifest change is a comment, so no requirement moves; swift-asn1 stays 1.7.4; P-08's candidate swift-certificates range `3.12.3..<6.0.0` still contains it.
+  - Lockfile: only the swift-crypto pin and `originHash` change; SHA-256 `9608e8e0…a37494` → `f846319595094d9399eccd89f565e571db298f5dab8c46543bcd7d95bc91e776`. Commits `9e35866` (`Package.swift`) and `fd94a78` (`Package.resolved`, the buildable checkpoint).
+  - Regression: the unmodified R1 suite passes 376 tests in 66 suites in debug and release with Swift 6.4.2 and 6.4.3, with 0 warnings, and the demo passes 30 of 30 (`docs/VERIFICATION-SCENARIOS.md`).
+- **swift-nio 2.105.0 → 2.105.1: assessed, not adopted.** Its four changes: temporary directories created through `NIOFS` and `_NIOFileSystem` get owner-only permissions; the event loop's `autoreleasepool` is guarded by `canImport(ObjectiveC)`; a fix in `NIOTestUtils`' HTTP/1 test server; a CMake script. Lisa imports only `NIOCore`, `NIOHTTP1`, `NIOPosix` and `NIOSSL` and creates no temporary directory through `NIOFS`, so none of them changes Lisa's behavior. To be re-assessed if R2 adopts `NIOFS`.
+- **swift-nio-ssl 2.37.6 → 2.37.7 and swift-asn1 1.7.4 → 1.7.5: not adopted.** The first only guards `Security.framework` use with `canImport(Security)` for Apple builds of `NIOSSL`, which no Lisa Apple target links; the second changes only CMake files.
+- **Sources.** GitHub's public compare and security-advisory data for apple/swift-crypto, apple/swift-nio, apple/swift-nio-ssl and apple/swift-asn1, read without credentials on 2026-11-24.
