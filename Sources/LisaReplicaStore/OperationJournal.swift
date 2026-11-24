@@ -12,17 +12,17 @@ enum OperationJournal {
         from_draft
         """
 
-    /// Stores a new operation as pending and in the effective view.
+    /// Stores a new operation: pending and an overlay, or `revoked` and out of the view.
     static func insert(
         _ operation: SignedOperation, envelope: OperationEnvelope, digest: Digest256, source: JournalEntry.Source,
-        generation: Int64, fromDraft: Bool, in session: SQLiteSession
+        generation: Int64, fromDraft: Bool, state: ReplicaOperationState = .pending, in session: SQLiteSession
     ) throws {
         let triple = envelope.origin.deviceTriple
         try session.query(
             """
             INSERT INTO operations (operation_id, digest, body, signature, origin_device, origin_incarnation,
               origin_sequence, entity_type, entity_id, operation_type, source, state, overlay, stored_generation, from_draft)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ReplicaColumns.id(envelope.operationID), ReplicaColumns.digest(digest),
@@ -30,7 +30,8 @@ enum OperationJournal {
                 ReplicaColumns.optionalID(triple?.device), ReplicaColumns.optionalID(triple?.incarnation),
                 ReplicaColumns.optionalInteger(triple?.sequence), .text(envelope.entityType),
                 ReplicaColumns.id(envelope.entityID), .text(envelope.operationType), .text(source.rawValue),
-                .integer(generation), .integer(fromDraft ? 1 : 0),
+                .text(state.rawValue), .integer(state == .revoked ? 0 : 1), .integer(generation),
+                .integer(fromDraft ? 1 : 0),
             ])
     }
 
