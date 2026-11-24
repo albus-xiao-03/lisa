@@ -169,6 +169,35 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
   - `task.complete`, `task.cancel`, `item.delete`: `{}`
 - **Merged state** (`LisaMerge.TaskMergeState`, `docs/CONFLICTS.md`): one register per field, note pieces, one observed-remove set per tag, terminal actions and the tombstone.
 
+## 8a. Change pages (plan §8.4.2)
+
+A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "entries", "epochID", "fromPosition", "partitions", "toPosition"}` (`ChangePage`). Core signs it raw, over `lisa-r2-change-page-v1\n` ‖ body (`ChangePageSigning`), and relays forward the exact bytes (`SignedChangePage`).
+- **The page:**
+  - `partitions` is 1–256 names (1–128 bytes each), strictly ascending in Unicode scalar order.
+  - `fromPosition` is ≥ 0 and `toPosition` is greater than it.
+  - `entries` is strictly ascending by position. Every entry lies in `(from, to]` and touches at least one listed partition.
+- **What a page proves:** for every partition it lists, the page's entries are all the entries in `(from, to]` touching that partition. A listed partition without entries is proved unchanged over the interval. A page is self-contained.
+- **An entry** (`ChangeEntry`) is `{"decision", "operation": {"body", "signature"}, "partitions", "position"}`:
+  - `decision` is `accepted`, `accepted_with_conflict` or `rejected` (every decision is an entry, §8.2.1);
+  - the operation's exact signed bytes are base64url;
+  - `partitions` is the 1–64 partitions it touches, strictly ascending;
+  - `position` is ≥ 1.
+  - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`). Windowed bucket ranges join with their collections' schemas.
+- **On a replica** (`ReplicaStore.applyChangePage`):
+  - **Verified whole first:** Core's signature, the page's form, the dataset, and every entry's operation by the roster (the replica's own device included). Anything invalid refuses the page, and nothing changes.
+  - **Then, per listed partition with cursor `c`:**
+    - under repair → deferred, and applied after the repair publishes;
+    - `to ≤ c` → ignored;
+    - `from ≤ c < to` → the entries in `(c, to]` are applied, and `c` becomes `to`;
+    - `c < from` → a gap, and the cursor stays;
+    - another epoch → refused for that partition;
+    - no cursor → applied only if the page starts at 0.
+  - **Each entry applies once,** and only when its position is above its row's version:
+    - a committed entry joins canonical state, and the journal's copy, if any, records the commit and stops being an overlay;
+    - a rejected entry leaves the view;
+    - either way, its causal decision releases its dependents.
+  - Nothing missing from a page is read as deleted.
+
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
 Rosters with key history, causal summaries, snapshot manifests and reviewed-set artifacts can span several pages:
@@ -188,4 +217,4 @@ Rosters with key history, causal summaries, snapshot manifests and reviewed-set 
 
 ## 11. Not yet specified here
 
-The payloads of the other operation types (captures, ideas, reminders, occurrences, proposals, preferences, plans, suggestions, conflicts, devices, authority writes, restores), receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
+The payloads of the other operation types (captures, ideas, reminders, occurrences, proposals, preferences, plans, suggestions, conflicts, devices, authority writes, restores), receipts, dependency release, windowed partitions' bucket ranges and interval coverage, membership records, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
