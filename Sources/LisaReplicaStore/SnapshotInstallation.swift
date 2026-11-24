@@ -112,6 +112,7 @@ extension ReplicaStore {
                 throw .unverified(error)
             }
         }
+        try requireRoomBeyondReserve(estimate: 2 * page.bytes.count)
         try write { session in
             let names = chunk.partitions.joined(separator: "\n")
             if let current = state.partitions {
@@ -152,7 +153,8 @@ extension ReplicaStore {
     /// Builds the staged index entries of at most 256 pending items from the staged view; returns how many remain.
     @discardableResult
     public func buildStagedIndexStep() throws(ReplicaStoreError) -> Int {
-        try write { session in
+        try requireRoomBeyondReserve(estimate: 1 << 20)
+        return try write { session in
             let rows = try session.query(
                 "SELECT entity_type, entity_id FROM installation_pending ORDER BY entity_type, entity_id LIMIT ?",
                 [.integer(Int64(Self.indexBuildStep))])
@@ -182,7 +184,8 @@ extension ReplicaStore {
     /// one short transaction. Returns the changes applied.
     @discardableResult
     public func catchUpPass() throws(ReplicaStoreError) -> Int {
-        try write { session in
+        try requireRoomBeyondReserve(estimate: 1 << 20)
+        return try write { session in
             guard let state = try Self.installationState(in: session) else { throw ReplicaStoreError.noInstallation }
             let changes = try LocalChangeJournal.changes(
                 after: state.appliedGeneration, limit: Self.catchUpPassChanges, in: session)
@@ -210,6 +213,7 @@ extension ReplicaStore {
     /// The installation point: one write transaction that evaluates the backlog before applying anything, then either
     /// invalidates the staging or applies the backlog and swaps. A truncating checkpoint follows a swap (§8.15.2).
     public func installSnapshot() throws(ReplicaStoreError) -> SnapshotInstallationOutcome {
+        try requireRoomBeyondReserve(estimate: 1 << 20)
         let outcome = try write { session -> SnapshotInstallationOutcome in
             guard let state = try Self.installationState(in: session) else { throw ReplicaStoreError.noInstallation }
             let staged = try session.query("SELECT count(*) FROM installation_chunks").first?.first?.integer ?? 0
