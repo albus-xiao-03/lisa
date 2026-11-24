@@ -37,7 +37,9 @@ enum DerivedRows {
                 "SELECT version FROM derived_rows WHERE record_type = ? AND record_id = ? AND generation = ?",
                 [.text(record.type), id, .integer(generation)]
             ).first?.first?.integer
-        let range = record.occurrence?.buckets
+        let occurrence = record.occurrence
+        let proof = record.zoneProof
+        let range = occurrence?.buckets ?? proof?.buckets
         if current.map({ position > $0 }) ?? true {
             let body: SQLiteValue
             if let row = record.row {
@@ -47,15 +49,20 @@ enum DerivedRows {
             }
             try session.query(
                 """
-                INSERT INTO derived_rows (record_type, record_id, generation, version, body, first_bucket, last_bucket)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO derived_rows (record_type, record_id, generation, version, body, first_bucket, last_bucket,
+                  source_id, zone, zone_dependent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (record_type, record_id, generation) DO UPDATE SET version = excluded.version,
-                  body = excluded.body, first_bucket = excluded.first_bucket, last_bucket = excluded.last_bucket
+                  body = excluded.body, first_bucket = excluded.first_bucket, last_bucket = excluded.last_bucket,
+                  source_id = excluded.source_id, zone = excluded.zone, zone_dependent = excluded.zone_dependent
                 """,
                 [
                     .text(record.type), id, .integer(generation), .integer(position), body,
                     ReplicaColumns.optionalInteger(range?.lowerBound),
                     ReplicaColumns.optionalInteger(range?.upperBound),
+                    ReplicaColumns.optionalText(occurrence?.sourceID ?? proof?.sourceID),
+                    ReplicaColumns.optionalText(occurrence?.expandedZone ?? proof?.zone),
+                    .integer(occurrence?.movesWithZone == true ? 1 : 0),
                 ])
         }
         for (partition, membershipGeneration) in partitions {
