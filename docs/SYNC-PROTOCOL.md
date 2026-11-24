@@ -177,12 +177,20 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
   - `fromPosition` is ≥ 0 and `toPosition` is greater than it.
   - `entries` is strictly ascending by position. Every entry lies in `(from, to]` and touches at least one listed partition.
 - **What a page proves:** for every partition it lists, the page's entries are all the entries in `(from, to]` touching that partition. A listed partition without entries is proved unchanged over the interval. A page is self-contained.
-- **An entry** (`ChangeEntry`) is `{"decision", "operation": {"body", "signature"}, "partitions", "position"}`:
+- **An operation entry** (`ChangeEntry`) is `{"decision", "operation": {"body", "signature"}, "partitions", "position"}`:
   - `decision` is `accepted`, `accepted_with_conflict` or `rejected` (every decision is an entry, §8.2.1);
   - the operation's exact signed bytes are base64url;
-  - `partitions` is the 1–64 partitions it touches, strictly ascending;
+  - `partitions` is the 1–256 partitions it touches, strictly ascending;
   - `position` is ≥ 1.
-  - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`). Windowed bucket ranges join with their collections' schemas.
+  - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`).
+- **A derived-record entry** is `{"partitions", "position", "record": {"id", "row": <row> | null, "type": "occurrence"}}`: a row Core computed, or its deletion (`DerivedRecord`, plan §8.3.5). It has no signature of its own; the Core-signed page or snapshot vouches for it.
+  - **An occurrence row** (`OccurrenceRow`) is `{"sourceID", "timing", "title"}`. The timing is `{"kind":"timed","start","end","zone"}`, in UTC milliseconds with `end ≥ start` and a zone of `utc`, `floating` or an IANA name; or `{"kind":"allDay","firstDate","endDate"}`, with the end exclusive.
+  - **Calendar partitions are UTC days, named `occurrences/<n>`** (`CalendarBuckets`). Bucket n covers `[n × 86,400,000, (n + 1) × 86,400,000)`.
+  - **An occurrence belongs to every bucket its interval overlaps:**
+    - a timed `[start, end)` covers each bucket it overlaps;
+    - a zero-length event, its start's bucket;
+    - all-day dates are widened by a day on each side, `day(first) − 1` through `day(end)`.
+  - **Which buckets an entry names:** the buckets of the row's old and new ranges, so a move reaches the buckets it left. A deletion names the range the row last occupied.
 - **On a replica** (`ReplicaStore.applyChangePage`):
   - **Verified whole first:** Core's signature, the page's form, the dataset, and every entry's operation by the roster (the replica's own device included). Anything invalid refuses the page, and nothing changes.
   - **Then, per listed partition with cursor `c`:**
@@ -192,7 +200,11 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
     - `c < from` → a gap, and the cursor stays;
     - another epoch → refused for that partition;
     - no cursor → applied only if the page starts at 0.
-  - **Each entry applies once,** and only when its position is above its row's version:
+  - **A derived record** changes its row only above the row's version. For each bucket it touches, it records whether that bucket's proof delivered the row, and at which version (a membership record).
+  - **The absence rule:** a bucket lists a row whose range overlaps it when its own proof delivered the row at its current version, or when the row's version is above the bucket's cursor (delivered through another bucket, until this one catches up). Otherwise the row is absent from that bucket.
+  - **A bucket repair publishes** a Core-signed paged artifact of type `bucket-snapshot` (version = the cut). Its chunks name only that bucket and list its members as record entries; the bucket's membership becomes exactly that.
+  - **A window roll** drops a bucket's cursor and memberships, and drops a row only when no covered bucket overlaps it.
+  - **Each operation entry applies once,** and only when its position is above its row's version:
     - a committed entry joins canonical state, and the journal's copy, if any, records the commit and stops being an overlay;
     - a rejected entry leaves the view;
     - either way, its causal decision releases its dependents.
