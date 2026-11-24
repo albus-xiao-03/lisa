@@ -1,0 +1,34 @@
+{
+  "configurations": [
+    {
+      "id": "CF2827F5-53B3-54DC-892E-F6A53FB04029",
+      "name": "X1",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "targetForVariableExpansion": {
+      "containerPath": "container:Lisa.xcodeproj",
+      "identifier": "LisaProof",
+      "name": "LisaProof"
+    },
+    "testTimeoutsEnabled": true
+  },
+  "testTargets": [
+    {
+      "target": {
+        "containerPath": "container:Lisa.xcodeproj",
+        "identifier": "LisaOwnerUITests-iOS",
+        "name": "LisaOwnerUITests-iOS"
+      }
+    },
+    {
+      "target": {
+        "containerPath": "container:Lisa.xcodeproj",
+        "identifier": "LisaOwnerUITests-macOS",
+        "name": "LisaOwnerUITests-macOS"
+      }
+    }
+  ],
+  "version": 1
+}
