@@ -40,6 +40,13 @@ public final class SQLiteDatabase: @unchecked Sendable {
     /// The SQLite library version, such as `3.46.1`.
     public static var libraryVersion: String { String(cString: sqlite3_libversion()) }
 
+    /// Interrupts the statement running on this connection (`sqlite3_interrupt`): it fails with `SQLITE_INTERRUPT`,
+    /// and the transaction it belongs to ends when its closure returns. Safe to call from another thread while a
+    /// statement runs inside `perform` (plan §8.15.2, the reader monitor).
+    public func interrupt() {
+        sqlite3_interrupt(handle)
+    }
+
     /// Runs `body` with exclusive use of the connection. Using the connection again from inside `body` on the same
     /// thread is a programming error: it fails immediately instead of deadlocking.
     @discardableResult
