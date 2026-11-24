@@ -120,7 +120,7 @@ Run `20261124-r2-5462`, from M0 (2026-11-24). The R1 rows above keep the statuse
 |---|---|---|---|
 | R2-L01 Portable debug and release builds without Apple SDKs | M0 first, M9 final | First run **PASS** for the R1 package (Claude): debug and release, 0 warnings, Swift 6.4.2 and 6.4.3 | VERIFICATION-SCENARIOS M0-1 |
 | R2-L02 Applicable R1 regression behavior remains correct | M0 baseline; repeated at M3, M5, M8, M9 | Baseline **PASS** (Claude): the unmodified R1 suite, 376 tests in 66 suites, in debug and release with both toolchains; no failure to classify; no R1 requirement replaced yet | M0-1 |
-| R2-L05 (codec), L16 (signatures, rollback), L32 (encoding) | M1 | Not run: the modules don't exist yet | — |
+| R2-L05 (codec), L16 (signatures, rollback), L32 (encoding) | M1 | M1 parts **PASS** (Claude, temporary harnesses): L05's codec (envelope, identity rules, derived value budget); L16's signatures (domain-separated signing, operation, paged-artifact and archive signatures, the dataset binding), its rollback part being M3's; L32's encoding (canonical JSON, strict base64url, the four budgets, the nearby frame header and hello form). Final at their later milestones | VERIFICATION-SCENARIOS M1-1–M1-7 |
 | R2-L03, L06 (replica), L07, L09–L12, L15, L17, L18 (replica side), L33, L35 | M2 | Not run | — |
 | R2-L04 (direct), L05, L06 (Core), L08 (Core), L13, L14, L16, L18 (Core), L28, L29, L33 (Core), L34 | M3 | Not run | — |
 | R2-D01–D04, D06–D09, D12 | M4 | Not run | — |
