@@ -7,6 +7,7 @@
 
 import Foundation
 import LisaCrypto
+import LisaMerge
 import LisaSQLite
 import LisaSyncProtocol
 import LisaTrust
@@ -222,6 +223,8 @@ public final class ReplicaStore: Sendable {
         try OperationJournal.insert(
             operation, envelope: envelope, digest: OperationDigest.of(body: body), source: .local,
             generation: generation, fromDraft: fromDraft, in: session)
+        // A local operation enters the effective view at once; its marker later releases relayed dependents.
+        try CausalReleaseTables.decide(operationID, .applied, in: session)
         try reindex(command.item, in: session)
         try FollowUpQueue.add(.submit, operationID, generation: generation, in: session)
         return .saved(
@@ -328,7 +331,10 @@ public final class ReplicaStore: Sendable {
                 try OperationJournal.insert(
                     operation, envelope: envelope, digest: digest, source: .relayed, generation: generation,
                     fromDraft: false, in: session)
-                try self.reindex(item, in: session)
+                // It enters the effective view when a release step finds every dependency decided (§8.2.2).
+                _ = try CausalReleaseTables.intake(
+                    envelope.operationID, origin: envelope.origin.deviceTriple?.device ?? Self.coreOrigin,
+                    dependencies: envelope.dependencies, in: session)
                 return .stored(generation: generation)
             }
         }
@@ -362,7 +368,10 @@ public final class ReplicaStore: Sendable {
             try LocalChangeJournal.append(
                 rejected ? .rejection : .receipt, operations: [receipt.operationID], items: [entry.item], in: session)
             try OperationJournal.record(receipt, overlay: entry.isOverlay && !rejected, in: session)
-            if rejected { try self.reindex(entry.item, in: session) }
+            if rejected {
+                try CausalReleaseTables.decide(receipt.operationID, .rejected, in: session)
+                try self.reindex(entry.item, in: session)
+            }
             try FollowUpQueue.remove(.submit, receipt.operationID, in: session)
             return true
         }
@@ -409,6 +418,93 @@ public final class ReplicaStore: Sendable {
             else { return nil }
             return (try ReplicaColumns.integer(row[0]), ReplicaColumns.optionalBytes(row[1]))
         }
+    }
+
+    // MARK: - Causal release and the effective view (§8.2.2, §8.6.1)
+
+    /// The origin key of Core's legacy translation in round-robin release.
+    // Sixteen bytes always make an identifier.
+    static let coreOrigin = try! Identifier128(bytes: [UInt8](repeating: 0, count: 16))
+
+    /// Runs one causal step in its own transaction: an expansion step while a marker is left, otherwise a release step,
+    /// whose operations enter the effective view (one local change, the index updated).
+    @discardableResult
+    public func causalStep() throws(ReplicaStoreError) -> CausalStep {
+        try write { session in
+            if let (edges, enqueued) = try CausalReleaseTables.expansionStep(in: session) {
+                return .expanded(edges: edges, enqueued: enqueued)
+            }
+            let released = try CausalReleaseTables.releaseStep(in: session)
+            guard !released.isEmpty else { return .idle }
+            var items: [ReplicaItemKey] = []
+            for operation in released {
+                guard let entry = try OperationJournal.entry(operation, in: session) else {
+                    throw ReplicaStoreError.corrupt("a released operation isn't in the journal")
+                }
+                if !items.contains(entry.item) { items.append(entry.item) }
+            }
+            try LocalChangeJournal.append(.journalEntry, operations: released, items: items, in: session)
+            for item in items { try self.reindex(item, in: session) }
+            return .released(released)
+        }
+    }
+
+    /// Runs causal steps until nothing is left or `maxSteps` ran; returns the steps that did work.
+    @discardableResult
+    public func drainCausalRelease(maxSteps: Int = .max) throws(ReplicaStoreError) -> Int {
+        var steps = 0
+        while steps < maxSteps, try causalStep() != .idle { steps += 1 }
+        return steps
+    }
+
+    /// Operations waiting for dependencies, ready to release, and markers to expand.
+    public func causalBacklog() throws(ReplicaStoreError) -> (waiting: Int, ready: Int, markers: Int) {
+        try read { session in try CausalReleaseTables.counts(in: session) }
+    }
+
+    /// The effective view of one task (plan §8.6.1), or `nil` when the replica holds nothing of it.
+    public func taskView(_ entityID: Identifier128) throws(ReplicaStoreError) -> TaskView? {
+        try read { session in try Self.taskView(entityID, in: session) }
+    }
+
+    /// The effective view of one task inside the caller's transaction, for `ReplicaIndexing`: every journal entry of
+    /// it that entered the view and wasn't rejected, with its commit position when known, and its held drafts, merged
+    /// by `TaskMergeState`. Merging is a join, so the order of application doesn't change the result; causal order
+    /// decides only what has entered the view.
+    public static func taskView(_ entityID: Identifier128, in session: SQLiteSession) throws -> TaskView? {
+        let item = ReplicaItemKey(entityType: "task", entityID: entityID)
+        let partition = CollectionPartition.name(forEntityType: "task") ?? "tasks"
+        let rows = try session.query(
+            """
+            SELECT o.body, o.commit_epoch, o.commit_position FROM operations o
+            JOIN causal_decisions d ON d.operation_id = o.operation_id AND d.decision = 'applied'
+            WHERE o.entity_type = ? AND o.entity_id = ? AND o.state != 'rejected'
+            """, [.text(item.entityType), ReplicaColumns.id(entityID)])
+        let drafts = try DraftStore.held(for: item, in: session)
+        guard !rows.isEmpty || !drafts.isEmpty else { return nil }
+        var state = TaskMergeState()
+        for row in rows {
+            let envelope = try OperationEnvelope.decode(body: ReplicaColumns.bytes(row[0]))
+            guard ItemOperationPayload.operationTypes.contains(envelope.operationType) else { continue }
+            let payload = try ItemOperationPayload(operationType: envelope.operationType, payload: envelope.payload)
+            var commit: CommitPosition?
+            if let epoch = try ReplicaColumns.optionalIdentifier(row[1]),
+                let position = ReplicaColumns.optionalInteger(row[2])
+            {
+                commit = CommitPosition(epochID: epoch, partition: partition, position: position)
+            }
+            state.apply(
+                payload, id: envelope.operationID, observed: envelope.observed.map(ObservedCoverage.init) ?? .nothing,
+                commit: commit)
+        }
+        for draft in drafts {
+            guard ItemOperationPayload.operationTypes.contains(draft.command.operationType) else { continue }
+            let payload = try ItemOperationPayload(
+                operationType: draft.command.operationType, payload: draft.command.payload)
+            state.apply(
+                payload, id: draft.operationID, observed: draft.command.observed.map(ObservedCoverage.init) ?? .nothing)
+        }
+        return state.view
     }
 
     // MARK: - Reading
