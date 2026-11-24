@@ -34,6 +34,8 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case datasetMismatch
     /// The index couldn't follow the change (`ReplicaIndexing`), so the change was rolled back.
     case indexFailed(String)
+    /// The reader monitor released this long read (its budget, or storage); retry it later (§8.15.2).
+    case readerReleased(String)
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
