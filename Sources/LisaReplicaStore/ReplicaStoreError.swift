@@ -24,6 +24,8 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case invalidCommand(OperationEnvelopeError)
     /// An arriving operation failed verification before its payload was looked at.
     case unverified(OperationVerificationError)
+    /// A change page failed verification (Core's signature, its form, the dataset) before any entry was applied.
+    case unverifiedPage(ChangePageVerificationError)
     /// The store needs an enrolled dataset and device for this.
     case notEnrolled
     /// No journal entry has this operation ID.
