@@ -838,3 +838,39 @@ Run directories exist only in this sandbox. Tracked records like this file reach
     - Search finds nothing, also after a restart.
 - **Full build and R1 suite:** `m2/suite-after-canonical-duplicates-20261124T232956Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
+
+### M2 boundary (run `20261124-r2-5462`, final: a clean reconstruction of the M2 head `815bbbc`)
+
+- **Tree:** `m2/clean-20261124T233606Z/tree`, rebuilt from `815bbbcf3dda1a32355b897ed6de6f86fa3408d5` with `git show` and checked byte for byte against `git rev-parse` (`m1/reconstruct-commit.py`): 1171 files of 815bbbcf3dda1a32355b897ed6de6f86fa3408d5, all byte-exact; manifest sha256 28e1587314e8dcb4c18931e4c78d13e7bcca7533f6ca3ad50fd0750134e0af9f.
+- **Toolchain:** Swift 6.4.2 (swift-6.4.2-RELEASE), x86_64 Debian 13 sandbox.
+- **Builds:** debug with tests 0 warnings, release 0 warnings, both exit 0.
+- **R1 suite** (unmodified): 376 tests in 66 suites passed. The runner's SHA-256 is `cd411543f1ec2107…`; it differs from the working tree's because the path differs.
+- **Fixtures:** `lisa-verify run --mode fixture`, 9 PASS (report `run-20261124T233727Z-2v5yso`).
+- **Lint:** `swift format lint -r Sources Tests Harness Apps Package.swift`. The one finding is R1's `Package.swift:172` (AddLines), unchanged since M0.
+- **Harnesses:** every current M2 harness against the clean tree, 108 tests in all, each target run alone (`make-harnesses.py`, sources byte-identical, `harnesses.manifest.tsv`). All of them passed:
+  - v6 WALGuardTests: 4 tests in 1 suite.
+  - v9 MergeTests: 7 tests in 2 suites.
+  - v10 CausalTests: 4 tests in 1 suite.
+  - v49 ReplicaStoreTests: 10 tests in 2 suites.
+  - v13 StorageTests: 5 tests in 2 suites.
+  - v15 TaskMergeTests: 7 tests in 2 suites.
+  - v19 EffectiveViewTests: 4 tests in 1 suite.
+  - v20 LocalSearchTests: 3 tests in 1 suite.
+  - v25 ResolutionTests: 6 tests in 2 suites.
+  - v26 MonotonicClockTests: 3 tests in 1 suite.
+  - v28 ChangePageTests: 6 tests in 1 suite.
+  - v30 InstallationTests: 7 tests in 1 suite.
+  - v36 CalendarBucketTests: 6 tests in 1 suite.
+  - v39 BucketRepairTests: 5 tests in 1 suite.
+  - v43 PlanningZoneTests: 4 tests in 1 suite.
+  - v46 FullSnapshotRecordTests: 2 tests in 1 suite.
+  - v48 RevocationTests: 6 tests in 1 suite.
+  - v50 CustodyTests: 4 tests in 1 suite.
+  - v51 SkewReplayTests: 4 tests in 1 suite.
+  - v35 own package: 5 tests in 2 suites.
+  - v47 own package: 6 tests in 2 suites.
+  - Packaging: nineteen ran in one package; v35 and v47 ran in their own packages, because their kill tests start the runner again with a child filter that matches both. All built in one scratch path without the index store.
+  - Superseded harnesses are kept unchanged and were not run: v12, v16, v17, v21, v24, v27, v29, v31, v33, v34, v37, v40, v41 and v44. Others never built or didn't compile: v7, v8, v11, v14, v18, v22, v23, v32, v38, v42 and v45.
+- **Disk** (free on the project volume): 7.6 GB at the start; 5.1 GB after the debug build; 4.3 GB after the harness build; 4.1 GB after the harness runs; 2.2 GB (96% used) after the release build. The clean run's build output stays in the run directory (plan §10.2).
+- **Interim boundary:** an earlier clean run on `642e955` (`m2/clean-20261124T225253Z/`, before M2-17 to M2-20) passed the same steps with 17 harnesses.
+- **Result: PASS.** The M2 milestone's builds, suite, fixtures, lint and harnesses pass on the clean M2 head.
