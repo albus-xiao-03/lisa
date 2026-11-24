@@ -469,12 +469,16 @@ public final class ReplicaStore: Sendable {
         } catch {
             throw .unverifiedPage(error)
         }
-        var envelopes: [OperationEnvelope] = []
+        // Operation entries are verified on their own; a derived record is vouched for by Core's page signature.
+        var envelopes: [OperationEnvelope?] = []
         for entry in page.entries {
+            guard let operation = entry.operation else {
+                envelopes.append(nil)
+                continue
+            }
             do {
                 envelopes.append(
-                    try OperationSigning.verify(
-                        entry.operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                    try OperationSigning.verify(operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
             } catch {
                 throw .unverified(error)
             }
@@ -509,11 +513,12 @@ public final class ReplicaStore: Sendable {
             var outcomes: [PartitionPageOutcome] = []
             for signed in try CanonicalTables.takeDeferred(partition, in: session) {
                 let page = try ChangePageSigning.verify(signed, dataset: dataset, coreKey: coreKey)
-                var envelopes: [OperationEnvelope] = []
+                var envelopes: [OperationEnvelope?] = []
                 for entry in page.entries {
                     envelopes.append(
-                        try OperationSigning.verify(
-                            entry.operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                        try entry.operation.map {
+                            try OperationSigning.verify($0, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey)
+                        })
                 }
                 if let outcome = try self.apply(
                     page, signed: signed, envelopes: envelopes, only: partition, in: session)[
@@ -527,8 +532,8 @@ public final class ReplicaStore: Sendable {
     }
 
     /// Applies a verified page inside the caller's transaction, for every listed partition or only `only`.
-    private func apply(
-        _ page: ChangePage, signed: SignedChangePage, envelopes: [OperationEnvelope], only: String?,
+    func apply(
+        _ page: ChangePage, signed: SignedChangePage, envelopes: [OperationEnvelope?], only: String?,
         in session: SQLiteSession
     ) throws -> [String: PartitionPageOutcome] {
         var outcomes: [String: PartitionPageOutcome] = [:]
@@ -560,6 +565,12 @@ public final class ReplicaStore: Sendable {
             let touched = entry.partitions.filter { partition in from[partition].map { entry.position > $0 } ?? false }
             guard !touched.isEmpty else { continue }
             for partition in touched { counts[partition, default: 0] += 1 }
+            guard let envelope else {
+                if let record = entry.record {
+                    try DerivedRows.apply(record, at: entry.position, through: touched, in: session)
+                }
+                continue
+            }
             let item = ReplicaItemKey(entityType: envelope.entityType, entityID: envelope.entityID)
             if let version = try CanonicalTables.rowVersion(item, in: session), entry.position <= version { continue }
             try applyEntry(entry, envelope: envelope, epoch: page.epochID, item: item, in: session)
@@ -586,16 +597,17 @@ public final class ReplicaStore: Sendable {
         in session: SQLiteSession
     ) throws {
         let id = ReplicaColumns.id(envelope.operationID)
-        switch entry.decision {
+        guard let decision = entry.decision, let operation = entry.operation else { return }
+        switch decision {
         case .accepted, .acceptedWithConflict:
             try CanonicalTables.insertCanonical(
-                entry.operation, envelope: envelope, epoch: epoch, position: entry.position, decision: entry.decision,
+                operation, envelope: envelope, epoch: epoch, position: entry.position, decision: decision,
                 in: session)
             try session.query(
                 """
                 UPDATE operations SET state = ?, commit_epoch = ?, commit_position = ?, overlay = 0
                 WHERE operation_id = ? AND state != 'rejected'
-                """, [.text(entry.decision.rawValue), ReplicaColumns.id(epoch), .integer(entry.position), id])
+                """, [.text(decision.rawValue), ReplicaColumns.id(epoch), .integer(entry.position), id])
             try CausalReleaseTables.decide(envelope.operationID, .applied, in: session)
         case .rejected:
             try session.query(
