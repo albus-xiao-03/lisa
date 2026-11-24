@@ -248,6 +248,11 @@ let package = Package(
         .target(
             name: "LisaVerifyKit", dependencies: ["LisaCrypto", "LisaSQLite"], path: "Harness/Sources/LisaVerifyKit"),
         .target(name: "LisaVerifyCases", dependencies: ["LisaVerifyKit"], path: "Harness/Sources/LisaVerifyCases"),
+        .executableTarget(
+            name: "lisa-verify",
+            dependencies: [
+                "LisaVerifyKit", "LisaVerifyCases", .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ], path: "Harness/Sources/lisa-verify"),
         .testTarget(
             name: "LisaTests",
             dependencies: [
