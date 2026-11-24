@@ -58,6 +58,8 @@ let package = Package(
         .library(name: "LisaTwilio", targets: ["LisaTwilio"]),
         .library(name: "LisaAPNs", targets: ["LisaAPNs"]),
         .library(name: "LisaOpenAICompatible", targets: ["LisaOpenAICompatible"]),
+        // R2 (plan §7.2.1).
+        .library(name: "LisaSyncProtocol", targets: ["LisaSyncProtocol"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -72,6 +74,8 @@ let package = Package(
     targets: [
         .target(name: "LisaRedaction"),
         .target(name: "LisaTime"),
+        // R2 wire types and canonical encoding (plan §7.2.1, §8.16): the Swift standard library only.
+        .target(name: "LisaSyncProtocol"),
         .target(name: "LisaDomain", dependencies: ["LisaTime", "LisaRedaction"]),
         .target(name: "LisaSecrets", dependencies: ["LisaRedaction"]),
         .target(name: "LisaLogging", dependencies: ["LisaRedaction"]),
