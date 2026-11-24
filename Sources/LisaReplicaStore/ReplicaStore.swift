@@ -507,6 +507,18 @@ public final class ReplicaStore: Sendable {
         return state.view
     }
 
+    /// The texts of `item`'s effective view that a search finds it by, inside the caller's transaction: a task's
+    /// surviving titles, notes and tags; nothing for a deleted item or one the replica doesn't hold.
+    public static func searchableText(of item: ReplicaItemKey, in session: SQLiteSession) throws -> [String] {
+        switch item.entityType {
+        case "task":
+            guard let view = try taskView(item.entityID, in: session), !view.isDeleted else { return [] }
+            return view.title + view.notes + view.tags
+        default:
+            return []
+        }
+    }
+
     // MARK: - Reading
 
     public func journalEntry(_ operationID: Identifier128) throws(ReplicaStoreError) -> JournalEntry? {
