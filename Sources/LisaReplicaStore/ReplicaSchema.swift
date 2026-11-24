@@ -58,7 +58,7 @@ enum ReplicaSchema {
           operation_type TEXT NOT NULL,
           source TEXT NOT NULL CHECK (source IN ('local', 'relayed')),
           state TEXT NOT NULL CHECK (state IN ('pending', 'submitted', 'waiting_for_dependencies', 'accepted',
-            'accepted_with_conflict', 'rejected')),
+            'accepted_with_conflict', 'rejected', 'revoked')),
           overlay INTEGER NOT NULL CHECK (overlay IN (0, 1)),
           receipt BLOB,
           commit_epoch BLOB CHECK (commit_epoch IS NULL OR length(commit_epoch) = 16),
@@ -307,6 +307,17 @@ enum ReplicaSchema {
           acknowledged_at INTEGER NOT NULL,
           signature BLOB NOT NULL CHECK (length(signature) = 64),
           PRIMARY KEY (operation_id, peer_device)
+        ) STRICT, WITHOUT ROWID
+        """,
+        // Device revocations from verified rosters (§8.1.3): permanent, the union of every one learned.
+        """
+        CREATE TABLE revocations (
+          device_id BLOB NOT NULL CHECK (length(device_id) = 16),
+          epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+          position INTEGER NOT NULL CHECK (position >= 0),
+          learned_at INTEGER NOT NULL,
+          learned_generation INTEGER NOT NULL,
+          PRIMARY KEY (device_id, epoch_id, position)
         ) STRICT, WITHOUT ROWID
         """,
     ]
