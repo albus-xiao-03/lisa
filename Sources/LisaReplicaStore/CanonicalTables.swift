@@ -87,14 +87,32 @@ enum CanonicalTables {
         try session.query(
             """
             INSERT OR IGNORE INTO canonical_operations
-              (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision, origin_device,
+               origin_incarnation, origin_sequence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ReplicaColumns.id(envelope.operationID), .text(envelope.entityType),
                 ReplicaColumns.id(envelope.entityID),
                 ReplicaColumns.bytes(operation.body), ReplicaColumns.bytes(operation.signature),
                 ReplicaColumns.id(epoch), .integer(position), .text(decision.rawValue),
+                ReplicaColumns.optionalID(envelope.origin.deviceTriple?.device),
+                ReplicaColumns.optionalID(envelope.origin.deviceTriple?.incarnation),
+                ReplicaColumns.optionalInteger(envelope.origin.deviceTriple?.sequence),
             ])
+    }
+
+    /// Core's decision on a canonical operation, as a journal state; `nil` when canonical state doesn't hold it.
+    static func state(of operation: Identifier128, in session: SQLiteSession) throws -> ReplicaOperationState? {
+        guard
+            let text = try session.query(
+                "SELECT decision FROM canonical_operations WHERE operation_id = ?", [ReplicaColumns.id(operation)]
+            ).first?.first?.text
+        else { return nil }
+        switch text {
+        case "accepted": return .accepted
+        case "accepted_with_conflict": return .acceptedWithConflict
+        default: throw ReplicaStoreError.corrupt("a canonical decision")
+        }
     }
 }
