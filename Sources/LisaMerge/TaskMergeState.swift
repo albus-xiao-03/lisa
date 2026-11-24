@@ -64,6 +64,13 @@ public struct TaskMergeState: Hashable, Sendable {
             edits.insert(id)
         case .itemDelete:
             tombstone.delete(id: id)
+        case .conflictResolve(_, let value):
+            // A resolution replaces exactly the candidates it observed; a group page without a value changes nothing
+            // until its group is complete, which the holder decides (plan §8.3.2).
+            if let value {
+                set(value, id: id, authority: authority, observed: observed, commit: commit)
+                edits.insert(id)
+            }
         }
     }
 
