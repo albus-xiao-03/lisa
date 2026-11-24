@@ -189,15 +189,27 @@ sudo apt-get update
 sudo apt-get install -y --no-install-recommends binutils-gold gcc libstdc++-14-dev libedit-dev libncurses-dev \
   libpython3-dev uuid-dev libicu-dev libcurl4-openssl-dev libsqlite3-dev libxml2-dev pkg-config nghttp2-server
 
-# In a directory under .tmp/ (CONSTRICTION.md). For 6.4.3, replace 6.4.2 throughout.
-B=https://download.swift.org/swift-6.4.2-release/debian13/swift-6.4.2-RELEASE/swift-6.4.2-RELEASE-debian13.tar.gz
+# In a new directory under .tmp/ (CONSTRICTION.md). For 6.4.3, set V=6.4.3.
+set -eu
+V=6.4.2
+T=swift-$V-RELEASE-debian13.tar.gz
+B=https://download.swift.org/swift-$V-release/debian13/swift-$V-RELEASE/$T
+FPR=52BB7E3DE28A71BE22EC05FFEF80A866B47A981F   # Swift 6.x Release Signing Key, pinned here, never read from a download
 curl -fsSLO "$B" && curl -fsSLO "$B.sig"
 curl -fsSL -o all-keys.asc https://www.swift.org/keys/all-keys.asc
-mkdir -m 700 gnupg && export GNUPGHOME="$PWD/gnupg" && gpg --import all-keys.asc
-gpg --verify swift-6.4.2-RELEASE-debian13.tar.gz.sig swift-6.4.2-RELEASE-debian13.tar.gz
-#   expect "Good signature" from key 52BB7E3DE28A71BE22EC05FFEF80A866B47A981F
-sudo mkdir -p /opt/swift && sudo tar -xzf swift-6.4.2-RELEASE-debian13.tar.gz -C /opt/swift
-export PATH=/opt/swift/swift-6.4.2-RELEASE-debian13/usr/bin:$PATH   # made persistent in /etc/sandbox-persistent.sh
+mkdir -m 700 gnupg && export GNUPGHOME="$PWD/gnupg"
+gpg --batch --quiet --import all-keys.asc
+gpg --batch --export "$FPR" > pinned-key.gpg   # gpgv trusts only the pinned signer, not every key in the file
+ok=1
+[ -s pinned-key.gpg ] || ok=0
+gpgv --status-fd 3 --keyring ./pinned-key.gpg "$T.sig" "$T" 3>verify.status || ok=0
+grep -q '^\[GNUPG:\] GOODSIG ' verify.status || ok=0
+awk '$1=="[GNUPG:]" && $2=="VALIDSIG" {print $NF}' verify.status | grep -qx "$FPR" || ok=0   # primary-key fingerprint
+if grep -Eq '^\[GNUPG:\] (BADSIG|ERRSIG|EXPSIG|EXPKEYSIG|REVKEYSIG|NO_PUBKEY)' verify.status; then ok=0; fi
+if [ "$ok" -ne 1 ]; then echo "no valid signature from $FPR: not extracting" >&2; exit 1; fi
+# The privileged extraction is reached only after every check above passed.
+sudo mkdir -p /opt/swift && sudo tar -xzf "$T" -C /opt/swift
+export PATH=/opt/swift/swift-$V-RELEASE-debian13/usr/bin:$PATH   # made persistent in /etc/sandbox-persistent.sh
 
 # At the project root:
 swift --version                                   # Swift version 6.4.2 (swift-6.4.2-RELEASE)
