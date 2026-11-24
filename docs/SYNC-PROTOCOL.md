@@ -184,7 +184,13 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
   - `position` is ≥ 1.
   - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`).
 - **A derived-record entry** is `{"partitions", "position", "record": {"id", "row": <row> | null, "type": "occurrence"}}`: a row Core computed, or its deletion (`DerivedRecord`, plan §8.3.5). It has no signature of its own; the Core-signed page or snapshot vouches for it.
-  - **An occurrence row** (`OccurrenceRow`) is `{"sourceID", "timing", "title"}`. The timing is `{"kind":"timed","start","end","zone"}`, in UTC milliseconds with `end ≥ start` and a zone of `utc`, `floating` or an IANA name; or `{"kind":"allDay","firstDate","endDate"}`, with the end exclusive.
+  - **An occurrence row** (`OccurrenceRow`) is `{"civil"?, "expandedZone"?, "sourceID", "timing", "title"}`. The timing is either:
+    - `{"kind":"timed","start","end","zone"}`, in UTC milliseconds with `end ≥ start`. The zone is `utc`, an IANA name, `floating`, or `unknown` (a TZID R1 didn't know, resolved like floating);
+    - or `{"kind":"allDay","firstDate","endDate"}`, with the end exclusive.
+  - **A floating or unknown-zone row moves with the zone.**
+    - `expandedZone` names the zone its instants were expanded in.
+    - `civil` holds its original civil times, `{"start","end"}` as `YYYY-MM-DDTHH:MM`, when retained. A migrated row may lack them.
+  - **A zone proof** (`ZoneProof`, type `zoneProof`) is `{"firstBucket","generation","lastBucket","sourceID","zone"}`: Core holds the source's every occurrence expanded for that zone and generation over those buckets.
   - **Calendar partitions are UTC days, named `occurrences/<n>`** (`CalendarBuckets`). Bucket n covers `[n × 86,400,000, (n + 1) × 86,400,000)`.
   - **An occurrence belongs to every bucket its interval overlaps:**
     - a timed `[start, end)` covers each bucket it overlaps;
@@ -210,6 +216,12 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
     - Readers resolve each row to its newest version among published generations, so they see one view or the other.
     - The deferred pages then apply, each in its own transaction. Superseded generations are cleaned up in bounded chunks.
   - **A window roll** drops a bucket's cursor and memberships, and drops a row only when no covered bucket overlaps it.
+  - **A local planning-zone change** (`setPlanningZone`) advances the coverage generation and marks every source with rows that move with the zone unverified, at once, even with Core offline. A source's mark clears for a bucket only with a zone proof of that source and zone covering it.
+  - **A planning day** (`planningDay`) is read from its own UTC bounds:
+    - all-day rows follow the date;
+    - zoned and UTC rows keep their instants;
+    - a floating row expanded in another zone, or from an unverified source, is shown unverified.
+    - No free time is offered from an unverified, stale or repairing day.
   - **Each operation entry applies once,** and only when its position is above its row's version:
     - a committed entry joins canonical state, and the journal's copy, if any, records the commit and stops being an overlay;
     - a rejected entry leaves the view;
