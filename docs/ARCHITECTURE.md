@@ -127,7 +127,7 @@ Implemented and verified on Linux over loopback (`docs/API.md`, D-44, D-45). The
 
 `Package.resolved` pins eight packages, all approved in plan §11 (REC-DEP-01, -03, -04, -06) with their transitive dependencies:
 - `LisaCLI` uses swift-argument-parser 1.8.2.
-- `LisaCrypto` uses swift-crypto 5.1.1, which needs swift-asn1 1.7.4.
+- `LisaCrypto` uses swift-crypto 5.1.2 (raised from 5.1.1 in R2 M0 for two security fixes, `docs/DECISIONS.md` D-53), which needs swift-asn1 1.7.4.
 - `LisaAPIServer` uses swift-nio 2.105.0 and swift-nio-ssl 2.37.6. swift-nio needs swift-atomics 1.3.1, swift-collections 1.7.6 and swift-system 1.9.0.
 
 All eight are under the Apache License 2.0. swift-argument-parser, swift-atomics, swift-collections and swift-system add the Swift Runtime Library Exception. The BoringSSL that swift-crypto and swift-nio-ssl each vendor is under a combination of the ISC and OpenSSL licenses. The system libraries are linked dynamically: SQLite, libxml2 and libcurl (`docs/SETUP-LINUX.md`).
