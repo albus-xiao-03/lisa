@@ -96,3 +96,41 @@ targets:
           CODE_SIGN_ENTITLEMENTS: Config/Mac-Debug.entitlements
         Release:
           CODE_SIGN_ENTITLEMENTS: Config/Mac-Release.entitlements
+  # PROOF ONLY (plan R2 §8.7, §10.6 X1; docs/DECISIONS.md D-54): the X1 proof app — nearby proofs of both designs, the
+  # fetch probe with Core unavailable, and the proof-only certificate encoder. It never ships and no product links it.
+  # One target for the Mac, the iPhone and the iPad, so its scheme LisaProof offers all three destinations; building it
+  # for each SDK builds the portable modules and swift-crypto (E-2). Pass the built commit with
+  # `xcodebuild … LISA_PROOF_COMMIT=$(git rev-parse HEAD)`.
+  LisaProof:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    platform: auto
+    deploymentTarget:
+      iOS: "18.0"
+      macOS: "15.0"
+    sources:
+      - path: Proof
+    dependencies:
+      - package: Lisa
+        product: LisaTrust
+      - package: Lisa
+        product: LisaSyncProtocol
+      - package: Lisa
+        product: LisaCrypto
+      # R1's URL policy, IP literals and address classification for the fetch probe (§8.9.3).
+      - package: Lisa
+        product: LisaHTTP
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.proof
+        PRODUCT_NAME: LisaProof
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        LISA_PROOF_COMMIT: ""
+        "INFOPLIST_FILE[sdk=iphoneos*]": Config/Proof-iOS-Info.plist
+        "INFOPLIST_FILE[sdk=iphonesimulator*]": Config/Proof-iOS-Info.plist
+        "INFOPLIST_FILE[sdk=macosx*]": Config/Proof-macOS-Info.plist
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": Config/Proof-iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Config/Proof-iOS.entitlements
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": Config/Proof-macOS.entitlements
+        "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
