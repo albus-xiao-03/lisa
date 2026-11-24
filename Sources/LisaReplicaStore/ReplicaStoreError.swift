@@ -40,6 +40,10 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case readerReleased(String)
     /// The item reached an advisory aggregate limit (1,000 notes): the app asks the owner to archive (§8.3.2).
     case aggregateLimit(String)
+    /// A snapshot chunk isn't included under the signed snapshot header's root at its index (§8.4.3).
+    case snapshotChunkNotIncluded(Int64)
+    /// No snapshot installation is being staged.
+    case noInstallation
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
