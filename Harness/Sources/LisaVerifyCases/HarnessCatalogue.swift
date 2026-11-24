@@ -48,6 +48,13 @@ public enum HarnessCatalogue {
             expected: "No canary from configuration, prompts, mail, calendar URLs, numbers, references or tokens",
             evidence: ["the export", "the canary scan"]),
         fixture(
+            "OV-HARNESS-PREFLIGHT-01", "Signed entitlements and profiles decide before a case runs",
+            expected:
+                "Each platform's own APNs key with a matching environment, topic and listed device passes; the other "
+                + "platform's key only, a missing key, a mismatched environment or topic, an unlisted device and an "
+                + "expired profile each stop the case; identifiers derive from the bundle ID as R1's code does",
+            evidence: ["the preflight's decisions over fixture signed products"]),
+        fixture(
             "OV-HARNESS-CLEANUP-01", "Cleanup removes only what the run created",
             expected: "The run's own data is removed; another run's data and unrelated files are untouched",
             evidence: ["the file listing before and after"]),
