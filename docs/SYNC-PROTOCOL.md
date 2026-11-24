@@ -1,7 +1,7 @@
 <!-- The R2 synchronization protocol as implemented (plan §8.2, §8.16, §8.1, §8.7): canonical encoding, identifiers, budgets, signing domains, owner texts and the nearby session layer, with test vectors. Grows with each milestone; sections not yet implemented say so. -->
 # Lisa R2 — Synchronization protocol
 
-This document specifies Lisa R2's wire formats as `LisaSyncProtocol` and `LisaTrust` implement them, with the test vectors the temporary harnesses check (`docs/VERIFICATION-SCENARIOS.md`). The design is `plans/R2.md` revision 13; where the plan fixes a byte, this document repeats it, and where it leaves an encoding open, this document defines it. **Status:** M1, in progress. The operation envelope, receipts, change pages, paged artifacts, rosters, lineage, enrollment messages, challenges and frames are added as they are implemented.
+This document specifies Lisa R2's wire formats as `LisaSyncProtocol` and `LisaTrust` implement them, with the test vectors the temporary harnesses check (`docs/VERIFICATION-SCENARIOS.md`). The design is `plans/R2.md` revision 13; where the plan fixes a byte, this document repeats it, and where it leaves an encoding open, this document defines it. **Status:** M1, in progress. Receipts, change pages, rosters, lineage, enrollment messages, challenges and frames are added as they are implemented.
 
 ## 1. Canonical JSON (plan §8.16.1)
 
@@ -53,6 +53,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-enroll-result-v1\n` | Core's enrollment result (§8.1.2 step 5.7) |
 | `lisa-r2-tls-anchors-v1\n` | Core's token-free TLS anchors bundle (§8.1.2 step 3) |
 | `lisa-nearby-auth-v1\n` | Each side's nearby authentication transcript (§8.7) |
+| `lisa-r2-paged-artifact-v1\n` | The header of a paged artifact (§8.1.3) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -103,6 +104,39 @@ Its checksum is `OrichA`. Checked independently of Lisa's code: OpenSSL parses t
   **Vectors** (reproduced with Python's `hmac`): discovery secret `00 01 … 1f`, window 2,000,000 (Unix second 1,800,000,000), device ID `00 01 … 0f` → tag `218c28976c2415b1d21ea358c0878b45`; pair key `20 21 … 3f`, window 2,000,000 → rejoin identity `c4267b18478e985a535b7512bbf4758b`.
 - **Frames:** 8-byte header and payload within the frame budget (§3); the header layout is specified when M6 implements the frames.
 
-## 8. Not yet specified here
+## 8. Operation envelope (plan §8.2.1–§8.2.3, §8.3.2, §8.3.3)
 
-The operation envelope (§8.2.1 fields, digest over the complete canonical signed body, duplicate and reuse rules), receipts, dependency release, change pages and interval coverage, snapshots and paged artifacts with Merkle paging, manifests, blobs and chunks, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the protected archive format and nearby frames. Each is added with its vectors when its milestone implements it.
+An operation's signed body is one canonical JSON object (`OperationEnvelope`) of at most 65,536 bytes:
+
+| Field | Content |
+|---|---|
+| `protocolVersion` | `2` |
+| `schemaVersion`, `policyVersion` | Integers ≥ 1 |
+| `datasetID`, `operationID` | Identifiers. A device's operation ID is random and stable for the logical action; a legacy child's is derived (below) |
+| `origin` | `{"kind": "device", "deviceID", "incarnationID", "sequence" (≥ 1), "previous"?: {"incarnationID", "lastSequence"}}`, where `previous` may appear only on sequence 1; or `{"kind": "coreLegacyTranslation"}` |
+| `entity` | `{"type", "id"}`, the type from the catalog (`OperationCatalog`) |
+| `type` | The operation type, `<entity>.<action>` from the catalog (§8.2.3) |
+| `payload` | The type's payload; opaque to the envelope codec until each type's schema is implemented |
+| `dependencies` | At most 32 operation IDs, strictly ascending, never the operation's own ID |
+| `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}` |
+| `legacyParent` | Only on Core legacy children: `{"scope", "requestID" (R1's 8–128-character alphabet), "discriminator", "index" (in 0..<count), "count", "setDigest"}` |
+| `createdAt` | Unix milliseconds, display and audit only; required on device operations, absent on legacy children |
+
+- **Malformed, refused before any payload is read:** a device operation carrying `legacyParent` or lacking `createdAt`, a legacy child lacking `legacyParent` or carrying `createdAt`, too many, unsorted or self dependencies, too many or unsorted observed pieces, a `previous` link after sequence 1, an unknown type, an unknown field, another protocol version, a non-canonical or oversized body.
+- **Digest:** SHA-256 over the complete canonical signed body (`OperationDigest`). **Signature:** raw 64 bytes over `lisa-r2-op\n` ‖ body, not part of the digest (`OperationSigning`). Verification refuses a malformed body, another dataset, an origin without a key in the holder's roster (unknown or revoked), a forged signature, and a legacy child not signed by Core's key.
+- **Duplicates,** everywhere (`OperationIdentityCheck`): the same ID and digest is `duplicate`; the same ID with another digest is `identity_reuse`; the same `(device, incarnation, sequence)` under another ID is `sequence_reuse`.
+- **Legacy child identity** (`LegacyChildIdentity`, plan §8.12.2): the child ID is the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`, with `len32` a 32-bit big-endian length, the dataset as its 16 raw bytes and the strings as UTF-8; `setDigest` is SHA-256 of the ordered child IDs' raw bytes. **Vectors** (reproduced with Python's `hashlib`), dataset `00112233445566778899aabbccddeeff`, scope `device:0123`, request ID `req-00000001`: discriminator `change:0` → `80d40d4a935c024d740fdc1f05dbbeb7`; `change:1` → `8fe937c75d3c10b783f520badee69ace`; set digest of the two → `eb8d5c08cc6253fb04b7d28287d5fede7f305878525c0212ea3c7526a11778d1`.
+- **Value budget** (`OperationValueBudget.maximumValueBytes(type)`): 65,536 − the encoded size of the type's largest envelope whose payload is `{"value":""}`, taking the larger of the device and legacy variants with every optional field at its maximum. The legacy variant is the larger. Results: `note.add` 53,982 bytes, `task.edit` 53,981, `capture.create` 53,976, `conflict.resolve` 53,974 (each type's name length is the only difference). A value of exactly that many encoded bytes, built from worst-case `\u00xx` escapes, fills the body to 65,536 bytes; one byte more is refused. Payload schemas with more fields subtract their own encoded overhead when they are defined.
+
+## 9. Paged artifacts (plan §8.1.3, §8.4.3)
+
+Rosters with key history, causal summaries, snapshot manifests and reviewed-set artifacts can span several pages:
+- **Header** (`PagedArtifactHeader`), signed by Core under `lisa-r2-paged-artifact-v1\n`: `{"artifactType", "datasetID", "epochID", "version", "pageCount" (≥ 1), "merkleRoot"}`.
+- **Pages** (`PagedArtifactPage`): `{index, bytes (at most 524,288), proof}`, the proof being the inclusion path, leaf side first.
+- **Tree** (`MerkleTree`): RFC 6962. Leaf `SHA-256(0x00 ‖ page)`, node `SHA-256(0x01 ‖ left ‖ right)`; for n > 1 pages the left subtree holds the largest power of two below n. Proofs are RFC 6962's audit path, verified by RFC 9162 §2.1.3.2.
+- **Acceptance** (`PagedArtifactVerification.assemble`): Core's header signature, the expected type, dataset and epoch, exactly `pageCount` pages with every index once, and every page verified at its index against the signed root. A dropped, repeated, swapped or altered page, a forged header or another dataset refuses the whole artifact. The proof does not authenticate the tree size (RFC 9162's algorithm accepts some size-n proofs under size n + 1), so the size is always taken from the signed header.
+- **Vectors** (pages are the ASCII strings `page-0`, `page-1`, …; reproduced with an independent Python implementation): roots for 1, 2, 3, 5, 7 and 8 pages: `db4a76ac8c461b45ae3bff430d7cac5c8f7ca6a24ed61f00c2cc3ac7d9cea390`, `9f986a9a86251bd8ca7582421873166e5bb6baaa0d5846f767b70c6d91127db2`, `e8cf1716052692337c090ad09676ed22f277f56547aa42a8d566439a0a42adbe`, `4b51c34223a04defb1dee194c7a543843ff28d4886c008c09f7506ce38a93f7a`, `87f45200cc7e94818a4341e9f82fdd3d333be87069a21fdb36b28c41152e2709`, `5de10b435c206d44950064dc0ac4d84cad4e608bbff864ebc3dddd62f296bf77`. The proof of page 5 in 7 pages is `dc4e1dfabb0f278819e31d357612c989b62f153a51f4e707c7f4aaedb23f838b`, `1afc45a4da64f47b7f7be075c1e01de71ee14aaabb9adf448674dc790c60cf91`, `ecfaf8a423d8a78f097fdaa35167814e8abbeef186835e034e8057ebe98ecc47`; of page 4 in 5 pages, the last of those alone.
+
+## 10. Not yet specified here
+
+Receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the protected archive format and nearby frames. Each is added with its vectors when its milestone implements it.
