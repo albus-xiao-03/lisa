@@ -64,6 +64,7 @@ let package = Package(
         .library(name: "LisaArchive", targets: ["LisaArchive"]),
         .library(name: "LisaMerge", targets: ["LisaMerge"]),
         .library(name: "LisaReplicaStore", targets: ["LisaReplicaStore"]),
+        .library(name: "LisaLocalSearch", targets: ["LisaLocalSearch"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -117,6 +118,9 @@ let package = Package(
         .target(
             name: "LisaReplicaStore",
             dependencies: ["LisaSQLite", "LisaSyncProtocol", "LisaTrust", "LisaCrypto", "LisaMerge"]),
+        // R2 local search (plan §7.2.1): the token index behind ReplicaIndexing. It names items by LisaSyncProtocol's
+        // identifiers, so it uses that module directly (docs/DECISIONS.md D-57); LisaDomain joins with other item types.
+        .target(name: "LisaLocalSearch", dependencies: ["LisaSQLite", "LisaReplicaStore", "LisaSyncProtocol"]),
         .target(
             name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
         .target(
