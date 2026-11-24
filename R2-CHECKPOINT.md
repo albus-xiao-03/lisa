@@ -1,0 +1,99 @@
+<!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
+# Lisa R2 — Checkpoint
+
+**Updated:** 2026-11-24T08:20Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, in progress.
+
+The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
+
+## 1. Branch and baseline
+
+| Item | State |
+|---|---|
+| Branch | `feature/distributive`, the only branch consulted |
+| Plan | `plans/R2.md` revision 13: approved content `1a5a07d`, approval recorded `05b856e`, unchanged |
+| Frozen R1 | `491c90a`. Its code, tests, fixtures, `Package.swift` and `Package.resolved` equal HEAD's: since `491c90a` only `DEVELOPMENT-ENVIRONMENT-REPORT.md` was added and `plans/R2.md` changed |
+| Environment record | `051d9d4`, amended in `9951cbd` (signature-gated recipe) and `c40f5d0` (the owner's decisions, §13) |
+| Start instruction | The owner, 2026-11-24: begin M0 in the Docker sandbox and execute the approved plan through M9 |
+| Platform | Docker Sandboxes VM `lisa.lab`: Debian 13 (trixie) x86_64, clone-mode Git workspace (commits stay in the sandbox until the owner fetches them), rootful Docker 29.10.0. Swift 6.4.2 primary, 6.4.3 for comparison |
+| Run | `20261124-r2-5462`, started 2026-11-24T07:42Z; Claude Code session `4e52d1e9-0d10-448b-8239-b9b21ceda630`; run directory `.tmp/r2/20261124-r2-5462/` (ignored by Git, exists only in this sandbox) |
+| Lockfile | `Package.resolved` SHA-256 `9608e8e024c6cbe0ea3fc269c5d80dcba8235c585f852de0e0c046a1dab37494`, unchanged before and after every build |
+
+## 2. Requirements
+
+None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
+
+| ID | Status now | Evidence |
+|---|---|---|
+| R2-L01 Portable debug and release builds without Apple SDKs | First run `PASS` for the R1 package (Claude; Debian 13 sandbox, Swift 6.4.2 and 6.4.3, 0 warnings). Final at M9 | §4 |
+| R2-L02 Applicable R1 regression behavior remains correct | Baseline `PASS`: the unmodified R1 suite, 376 tests in 66 suites, in debug and release with both toolchains; no failure to classify, no requirement replaced yet. Repeated at M3, M5, M8 and M9 | §4 |
+
+## 3. Files
+
+- **Uncommitted tracked changes:** none at this update.
+- **Commits in this run:** `9951cbd` and `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`), then this file.
+- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`). None is committed; none is removed or overwritten.
+
+## 4. Commands and results (M0)
+
+| Check | Command | Result | Evidence |
+|---|---|---|---|
+| R1 suite, Swift 6.4.2 debug | `swift build --scratch-path .build/r2-m0-20261124-r2-5462/swift-6.4.2 -c debug --build-tests`, then `…/out/Products/Debug-linux-x86_64/LisaTests-test-runner --testing-library swift-testing` | Build exit 0 (32.2 s, 0 warnings); **376 tests in 66 suites passed**; runner SHA-256 `9240fefd…69f83` | `m0/suite/6.4.2-debug/` |
+| R1 suite, 6.4.2 release | The same with `-c release` | Build exit 0 (112.3 s, 0 warnings); **376/66 passed**; runner `a13a5f4d…4d6d0` | `m0/suite/6.4.2-release/` |
+| R1 suite, 6.4.3 debug | The same with the 6.4.3 toolchain first on `PATH` and its own scratch path | Build exit 0 (28.6 s, 0 warnings); **376/66 passed**; runner `a67c3607…47ed9` | `m0/suite/6.4.3-debug/` |
+| R1 suite, 6.4.3 release | As above, `-c release` | Build exit 0 (111.0 s, 0 warnings); **376/66 passed**; runner `bb163890…820a` | `m0/suite/6.4.3-release/` |
+| Offline demo | `lisa demo --data-dir <run>/demo-data --json` with each of the four builds | Exit 0; 8 steps, **30 of 30 checks** each | `m0/suite/*/demo.json` |
+| Frozen R1 sources | `git show --no-textconv 491c90a:<path>`, walking `git show 491c90a:<dir>/` (`m0/reconstruct-r1.py`) | 872 files, each byte-exact against `git rev-parse 491c90a:<path>`; manifest SHA-256 `5e0524fc…b46679` | `m0/r1-src/`, `m0/r1-src.manifest.tsv` |
+| Frozen R1 `lisa` | In `m0/r1-src/`: `swift build -c debug`, `swift build -c release` (Swift 6.4.2) | Exit 0 both; debug `220690d1…64f0`, release `34ef4335…9bff` | `m0/frozen/` |
+| Frozen-client harness and R1 queue files | A temporary package linking R1's `LisaClient` by path; R1's own `OfflineQueue` writes every queue state | In progress | `m0/frozen-client/` |
+| Frozen R1 datasets | The frozen `lisa` writes data directories with pending, uncertain and dry-run deliveries, schedules and budgets, live paths only against loopback controlled servers | In progress | `m0/frozen-datasets/` |
+
+The first outcomes passed, so M0 needed no production fix. Every run directory and log is new; first outcomes are kept as recorded.
+
+## 5. Open conflicts, blockers and unavailable evidence
+
+| Item | Status, executor and cause |
+|---|---|
+| Fedora 45 with Swift 6.3.2 (§4 C8, §8.18 step 2, P-08's toolchain list) | `NOT_RUN_ENVIRONMENT` (Claude; the platform changed; Swift 6.3 has no Debian 13 build). The owner set Swift 6.4.2 on Debian 13 as the baseline |
+| E-5, libxml2 2.15 and OpenSSL 4.0 | `NOT_RUN_ENVIRONMENT` (Claude; Debian 13 ships libxml2 2.9.14 and OpenSSL 3.5.9) |
+| Rootless engine evidence for G2: UID/GID mapping, secret access | `NOT_RUN_ENVIRONMENT` (Claude; this engine is rootful). Genuine rootless amd64 evidence is still required |
+| arm64 | `NOT_RUN_ENVIRONMENT` (Claude; no arm64 environment); R1's historical results only |
+| SELinux, VPN and off-VPN reachability over IPv4 and IPv6, D05 | The owner's, on the target host; pending M4 |
+| Apple builds and devices (X1–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
+| Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
+| KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
+
+**Process deviation, recorded:** before 08:08Z this run used five read-only Git commands outside the plan's allowed set (§3): `git worktree list`, `git merge-base --is-ancestor`, `git ls-files`, `git rev-list --max-parents=0` and `git symbolic-ref`. None changed anything. Each was replaced (by `rev-parse`, `log` or a `git show` walk), and only `status`, `diff`, `log`, `show`, `rev-parse`, `add` and `commit` are used since.
+
+## 6. Pending owner sessions and experiments
+
+X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
+
+## 7. Permissions in force
+
+- **Engine:** the rootful Docker daemon inside `lisa.lab` (owner, 2026-11-24; P-02, P-03, account-free P-09a at their milestones).
+- **P-07:** any R1 test or test-support change needs the owner's approval of a request naming the file, reason and evidence.
+- **Dependencies:** existing versions may change after the freeze when necessary or beneficial (swift-crypto 5.1.2 first, SwiftNIO 2.105.1 assessed), each with revisions, rationale, lockfile change and regression results. **P-08** stays conditional on N-1 and on the owner's approval of the exact swift-certificates pin. **P-09a:** Proton Mail Bridge 3.27.2 on amd64.
+- **Kept by the owner:** the host, accounts, image publication, production deployment, real-data cutover, the Apple Developer account, every live provider action and every device session.
+
+## 8. Last buildable checkpoint
+
+`051d9d4`: the R1 package builds in debug and release and passes its suite with Swift 6.4.2 and 6.4.3. Later commits in this run change documentation only.
+
+## 9. Quota monitoring, the guard, pause and resume
+
+- **Readings.** `.tmp/r2/20261124-r2-5462/usage/usage_read.py` starts a headless Claude Code process that sends only the SDK `get_usage` control request (no prompt, no model call); Claude Code fetches `/api/oauth/usage` itself. A reading counts as fresh only if that fetch happened inside the process; values served from Claude Code's shared 60-second cache are refused. While Claude works, the status-line tap records the session's own rate-limit fields after every response. Logs: `usage/readings.jsonl`, `usage/statusline.jsonl`.
+- **Proved on 2026-11-24:** a fresh reading during development (07:52:11Z, 0% used, reset 12:49:59.72Z, matching the status line) and a fresh reading by a detached process while Claude was idle after its turn ended (08:12:02Z, 6%; no transcript entry and no model request during the reading).
+- **The guard.** `.tmp/r2/20261124-r2-5462/guard/guard.py`, one detached process, bound to this account (hash `0c503c8f4594e0fb`), session lineage, sandbox checkout and run ID. It waits without model calls for a recorded quota pause or a verified quota interruption, confirms the reset with a fresh reading after the reported reset plus 180 s, checks the other plan windows, and launches one writer (`resume-launcher.sh`: a forked resume of the session) under the repository writer lock. The interactive session holds that lock through a lease helper. Rehearsed with simulated readings, a short clock and a harmless launcher at 08:02Z and 08:08Z: 10 of 10 scenarios passed. The real launcher has not run yet; its first use will be the first post-reset resume.
+- **Owner commands.** Inspect: `.tmp/r2/20261124-r2-5462/guard/guardctl status`. Stop: `guardctl stop --reason "<why>"` or `touch .tmp/r2/20261124-r2-5462/guard/live/STOP`. After a VM restart nothing restarts by itself: run `guardctl daemon --detach`, or resume Claude, which restarts it. A guard stopped by the owner restarts only with `--rearm "<reason>"`.
+- **Pause procedure.** At 80–85% used: drain workers and shorten batches; be paused by about 90%, earlier if the burn rate or in-flight work could consume the reserve. Before pausing: account for running processes, update this file, write a new `.tmp/r2/20261124-r2-5462/pause-<UTC>-<unique>.md` (HEAD, unfinished work, evidence, owner checks, measured usage and reset, the exact next safe action), record it with `guard.py pause`, release the writer lease, end the turn.
+- **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
+
+## 10. Owner action ledger
+
+No live action, external submission or owner check has been requested or performed in this run.
+
+## 11. Next steps
+
+1. Finish M0: the frozen-client harness and queue files, the frozen datasets, their hashes and commands in `docs/VERIFICATION-SCENARIOS.md`, the R2 part of `docs/REQUIREMENTS-MATRIX.md`, then this file at the M0 boundary.
+2. After the freeze: swift-crypto 5.1.2 (and an assessment of SwiftNIO 2.105.1), each with revisions, rationale, lockfile change and the full R1 suite in debug and release.
+3. M1: contracts (LisaSyncProtocol, LisaTrust, LisaCrypto additions, the LisaArchive codec), `Apps/Proof` for X1 (both nearby designs, all three pairs and network conditions, Core-offline public fetching), and the tracked owner-verification harness core.
