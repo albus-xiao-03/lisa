@@ -62,6 +62,7 @@ let package = Package(
         .library(name: "LisaSyncProtocol", targets: ["LisaSyncProtocol"]),
         .library(name: "LisaTrust", targets: ["LisaTrust"]),
         .library(name: "LisaArchive", targets: ["LisaArchive"]),
+        .library(name: "LisaMerge", targets: ["LisaMerge"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -78,6 +79,8 @@ let package = Package(
         .target(name: "LisaTime"),
         // R2 wire types and canonical encoding (plan §7.2.1, §8.16): the Swift standard library only.
         .target(name: "LisaSyncProtocol"),
+        // R2 merge state and rules (plan §7.2.1, §8.3): registers, observed sets, authority, terminal actions.
+        .target(name: "LisaMerge", dependencies: ["LisaSyncProtocol"]),
         .target(name: "LisaDomain", dependencies: ["LisaTime", "LisaRedaction"]),
         .target(name: "LisaSecrets", dependencies: ["LisaRedaction"]),
         .target(name: "LisaLogging", dependencies: ["LisaRedaction"]),
