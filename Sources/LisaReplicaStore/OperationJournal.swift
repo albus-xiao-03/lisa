@@ -3,6 +3,7 @@
 
 import LisaSQLite
 import LisaSyncProtocol
+import LisaTrust
 
 /// Journal rows, inside the caller's transaction.
 enum OperationJournal {
@@ -56,24 +57,46 @@ enum OperationJournal {
         ).map(decode)
     }
 
+    /// The operation known by this ID, in the journal or in canonical state (§8.2.1: the duplicate rules hold
+    /// against every operation the replica knows).
     static func known(byID operationID: Identifier128, in session: SQLiteSession) throws -> KnownOperation? {
-        try session.query(
+        if let journal = try session.query(
             """
             SELECT operation_id, digest, origin_device, origin_incarnation, origin_sequence FROM operations
             WHERE operation_id = ?
             """,
             [ReplicaColumns.id(operationID)]
-        ).first.map(decodeKnown)
+        ).first.map(decodeKnown) {
+            return journal
+        }
+        return try session.query(
+            """
+            SELECT operation_id, body, origin_device, origin_incarnation, origin_sequence FROM canonical_operations
+            WHERE operation_id = ?
+            """,
+            [ReplicaColumns.id(operationID)]
+        ).first.map(decodeCanonical)
     }
 
+    /// The operation known by this origin triple, in the journal or in canonical state.
     static func known(byOrigin triple: OriginTriple, in session: SQLiteSession) throws -> KnownOperation? {
-        try session.query(
+        let values: [SQLiteValue] = [
+            ReplicaColumns.id(triple.device), ReplicaColumns.id(triple.incarnation), .integer(triple.sequence),
+        ]
+        if let journal = try session.query(
             """
             SELECT operation_id, digest, origin_device, origin_incarnation, origin_sequence FROM operations
             WHERE origin_device = ? AND origin_incarnation = ? AND origin_sequence = ?
-            """,
-            [ReplicaColumns.id(triple.device), ReplicaColumns.id(triple.incarnation), .integer(triple.sequence)]
-        ).first.map(decodeKnown)
+            """, values
+        ).first.map(decodeKnown) {
+            return journal
+        }
+        return try session.query(
+            """
+            SELECT operation_id, body, origin_device, origin_incarnation, origin_sequence FROM canonical_operations
+            WHERE origin_device = ? AND origin_incarnation = ? AND origin_sequence = ?
+            """, values
+        ).first.map(decodeCanonical)
     }
 
     /// Records a receipt's state, bytes and position; `overlay` is whether the entry stays in the effective view.
@@ -124,17 +147,26 @@ enum OperationJournal {
         }
     }
 
+    /// A canonical operation as the duplicate rules see it: its digest is that of its exact stored body.
+    private static func decodeCanonical(_ row: [SQLiteValue]) throws -> KnownOperation {
+        KnownOperation(
+            operationID: try ReplicaColumns.identifier(row[0]),
+            digest: OperationDigest.of(body: try ReplicaColumns.bytes(row[1])), originTriple: try triple(row))
+    }
+
     private static func decodeKnown(_ row: [SQLiteValue]) throws -> KnownOperation {
-        var triple: OriginTriple?
-        if let device = try ReplicaColumns.optionalIdentifier(row[2]),
+        KnownOperation(
+            operationID: try ReplicaColumns.identifier(row[0]), digest: try ReplicaColumns.digest(row[1]),
+            originTriple: try triple(row))
+    }
+
+    /// The origin triple in columns 2–4, if the operation has one.
+    private static func triple(_ row: [SQLiteValue]) throws -> OriginTriple? {
+        guard let device = try ReplicaColumns.optionalIdentifier(row[2]),
             let incarnation = try ReplicaColumns.optionalIdentifier(row[3]),
             let sequence = ReplicaColumns.optionalInteger(row[4])
-        {
-            triple = OriginTriple(device: device, incarnation: incarnation, sequence: sequence)
-        }
-        return KnownOperation(
-            operationID: try ReplicaColumns.identifier(row[0]), digest: try ReplicaColumns.digest(row[1]),
-            originTriple: triple)
+        else { return nil }
+        return OriginTriple(device: device, incarnation: incarnation, sequence: sequence)
     }
 
     private static func decode(_ row: [SQLiteValue]) throws -> JournalEntry {
