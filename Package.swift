@@ -61,6 +61,7 @@ let package = Package(
         // R2 (plan §7.2.1).
         .library(name: "LisaSyncProtocol", targets: ["LisaSyncProtocol"]),
         .library(name: "LisaTrust", targets: ["LisaTrust"]),
+        .library(name: "LisaArchive", targets: ["LisaArchive"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -104,6 +105,8 @@ let package = Package(
         .target(name: "LisaCrypto", dependencies: [.product(name: "Crypto", package: "swift-crypto")]),
         // R2 signatures, token hashing, owner texts and the nearby session layer (plan §7.2.1).
         .target(name: "LisaTrust", dependencies: ["LisaCrypto", "LisaSyncProtocol"]),
+        // R2 protected archive format, sealing and opening (plan §7.2.1, §8.6.6).
+        .target(name: "LisaArchive", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaCrypto"]),
         .target(
             name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
         .target(
