@@ -18,13 +18,11 @@ struct CleanupCommand: ParsableCommand {
         let store = storeOptions.store
         let run = try VerifyRunID(runID)
         _ = try store.load(run)
-        let directory = store.directory(of: run).standardizedFileURL
-        guard directory.deletingLastPathComponent().path == store.runsDirectory.standardizedFileURL.path else {
-            throw VerifyError.store("refusing to remove \(directory.path): not a run directory of this store")
-        }
-        let items = (FileManager.default.enumerator(atPath: directory.path)?.allObjects as? [String]) ?? []
-        print("Run \(run) created \(items.count) local item\(items.count == 1 ? "" : "s") under \(directory.path):")
-        for item in items.sorted() { print("  \(item)") }
+        let items = store.items(of: run)
+        print(
+            "Run \(run) created \(items.count) local item\(items.count == 1 ? "" : "s") under \(store.directory(of: run).path):"
+        )
+        for item in items { print("  \(item)") }
         if !yes {
             print("Type the run ID to remove them:")
             guard readLine(strippingNewline: true) == run.text else {
@@ -32,7 +30,9 @@ struct CleanupCommand: ParsableCommand {
                 return
             }
         }
-        try FileManager.default.removeItem(at: directory)
-        print("Removed \(directory.path). Provider-side items, if any, are listed in Harness/docs/CLEANUP.md.")
+        try store.remove(run)
+        print(
+            "Removed \(store.directory(of: run).path). Provider-side items, if any, are listed in Harness/docs/CLEANUP.md."
+        )
     }
 }
