@@ -104,8 +104,8 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-13 | Export, rollback and installation of either v4 database | M5, M9, X3, X7 | Not run |
 | S-14 | The destination policy at every redirect | M7, X1, X5 | Not run |
 | S-15 | VPN publishing | M4, target host | Not run |
-| S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); M3 and M6 parts not run |
-| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | M2 parts run: the single-writer guard (M2-0), `SQLITE_FULL` in a save (M2-3), the reader monitor, the pinned reader and the burst on a container tmpfs (M2-4), storage filling during a staged installation on the tmpfs and the peak sizes (M2-12); `max_page_count` on the Fedora host `NOT_RUN_ENVIRONMENT`; Core's part at M3 |
+| S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); replica parts run in M2: causal readiness and bounded release (M2-2), the persisted release with nested fan-out and a restart (M2-6), a kill inside a release step (M2-17); M3 and M6 parts not run |
+| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | M2 parts run: the single-writer guard (M2-0), `SQLITE_FULL` in a save (M2-3), the reader monitor, the pinned reader and the burst on a container tmpfs (M2-4), storage filling during a staged installation on the tmpfs and the peak sizes (M2-12), kills right after a reported save and inside an unreported one (M2-17); `max_page_count` on the Fedora host `NOT_RUN_ENVIRONMENT`; Core's part at M3 |
 | S-18 | Model accounting | M7 | Not run |
 | S-19 | Deletion and expiry propagation | M5, M8 | Not run |
 | S-20 | Health, CLI modes and the deployment wrappers | M3, M4 | Not run |
@@ -719,3 +719,24 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **A page during staging:** an occurrence delivered by a page while a full snapshot that also holds it was staging is listed exactly once after the swap, at cursor 150.
 - **Full build and R1 suite:** `m2/suite-after-full-snapshot-records-20261124T224312Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.** S-06's M2 part is complete.
+
+### M2-17 Process kills right after a reported save and inside steps (R2-L03; S-16 and S-17 replica parts; plan §8.6.1, §8.2.2, §8.4.2)
+
+- **Code:** none changed. This case runs the kills that M2-3, M2-6 and M2-11 left for later.
+- **Harness:** `m2/harness-v47/`, 6/6 on its first run (log `m2/harness-v47-test-20261124T230642Z.log`).
+  - Every kill is a real SIGKILL of a child process: the harness's runner, started again in a kill mode.
+  - A kill inside a transaction comes from an indexer that the store calls inside it.
+  - **Build:** this is the first harness built with the shared scratch path `m2/harness-scratch-late` (427 MB once, instead of about 400 MB a harness). The project volume had 1.2 GB free.
+  - **Deviation:** its test file was edited in place once before its first build (a `World` value moved into each test). The plan's run-directory rule and the standing temporary-file rule call for a new version instead. The text before the edit exists only in the session transcript.
+- **Cases:**
+  - **R2-L03, a reported save:** the child saves, writes the reported result to a file, and SIGKILLs itself at once. After a restart:
+    - **One signed save, and a burst of 50:** every reported operation is in the journal, pending and local, as an overlay. Its signed bytes verify with the device key, and its origin triple is the reported one. The task is in the view and found by search, its submit follow-up is queued, and the generation is at least the reported one.
+    - The next launch is a new incarnation linked to (I1, last reported sequence). Its first save takes sequence 1, and no origin triple repeats.
+  - **R2-L03, a reported draft** (the key unavailable): after the kill the draft is held with its original input, in the view, found by search, with its sign-draft follow-up and no journal entry. Once the key is back, it is signed under its own operation ID and verifies.
+  - **"Saved" only after commit (§8.6.1):** the child is killed inside its second save's transaction, before that save reported. After a restart only the first save exists: the journal, generation, follow-ups and index hold nothing of the second, and I1's last sequence is 1.
+  - **Inside a causal release step (§8.2.2 "a crash loses nothing"):** 300 waiting notes depend on a task's creation.
+    - The child releases the creation, then is killed inside the next release step.
+    - After a restart the view has the task with no notes. The drain resumes from the tables, releases all 300 exactly once, and leaves no waiting, ready or marker rows.
+  - **Inside a change page's application (§8.4.2):** the child is killed inside the transaction applying a page (0, 10] with a creation and an edit. After a restart the cursor and the view are as before. The same page then applies (cursor 10, 2 entries) and, sent again, is ignored.
+  - `integrity_check` was ok after every kill.
+- **Result: PASS.**
