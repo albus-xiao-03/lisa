@@ -125,6 +125,15 @@ public final class ReplicaStore: Sendable {
     /// Whether the ballast has been used and not yet restored: the app says "Storage is almost full".
     public var storageIsAlmostFull: Bool { directory.ballastBytes < configuration.captureReserveBytes }
 
+    /// Writes other than captures read free space fresh at the start of each bounded transaction and stop before the
+    /// capture reserve (§8.15.2): `estimate` more bytes must leave the reserve untouched.
+    func requireRoomBeyondReserve(estimate: Int) throws(ReplicaStoreError) {
+        guard let available = freeSpace() else { return }
+        guard available - Int64(estimate) >= Int64(configuration.captureReserveBytes) else {
+            throw .reserveProtected
+        }
+    }
+
     /// Restores the ballast once the space has returned: a full reserve must stay free after it. Returns whether the
     /// ballast is whole.
     @discardableResult
@@ -613,7 +622,8 @@ public final class ReplicaStore: Sendable {
     /// whose operations enter the effective view (one local change, the index updated).
     @discardableResult
     public func causalStep() throws(ReplicaStoreError) -> CausalStep {
-        try write { session in
+        try requireRoomBeyondReserve(estimate: 1 << 20)
+        return try write { session in
             if let (edges, enqueued) = try CausalReleaseTables.expansionStep(in: session) {
                 return .expanded(edges: edges, enqueued: enqueued)
             }
