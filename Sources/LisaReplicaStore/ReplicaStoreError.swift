@@ -53,6 +53,11 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     /// A write other than a capture stopped before the capture reserve (§8.15.2): staging, a release step or an
     /// installation; it is retried when space returns, and captures keep their room.
     case reserveProtected
+    /// A custody acknowledgement that didn't verify (§8.6.1).
+    case unverifiedCustody(CustodyVerificationError)
+    /// A verified custody acknowledgement the replica can't take: for other bytes than the journal's, from this
+    /// device, or from a revoked device.
+    case custodyRefused(String)
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
