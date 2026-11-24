@@ -109,3 +109,39 @@ All persistent results are from Linux aarch64 with Swift 6.4.2, with the same co
 | Test | Status |
 |---|---|
 | A01–A18 | `NOT_RUN_ENVIRONMENT`. A12–A14, A17 and A18 also need an Apple Developer account, an APNs key or the owner's VPN route (`NOT_RUN_CREDENTIALS`). |
+
+## R2 (in progress)
+
+Run `20261124-r2-5462`, from M0 (2026-11-24). The R1 rows above keep the statuses R1 recorded. R2 statuses follow plan §10.1: `PASS`, `FAIL`, `NOT_RUN_ENVIRONMENT`, `NOT_RUN_CREDENTIALS`, `BLOCKED_PERMISSION` and `OUT_OF_SCOPE`, each with its **executor** (Claude or the owner) and actual **cause**. Integration and device results keep their levels apart: `harness-ready`, `fixture-pass` (Claude), `provider-accepted`, `owner-verified` (owner). Platform: the Debian 13 sandbox `lisa.lab`, x86_64, Swift 6.4.2 (primary) and 6.4.3 (`DEVELOPMENT-ENVIRONMENT-REPORT.md` §13). Commands, hashes and evidence: `docs/VERIFICATION-SCENARIOS.md`.
+
+### R2 Linux and container acceptance (R2 §18)
+
+| IDs | Milestone (plan §9) | Status now | Evidence |
+|---|---|---|---|
+| R2-L01 Portable debug and release builds without Apple SDKs | M0 first, M9 final | First run **PASS** for the R1 package (Claude): debug and release, 0 warnings, Swift 6.4.2 and 6.4.3 | VERIFICATION-SCENARIOS M0-1 |
+| R2-L02 Applicable R1 regression behavior remains correct | M0 baseline; repeated at M3, M5, M8, M9 | Baseline **PASS** (Claude): the unmodified R1 suite, 376 tests in 66 suites, in debug and release with both toolchains; no failure to classify; no R1 requirement replaced yet | M0-1 |
+| R2-L05 (codec), L16 (signatures, rollback), L32 (encoding) | M1 | Not run: the modules don't exist yet | — |
+| R2-L03, L06 (replica), L07, L09–L12, L15, L17, L18 (replica side), L33, L35 | M2 | Not run | — |
+| R2-L04 (direct), L05, L06 (Core), L08 (Core), L13, L14, L16, L18 (Core), L28, L29, L33 (Core), L34 | M3 | Not run | — |
+| R2-D01–D04, D06–D09, D12 | M4 | Not run | — |
+| R2-L19, L20, L22 (owner actions) | M5 | Not run | — |
+| R2-L04 (relay), L15, L17, L36 | M6 | Not run | — |
+| R2-L08 (fallback), L21, L22 (inference), L23, L35 (budget) | M7 | Not run | — |
+| R2-L24–L27 | M8 | Not run | — |
+| R2-L30, L31; R2-D10, D11 (portable) | M9 | Not run | — |
+| R2-D05, VPN and off-VPN over IPv4 and IPv6, SELinux | M4, target host | Not run: the owner's target-host cases | — |
+| R2-A01–A16 | X1–X7 | `NOT_RUN_ENVIRONMENT` (owner; the sessions follow their milestones) | — |
+
+### Unavailable
+
+| Check | Status, executor and cause |
+|---|---|
+| Host evidence on Fedora 45 with Swift 6.3.2 (plan §4 C8, §8.18 step 2, the toolchain list of P-08) | `NOT_RUN_ENVIRONMENT` (Claude; the development platform changed to the Debian 13 sandbox, and Swift 6.3 has no Debian 13 build). Replaced by the owner's baseline of Swift 6.4.2 on Debian 13 |
+| E-5, libxml2 2.15 and OpenSSL 4.0 compatibility | `NOT_RUN_ENVIRONMENT` (Claude; Debian 13 ships libxml2 2.9.14 and OpenSSL 3.5.9) |
+| Rootless-engine evidence for G2: UID/GID mapping and secret access | `NOT_RUN_ENVIRONMENT` (Claude; the sandbox's engine is rootful). Genuine rootless amd64 evidence is still required |
+| arm64 build and run | `NOT_RUN_ENVIRONMENT` (Claude; no arm64 environment). The 376 debug and 376 release passes on aarch64 are R1's |
+| SELinux confinement; VPN and off-VPN reachability | The owner's target-host cases; not run until M4 delivers them |
+| Apple builds and device behavior | The owner's sessions X1–X7; Linux results never stand in for them |
+| Live provider, APNs, mail, calendar, model and call results | The owner's sessions LS-1–LS-3 and the live parts of X5 and X6; Claude uses no owner account |
+| Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface (plan §8.19.6); its row, G4 and G5 stay open |
+| KF-1 (a restored Core can send a reminder twice), KF-2 (an Apple notification update can alert twice) | Open; deferred by the owner on 2026-11-23 without a waiver |
