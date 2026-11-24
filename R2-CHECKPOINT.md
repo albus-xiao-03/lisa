@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T23:40Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine:** M2-0 to M2-20 done (§4, `docs/VERIFICATION-SCENARIOS.md`). An interim clean-checkout boundary on `642e955` passed. The final boundary on the M2 head is next (§11). **Working:** session `d53fb9c3-8475-433d-91c1-c05c3a4743fa`, a background job that Claude Code forked from the interactive session at 20:34:58Z. It holds lease `interactive:4804`, and guard v2 runs as pid 197451 (§5, §9). Fresh reading at 23:28:27Z: 64% used, reset 2026-11-25T01:20:00Z.
+**Updated:** 2026-11-24T23:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary.** M2-0 to M2-20 are done, and the clean reconstruction of the M2 head `815bbbc` passed: debug and release, the R1 suite, fixtures, lint and every current M2 harness (`docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **Next: M3** (§11). **Working:** session `d53fb9c3-8475-433d-91c1-c05c3a4743fa`, a background job that Claude Code forked from the interactive session at 20:34:58Z. It holds lease `interactive:4804`, and guard v2 runs as pid 197451 (§5, §9). Fresh reading at 23:28:27Z: 64% used, reset 2026-11-25T01:20:00Z.
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -104,7 +104,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **What happened:** the volume fell to 349 MB free. Each harness's own `.build` rebuilt on every regression round, and switching the shared scratch path's index setting rebuilt it once more.
 - **Reclaimed:** superseded SwiftPM output from before this run was removed from `.build/`: `.build/out` and `.build/toolchain-6.4.3`, 7.1 GB (`m2/disk-reclaim-20261124T232752Z.txt`). That is ordinary build output under `CONSTRICTION.md` and lies outside the run directory. 7.5 GB were then free.
 - **Since then:** new harnesses share one scratch path (`m2/harness-scratch-late`). Regressions run as one package with byte-identical copies of the current harnesses' sources (`m2/make-regressions-v1.py`, `-v2.py`), with v35 and v47 in their own packages.
-- **For the owner:** the run directory holds about 30 GB, mostly SwiftPM `.build` output inside superseded harness copies. Plan §10.2 keeps everything in the run directory. Decide whether those regenerable `.build` folders may be removed, or the volume grown; M3 needs the room.
+- **For the owner:** the run directory holds about 35 GB, mostly SwiftPM build output: superseded harness copies' `.build` folders and the two clean-checkout runs (about 5 GB each). Plan §10.2 keeps everything in the run directory. 2.2 GB were free after the M2 boundary (23:44Z). Decide whether those regenerable build folders may be removed, or the volume grown. M3's builds need the room.
 
 **Process deviation, recorded (temporary files):** harness v47's test file was edited in place once, before its first build (a `World` value moved into each test). The rule asks for a new version. Every later fix went into a new version.
 
@@ -133,6 +133,8 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
+**M2's clean-checkout checkpoint:** `815bbbc`, reconstructed byte-exact into `m2/clean-20261124T233606Z/tree`. Debug and release have 0 warnings, the R1 suite passes 376/66, fixtures 9/9, lint shows only R1's finding, and the 21 current harnesses pass (108 tests). Its last code commit is the following one:
+
 `cdced83` (`ReplicaStore.swift`, the duplicate rules against canonical state). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2). Harness v51 (4) passes, and so does regression package v2 with its 19 targets (v6, v9, v10, v13, v15, v19, v20, v25, v26, v28, v30, v36, v39, v43, v46, v48, v49, v50, v51), with v35 and v47 in their own packages (run `m2/regressions-run-20261124T233307Z/`). Before it:
 - `79e44f1`, peer custody;
 - `9286c07`, revocations;
@@ -160,13 +162,12 @@ No live action or external submission has been requested or performed in this ru
 
 ## 11. Next steps
 
-1. **The final M2 boundary (next):**
-   - a clean reconstruction of the M2 head, built in debug and release;
-   - the R1 suite, the fixtures and lint;
-   - every current M2 harness against that tree, built once (`m2/clean-<UTC>/harnesses`, v35 and v47 on their own);
-   - then the `docs/REQUIREMENTS-MATRIX.md` M2 row and the M2 report.
-
-   No owner session is due at M2.
-2. **Then M3** (Core ledger and sync), from plan §9.
+1. **M3 — Core, v1 and the direct HTTPS path (next),** from plan §9's M3 row and the sections it names:
+   - first the deferred frozen fixtures due before S-01;
+   - then schema v5 and LisaCoreLedger;
+   - X2 is handed to the owner when M3 delivers its runner.
+2. **Owner decisions open** (§5):
+   - the run directory's build output, or a larger volume: 2.2 GB were free after the M2 boundary, and M3 needs room;
+   - reopening the replica at 0 bytes free.
 3. **While the owner runs X1:** import and evaluate the redacted results the owner shares; a nearby design is selected only from a passed proof (N-1), and M6 waits for it.
 4. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
