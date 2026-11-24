@@ -15,6 +15,9 @@ public enum ReplicaOperationState: String, Hashable, Sendable, CaseIterable {
     case acceptedWithConflict = "accepted_with_conflict"
     /// A final receipt refusing it; it leaves the effective view and stays in the journal.
     case rejected
+    /// Its origin device's revocation reached this replica before Core accepted it (§8.1.3, R2-L17): out of the
+    /// effective view and never forwarded, kept in the journal for inspection. A final receipt or a page still decides it.
+    case revoked
 
     /// Whether a final receipt decided it.
     public var isFinal: Bool { self == .accepted || self == .acceptedWithConflict || self == .rejected }
