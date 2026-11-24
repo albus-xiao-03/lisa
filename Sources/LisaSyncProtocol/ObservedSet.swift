@@ -61,6 +61,18 @@ public struct ObservedSet: Hashable, Sendable {
         self.group = group
     }
 
+    /// The canonical form, exactly as an envelope's `observed` field carries it. A store that keeps a command before it
+    /// can be signed (a draft, plan §8.6.2) keeps its observed set in this form.
+    public var canonicalValue: CanonicalValue {
+        get throws(CanonicalError) { try canonical }
+    }
+
+    /// Reads the canonical form with the envelope decoder's rules.
+    public init(canonicalValue value: CanonicalValue) throws(OperationEnvelopeError) {
+        guard case .object(let object) = value else { throw .invalidField("observed") }
+        try self.init(canonical: object)
+    }
+
     var canonical: CanonicalValue {
         get throws(CanonicalError) {
             var pairs: [(String, CanonicalValue)] = [("pieces", EnvelopeFields.identifierArray(pieces))]
