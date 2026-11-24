@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T09:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, complete at its boundary (two fixture groups are scheduled for M3 and M9, §5); M1 — Contracts and Apple proofs, in progress. **Paused for quota** at 09:45Z: 71% of the five-hour window used (fresh reading 09:42:32Z), reset at 12:49:59Z (07:49:59 EST). The pause note is `.tmp/r2/20261124-r2-5462/pause-20261124T0945Z-*.md`; the guard resumes after the reset.
+**Updated:** 2026-11-24T13:50Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, complete at its boundary (two fixture groups are scheduled for M3 and M9, §5); **M1 — Contracts and Apple proofs, complete at its boundary** (a clean checkout of `d0a9e53` builds in debug and release with 0 warnings, the R1 suite passes 376/66, and the harness's fixture cases pass 9 of 9); **X1 is handed to the owner** (§6); M2 — Replication engine, next. Resumed at 12:53Z after the 09:45Z quota pause by the guard's first real launch (§9).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -31,7 +31,8 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 
 - **Uncommitted tracked changes:** none at this update.
 - **Commits in this run:** `9951cbd`, `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`); `0c037c7` (this file); `ad0338d`, `b079c44` (`docs/VERIFICATION-SCENARIOS.md`); `e0b0302` (`docs/REQUIREMENTS-MATRIX.md`); the swift-crypto span `9e35866` → `fd94a78` with `1a49709` (`docs/SETUP-LINUX.md`), `269a2ca` (`docs/ARCHITECTURE.md`) and `866c98d` (`docs/DECISIONS.md` D-53); the `LisaSyncProtocol` span `8244d48` → `4a8826b`; then this update.
-- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`). None is committed; none is removed or overwritten.
+- **Commits since the 09:45Z pause:** the nearby frame header and hello form `c096983`–`c69586c`; D-54 `27769d1`; `Apps/Config` and `Apps/Proof` `bc11c09`–`559f4bb` (69 files, then `Apps/project.yml`); `docs/SYNC-PROTOCOL.md` `3079aa3`; the harness `8e58552`–`d0a9e53` (`LisaVerifyKit`, `LisaVerifyCases`, `LisaVerifyServers`, `lisa-verify`, `Harness/` documents and configuration example, `Apps/OwnerVerification`, test plan X1, the `LisaProof` scheme, each span ending in `Package.swift` or its last file); `docs/SETUP-APPLE.md` §9; `docs/REQUIREMENTS-MATRIX.md` `260a582`; then `docs/VERIFICATION-SCENARIOS.md` and this file.
+- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
 
@@ -49,6 +50,10 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 | Dependency change, swift-crypto 5.1.2 | The M0-1 procedure in fresh scratch paths | **PASS**: 376/66 in debug and release with 6.4.2 and 6.4.3, 0 warnings, demo 30/30 | `deps/regression-swift-crypto-5.1.2/` |
 | M1-1 canonical JSON, base64url, budgets | Temporary harness `m1/harness/` (swift-testing, public API) | **PASS**, 16 tests in 5 suites; full debug build 0 warnings; R1 suite 376/66 | `m1/` |
 | M1-2 to M1-5: crypto primitives, trust and owner texts, operation envelope, Merkle paging | `m1/harness-v2/` (`swift test --force-resolved-versions --manifest-cache none`) | **PASS**: crypto 6, trust 11, envelope and value budget (v2), Merkle (v2); two superseded v1 harness tests fail as recorded (`NOTES.md`, `NOTES-2.md`); R1 suite 376/66 after each span | `docs/VERIFICATION-SCENARIOS.md` M1-2 to M1-5 |
+| M1-7 nearby frame header and hello form | `m1/harness-v3/` | **PASS**, 6 tests (and v3's other 46) | `docs/VERIFICATION-SCENARIOS.md` M1-7 |
+| M1-8 `Apps/Proof` | `swiftc -parse` on 69 files; Linux type-check of the 38 portable files against HEAD's modules; the certificate encoder with `openssl` | **PASS** (syntax and portable types; no Apple build claimed) after five fixes found in review | M1-8 |
+| M1-9 harness core and S-24 at M1 | `m1/harness-v4/` (13 tests), `m1/harness-v5/` (3), `lisa-verify run --mode fixture` | **PASS**: 9 of 9 fixture cases, 25 logical actions, real SIGKILLs and resumes in new processes | M1-9 |
+| M1 boundary, clean checkout of `d0a9e53` | `m1/reconstruct-commit.py`, then `m1/clean-20261124T134046Z/matrix.sh` | **PASS**: debug and release 0 warnings, R1 suite 376/66, fixtures 9/9, lint clean apart from R1's own line | M1 boundary |
 
 The first outcomes passed, so M0 needed no production fix. Every run directory and log is new; first outcomes are kept as recorded.
 
@@ -73,7 +78,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 6. Pending owner sessions and experiments
 
-X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
+**X1 is requested (2026-11-24T13:50Z):** entry point `Apps/Proof` (scheme `LisaProof`, test plan `X1`) with `swift run lisa-verify quickstart`; the sheet is `Harness/docs/SETUP-APPLE.md` (prerequisites, build and signing, roster, the nine nearby cells for both designs, the nine fetch-probe cases on each device, the three E-2 builds, expected observations, and the redacted export to return). Cases: `OV-NEAR-{MI,MP,IP}-01..03` (paired), `OV-APPLE-X1-01..03`, `OV-APPLE-X1-FETCH-01..09`. Still to come: X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
 
 ## 7. Permissions in force
 
@@ -84,7 +89,7 @@ X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, wit
 
 ## 8. Last buildable checkpoint
 
-`505ee96` (the `LisaArchive` span) and, before it, `13ce72c` (the paging span): a full debug build with tests completes with 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); the M1 harnesses pass as recorded. Earlier checkpoints of this run: `4a8826b` (`LisaSyncProtocol`), `2abce7e` (`LisaCrypto` additions), `822ffe5` (`LisaTrust`), `e7e5085` (envelope), and the swift-crypto span's `fd94a78`, which passed the full matrix (6.4.2 and 6.4.3, debug and release).
+`d0a9e53` (M1's last code commit; later commits change documents only): a clean reconstruction builds in debug with tests and in release with 0 warnings, the unmodified R1 suite passes 376 tests in 66 suites, and `lisa-verify`'s fixture cases pass 9 of 9 (Swift 6.4.2). Earlier checkpoints of this run: `9cca054` and `fae7ba1` (the harness), `559f4bb` (`Apps/Proof`), `c69586c` (the wire contracts), `505ee96` (`LisaArchive`), `13ce72c` (paging), `e7e5085` (envelope), `822ffe5` (`LisaTrust`), `2abce7e` (`LisaCrypto` additions), `4a8826b` (`LisaSyncProtocol`), and the swift-crypto span's `fd94a78`.
 
 ## 9. Quota monitoring, the guard, pause and resume
 
@@ -95,15 +100,15 @@ X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, wit
 - **Pause procedure.** At 80–85% used: drain workers and shorten batches; be paused by about 90%, earlier if the burn rate or in-flight work could consume the reserve. Before pausing: account for running processes, update this file, write a new `.tmp/r2/20261124-r2-5462/pause-<UTC>-<unique>.md` (HEAD, unfinished work, evidence, owner checks, measured usage and reset, the exact next safe action), record it with `guard.py pause`, release the writer lease, end the turn.
 - **Batch sizing.** Two concurrent agents plus this session used 11 points of the window in 4 minutes on 2026-11-24 (08:36–08:40Z). Agents now run one at a time unless usage is low, and a background watchdog that makes no model calls wakes this session at 70%.
 - **Evidence for the owner.** `python3 .tmp/r2/20261124-r2-5462/export/make_bundle.py` writes a redacted `bundle-<UTC>.tar.gz` with its SHA-256 (it refuses to package if a canary survives). To copy one out: publish a port once on the host (`sbx port publish lisa.lab 8765:8765`), ask Claude to run `export/serve-bundle.sh`, then `curl -fO http://localhost:8765/<bundle>.tar.gz`.
+- **The first real resume (2026-11-24):** the guard recorded pause `P-20261124T094325Z-14b7b7` at 09:43Z, took a fresh reading at 12:53:00Z (0%, reset confirmed after 12:49:59Z plus the 180 s buffer) and launched `L-3930e57701`, a forked headless resume of the session; it was acknowledged at 12:53:07Z by session `d0d5cdce-07e8-48a9-a66e-d38baa446cdf`, which is the writer since. Its fresh reading at 12:54:02Z showed 2%, next reset 17:49:59Z. A headless session runs no status line, so its readings come from `usage_read.py` alone.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
 
-No live action, external submission or owner check has been requested or performed in this run.
+No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only; it involves no account, provider or real action, so the action ledger records none.
 
 ## 11. Next steps
 
-1. **On resume:** acknowledge the launch, take a fresh reading, confirm HEAD `c8b5f89` with a clean tree, then review the `Apps/Proof` proposal in `.tmp/r2/20261124-r2-5462/m1/proof-proposal/` (70 current Swift files, configuration, `project.yml` addition; `NOTES.md` with five open questions and the parts not done; `PORTABLE-NEEDS.md`; the certificate encoder checked with `openssl`, `swiftc -parse` on every file). Integrate it file by file only after review against HEAD, recording each open-question decision.
-2. M1, still to do: the owner-verification harness core (`Harness/`, §10.8) with the X1 runner (`Apps/OwnerVerification`, test plan `X1`, `pair-session`), the X1 sheet in `docs/SETUP-APPLE.md`, receipts, roster, lineage and key-history verification. Nearby frames are M6. Done: canonical JSON, identifiers, budgets, the operation envelope with digests, verification and identity rules, `LisaCrypto` additions, the token vector, owner texts with the shared fixture, the nearby session layer and Design A derivations, Merkle paging, the `LisaArchive` codec, `docs/SYNC-PROTOCOL.md`.
-3. Then X1 is handed to the owner (entry point, prerequisites, case IDs, expected observations, redacted results to return), and M2–M5 continue while the owner tests.
-4. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
+1. **M2 — Replication engine** (plan §9): LisaMerge, LisaReplicaStore (membership records, deferred pages), LisaLocalSearch, the LisaSQLite and LisaTime additions, and the first container use (the rootful engine authorized on 2026-11-24, labeled as such). First, the SQLite WAL-reset check (§5) before any M2/M3 durability result is accepted. LisaTrust's roster, lineage and key-history verification and the receipts are built where they are first exercised (the replica at M2, Core at M3); the plan's M1 evidence list doesn't include them.
+2. While the owner runs X1: import and evaluate the redacted results the owner shares; the nearby design is selected only from a passed proof (N-1), and M6 waits for it.
+3. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
