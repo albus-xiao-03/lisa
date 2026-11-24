@@ -239,3 +239,30 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Result: PASS.** After the span, a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (`m2/suite-after-walguard-rerun-*`).
 - **Environment event:** the first suite run after the span failed to link: the project volume was full (49 GB, 5.6 MB free). The SwiftPM scratch outputs of superseded builds under `.build/` were removed (24 GB). They are ordinary build output, not temporary files (`CONSTRICTION.md`); their logs and runner hashes are kept in `.tmp/`, which wasn't touched. The rerun passed as above, and routine builds now reuse `.build/r2-run`.
 
+### M2-1 LisaMerge: the merge rules' state (R2-L11 part; plan §8.3.1, §8.3.2)
+
+- **Code:** `MergeAuthority`, `CommitPosition`, `ObservedCoverage`, `MultiValueRegister`, `ObservedRemoveSet`, `TerminalActions`, `FiringResponses`, `ItemTombstone`, and the `LisaMerge` target: `72797e1` and the commits before it.
+- **Harness:** `m2/harness-v9/`, 7 tests.
+  - v7's test file didn't compile under Swift 6's concurrency checking, and v8's had a mutating call inside `#expect`. Each was superseded by a new harness copy; neither was edited.
+- **Cases:**
+  - Every permutation of a representative operation set converges. For the register, all 120 orders give the owner conflict B/C, with model and source suggestions M/S.
+  - An owner write replaces what it observed, whatever its authority; a model or source write never replaces an owner or ambiguous value.
+  - A piece committed later is judged by the stored horizon. A piece committed after the horizon, or in another epoch, stays.
+  - The observed-remove set keeps a concurrent addition.
+  - A reopen leaves an unseen cancellation in effect, and completion with cancellation shows as "completed and cancelled".
+  - The latest snooze is capped at the maximum, and a settlement suppresses the firing while keeping the snoozes in history.
+  - The tombstone dominates in either order.
+- **Result: PASS.**
+
+### M2-2 Causal readiness and bounded release (S-16 part; plan §8.2.2)
+
+- **Code:** `CausalRelease` (`LisaMerge`), `386a738`: the reference algorithm the replica store and Core's ledger persist.
+- **Harness:** `m2/harness-v10/`, 4 tests, 9.3 s in debug.
+- **Cases:**
+  - The plan's nested fan-out: one decision releases 5,000 dependents, each with 20 dependents (105,001 operations). All are applied in causal order, and no expansion or release step exceeds 256 edges, enqueues or releases.
+  - 33 dependencies are refused as malformed.
+  - A forged two-operation cycle rejects both members, and their dependents are released.
+  - Release is round-robin across origins: 128 + 128 in the first step.
+  - A copy taken mid-drain reaches the same decisions.
+- **Result: PASS.** The durable markers, cursors and queue, and the kill at each step, are tested with the stores (M2 replica, M3 Core).
+
