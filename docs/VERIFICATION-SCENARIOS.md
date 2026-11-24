@@ -456,3 +456,26 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - the staged index and its swap (S-06);
   - the searches scoped to days (S-08);
   - a materialized effective view: today the view is folded on demand. The random sequence took 16 s, mostly that fold, and staged installation needs materialized view tables anyway.
+
+### M2-8 Paged resolution groups and the advisory note limit (S-07 M2 replica part; plan §8.3.2, §8.3.3)
+
+- **Code:** `9c88032` → `3fb9b7f`: the `conflict.resolve` payload, its merge, `aggregateLimit`, and in the store the value rules, group assembly and advisory limit. Documented in `docs/SYNC-PROTOCOL.md`.
+- **Harnesses (first outcomes kept):**
+  - **v22:** never built. Read first, one refusal expected the wrong field and it used a tuple key path.
+  - **v23:** didn't compile: an unmarked throwing initializer, and two `do` blocks mixing error types.
+  - **v24:** built its group pages 0-based, and the protocol's `ResolutionGroupPage` refused them: pages are numbered 1…count. The store's new code had made the same 0-based assumption about the last page, and it was fixed to 1-based before v25.
+  - **v25:** 6/6.
+  - v13, v15, v19, v20 and v21 pass again.
+- **Cases:**
+  - **A four-page group over 1,000 pending candidates:**
+    - A task's title has 1,000 concurrent candidates. The owner's resolution becomes pages of 256, 256, 256 and 232 IDs, each depending on the previous.
+    - After each of the first three pages the title is still a 1,000-way conflict. After the last page it is "Resolved" alone.
+    - A later candidate that the owner never reviewed stays beside it as a new conflict.
+  - **The same group relayed from a peer, with page 2 withheld:** page 1 is released, pages 3 and 4 wait, and the title stays unresolved. When page 2 arrives, all of them release and the title is resolved, with nothing left waiting.
+  - **A group whose list digest doesn't match:** never applied.
+  - **Refused, before anything is written:** a resolution without its value, a value on page 1 of 2, and a title value under `priority`.
+  - **Two maximum-size notes (53,983 encoded bytes each) from two peers:** received in both arrival orders by two replicas, they give identical views with both notes whole.
+  - **The advisory limit:** after 1,000 notes, this replica's next note is refused (`aggregateLimit("notes")`), while a peer's note is still merged, giving 1,001.
+- **Full build and R1 suite:** `m2/suite-after-resolution-groups-20261124T214107Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **What this leaves of S-07:** the replica part's three cases (the largest values, concurrent maximum-size edits and notes, the four-page group) now have M2 evidence in M2-5 and M2-8. Exports (M5) and Core (M3) remain.
