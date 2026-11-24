@@ -96,7 +96,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
 | S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12); still to come: the windowed buckets' deferred pages and absence after the swap (with S-08) |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
-| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages; still to come: the planning-zone cases, the overlay watermark and constant-size publication, readers during a repair, Core (M3) and the simulated link (M6) |
+| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13, M2-14): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages, repairs by generation with the overlay watermark and constant-size publication; still to come: the zone-unverified floating rows and all-day rows read in the planning zone, searches around a repair, Core (M3) and the simulated link (M6) |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
 | S-10 | Re-anchoring, restore, fences and admission | M3 | Not run |
 | S-11 | Delivery holds after a restore; (l) recorded against KF-1 | M3, M4, M8 | Not run |
@@ -645,3 +645,33 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - readers before, during and after a repair (see one view or the other);
   - derived records in full snapshots;
   - searches scoped to days.
+
+### M2-14 Partition repairs by generation: the overlay watermark and constant-size publication (S-08 replica part; plan §8.4.3)
+
+- **Code:** `07bd0b9` → `799a16f`:
+  - derived rows and memberships by generation, each partition's published generation, and repair records with their chunks;
+  - the watermark advancing with every local change;
+  - the repair steps: record, stage, publish, deferred pages, clean up;
+  - M2-13's one-call `finishRepair` now running on them.
+  - Documented in `docs/SYNC-PROTOCOL.md` §8a.
+- **Harness:** `m2/harness-v39/`, 5/5.
+  - **v38:** didn't compile; three catches of untyped helpers. It is kept unchanged.
+  - **v36 and v28:** pass again (6/6 each) on the new path, so M2-13's cases hold with publication by generation.
+  - **v37:** its pinned table list predates the repair tables. **v40** has the updated list, 10/10.
+  - v13, v15, v19, v20, v25, v30 and v35 pass again.
+- **Cases:**
+  - **Staged rows stay invisible until the flip:**
+    - A bucket proved at 110 lists "Standup".
+    - A repair at cut 200 stages "Standup, moved" and a new "Review". Until publication the bucket still lists only "Standup", as of 110, marked repairing.
+    - Three local changes during the repair keep its watermark current, so publication's re-check passes.
+    - After publication the bucket lists both new rows as of 200, and the cursor is 200.
+  - **Publication is constant in size:** 0.67 ms with 10 staged rows, and 1.19 ms with 5,000. Each bucket then lists all of its staged rows.
+  - **Refusals:** a snapshot at cut 200 for a bucket at 300 is refused as stale. A snapshot from another epoch abandons the repair. The bucket stays unrepaired.
+  - **A bucket entering the window:**
+    - It starts at cursor 0.
+    - With one of its two chunks staged, publication reports one missing (`repairIncomplete(1)`).
+    - With both staged, it publishes 600 rows at cut 700.
+  - **Cleanup:** after two successive repairs of one bucket, three membership records exist. Cleanup in chunks of 1 leaves only the published generation's one, with the listing unchanged.
+- **Full build and R1 suite:** `m2/suite-after-repair-generations-20261124T222922Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **What the watermark covers so far:** derived occurrences have no local overlay or search entries yet, so a local change keeps a staged repair current just by advancing its watermark. When event-attached notes and their search entries arrive, the same transaction recomputes them for every staged generation holding the row (§8.4.3 step 3).
