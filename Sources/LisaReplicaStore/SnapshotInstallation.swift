@@ -103,14 +103,19 @@ extension ReplicaStore {
             throw .unverifiedPage(.malformed(.invalidField("chunk.position")))
         }
         var envelopes: [OperationEnvelope] = []
+        var operations: [(signed: SignedOperation, decision: ChangeEntry.Decision)] = []
         for entry in chunk.entries {
+            // Derived records join full snapshots with their staged tables; bucket snapshots carry them now.
+            guard let operation = entry.operation, let decision = entry.decision else {
+                throw .unverifiedPage(.malformed(.invalidField("chunk.record")))
+            }
             do {
                 envelopes.append(
-                    try OperationSigning.verify(
-                        entry.operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                    try OperationSigning.verify(operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
             } catch {
                 throw .unverified(error)
             }
+            operations.append((operation, decision))
         }
         try requireRoomBeyondReserve(estimate: 2 * page.bytes.count)
         try write { session in
@@ -122,7 +127,7 @@ extension ReplicaStore {
             } else {
                 try session.query("UPDATE installation_state SET partitions = ? WHERE singleton = 1", [.text(names)])
             }
-            for (entry, envelope) in zip(chunk.entries, envelopes) {
+            for ((entry, envelope), operation) in zip(zip(chunk.entries, envelopes), operations) {
                 try session.query(
                     """
                     INSERT OR IGNORE INTO staged_canonical_operations
@@ -131,9 +136,9 @@ extension ReplicaStore {
                     """,
                     [
                         ReplicaColumns.id(envelope.operationID), .text(envelope.entityType),
-                        ReplicaColumns.id(envelope.entityID), ReplicaColumns.bytes(entry.operation.body),
-                        ReplicaColumns.bytes(entry.operation.signature), ReplicaColumns.id(state.epochID),
-                        .integer(entry.position), .text(entry.decision.rawValue),
+                        ReplicaColumns.id(envelope.entityID), ReplicaColumns.bytes(operation.signed.body),
+                        ReplicaColumns.bytes(operation.signed.signature), ReplicaColumns.id(state.epochID),
+                        .integer(entry.position), .text(operation.decision.rawValue),
                     ])
                 try session.query(
                     """
