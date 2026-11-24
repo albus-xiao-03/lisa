@@ -117,7 +117,7 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `origin` | `{"kind": "device", "deviceID", "incarnationID", "sequence" (≥ 1), "previous"?: {"incarnationID", "lastSequence"}}`, where `previous` may appear only on sequence 1; or `{"kind": "coreLegacyTranslation"}` |
 | `entity` | `{"type", "id"}`, the type from the catalog (`OperationCatalog`) |
 | `type` | The operation type, `<entity>.<action>` from the catalog (§8.2.3) |
-| `payload` | The type's payload; opaque to the envelope codec until each type's schema is implemented |
+| `payload` | The type's payload. The schemas implemented so far are below ("Item payloads"); other types' payloads stay opaque to the envelope codec until theirs are |
 | `dependencies` | At most 32 operation IDs, strictly ascending, never the operation's own ID |
 | `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}` |
 | `legacyParent` | Only on Core legacy children: `{"scope", "requestID" (R1's 8–128-character alphabet), "discriminator", "index" (in 0..<count), "count", "setDigest"}` |
@@ -128,6 +128,41 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 - **Duplicates,** everywhere (`OperationIdentityCheck`): the same ID and digest is `duplicate`; the same ID with another digest is `identity_reuse`; the same `(device, incarnation, sequence)` under another ID is `sequence_reuse`.
 - **Legacy child identity** (`LegacyChildIdentity`, plan §8.12.2): the child ID is the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`, with `len32` a 32-bit big-endian length, the dataset as its 16 raw bytes and the strings as UTF-8; `setDigest` is SHA-256 of the ordered child IDs' raw bytes. **Vectors** (reproduced with Python's `hashlib`), dataset `00112233445566778899aabbccddeeff`, scope `device:0123`, request ID `req-00000001`: discriminator `change:0` → `80d40d4a935c024d740fdc1f05dbbeb7`; `change:1` → `8fe937c75d3c10b783f520badee69ace`; set digest of the two → `eb8d5c08cc6253fb04b7d28287d5fede7f305878525c0212ea3c7526a11778d1`.
 - **Value budget** (`OperationValueBudget.maximumValueBytes(type)`): 65,536 − the encoded size of the type's largest envelope whose payload is `{"value":""}`, taking the larger of the device and legacy variants with every optional field at its maximum. The legacy variant is the larger. Results: `note.add` 53,982 bytes, `task.edit` 53,981, `capture.create` 53,976, `conflict.resolve` 53,974 (each type's name length is the only difference). A value of exactly that many encoded bytes, built from worst-case `\u00xx` escapes, fills the body to 65,536 bytes; one byte more is refused. Payload schemas with more fields subtract their own encoded overhead when they are defined.
+
+### Item payloads: the task family, notes, tags and deletion (plan §8.2.3, §8.3.2, §8.3.3)
+
+`ItemOperationPayload` decodes each of these strictly. The rules:
+- only the type's own fields are accepted;
+- each value is checked by its rules;
+- what an operation replaces, removes or reopens by observation is stated in its observed set (§8 above), never in its payload.
+
+| Type | Payload | Rules |
+|---|---|---|
+| `task.create` | `{"confirmation","deadline","estimate","priority","splittable","title"}`, all six present | As `task.edit` per field; R1's defaults are the caller's (normal priority, not splittable) |
+| `task.edit` | `{"field": <field>, "value": <value>}` | `title` 1–200 characters; `priority` `low`, `normal`, `high` or `urgent`; `deadline` a deadline or `null` to clear; `estimate` minutes ≥ 1 or `null`; `splittable` a boolean; `confirmation` `confirmed`, `possible` or `informational` |
+| `task.complete`, `task.cancel`, `item.delete` | `{}` | The operation ID is the terminal action's or the deletion's identity |
+| `task.reopen` | `{"reopens": [IDs]}` | 1–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect |
+| `note.add`, `note.replaceObserved` | `{"text": <text>}` | Non-empty, within the text budget below; a replacement removes exactly the note pieces its observed set covers |
+| `tags.change` | `{"change": "add" \| "remove", "tag": <tag>}` | One tag of 1–64 characters; a removal covers only additions of its own tag that its observed set covers |
+
+- **A deadline** is `{"kind":"instant","at": <UTC milliseconds>, "zone"?: <IANA name>}` or `{"kind":"date","date":"YYYY-MM-DD"}`.
+  - The date must exist in the Gregorian calendar, for example `2028-02-29` but not `2026-02-29`.
+  - The zone is 1–64 bytes of `A–Z a–z 0–9 / _ + -`.
+  - A date-only deadline never becomes an invented time (R1's `Deadline`).
+- **A task operation must name a task:** `task.*` with another entity type is malformed. The replica store applies these checks both to its own saves and to arriving operations, refusing the latter as `malformed`.
+- **The note text budget:** a note's text may take `ItemOperationPayload.maximumTextBytes(type)` encoded bytes, measured after canonical escaping and excluding the quotes. That is the type's value budget plus one, because `{"text":…}` is one byte shorter than the budget's reference `{"value":…}`.
+  - For `note.add` it is 53,983 bytes.
+  - It is checked on the encoded length before anything larger is built.
+  - A text that doesn't fit becomes a blob (§8.3.3), when blobs are implemented.
+- **Vectors** (canonical payload bytes; harness v15 round-trips each through the decoder):
+  - `task.create`, title "Call the dentist", priority high, due 2026-12-01, 30 minutes: `{"confirmation":"confirmed","deadline":{"date":"2026-12-01","kind":"date"},"estimate":30,"priority":"high","splittable":false,"title":"Call the dentist"}`
+  - `task.edit` deadline: `{"field":"deadline","value":{"at":1795550000000,"kind":"instant","zone":"Europe/Berlin"}}`
+  - `task.edit` clearing the estimate: `{"field":"estimate","value":null}`
+  - `task.reopen`: `{"reopens":["00000000000000000000000000000001","00000000000000000000000000000002"]}`
+  - `note.add`: `{"text":"Bring the referral"}`
+  - `tags.change`: `{"change":"remove","tag":"health"}`
+  - `task.complete`, `task.cancel`, `item.delete`: `{}`
+- **Merged state** (`LisaMerge.TaskMergeState`, `docs/CONFLICTS.md`): one register per field, note pieces, one observed-remove set per tag, terminal actions and the tombstone.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
@@ -148,4 +183,4 @@ Rosters with key history, causal summaries, snapshot manifests and reviewed-set 
 
 ## 11. Not yet specified here
 
-Receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
+The payloads of the other operation types (captures, ideas, reminders, occurrences, proposals, preferences, plans, suggestions, conflicts, devices, authority writes, restores), receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
