@@ -105,7 +105,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-14 | The destination policy at every redirect | M7, X1, X5 | Not run |
 | S-15 | VPN publishing | M4, target host | Not run |
 | S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); M3 and M6 parts not run |
-| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Not run |
+| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Parts run: the single-writer guard (M2-0) and `SQLITE_FULL` in a save (M2-3); the reader monitor and the container runs not yet |
 | S-18 | Model accounting | M7 | Not run |
 | S-19 | Deletion and expiry propagation | M5, M8 | Not run |
 | S-20 | Health, CLI modes and the deployment wrappers | M3, M4 | Not run |
@@ -266,3 +266,48 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - A copy taken mid-drain reaches the same decisions.
 - **Result: PASS.** The durable markers, cursors and queue, and the kill at each step, are tested with the stores (M2 replica, M3 Core).
 
+
+### M2-3 LisaReplicaStore, first span (R2-DATA-01, -02, R2-SYNC-02, -04 parts; plan §8.1.1, §8.2.1, §8.6.1–§8.6.4; S-17 in-database part)
+
+- **Code:** `LisaReplicaStore`, `ef9f546` → `818fe3c`. It starts with the observed set's canonical form in LisaSyncProtocol and ends with `Package.swift`; D-56 is `528f236`.
+- **Harness:** `m2/harness-v12/`, 9 tests through the public API on real files under `m2/harness-v12-work-*`.
+  - v11 didn't compile: a `Digest256` built inside a `do` block widened its error type. It is superseded and kept unchanged.
+  - v12 was rerun after formatting: 9/9 again.
+- **Cases:**
+  - **Directory and schema:**
+    - The replica directory and its folders are 0700; the database, its WAL and the ballast (written zeros) are 0600.
+    - Schema v1 has 18 tables.
+    - A second writer is refused while the first is open.
+  - **Before enrollment:** a save is a draft ("not enrolled") with its follow-up. After enrollment the draft is signed under its own operation ID and original time, at sequence 1, and verifies with the device key.
+  - **Key unavailable:** a save is a draft ("key unavailable") and consumes no sequence. A later launch signs it, and its link skips the empty incarnation: (I1, 1).
+  - **The restored copy (§8.6.4, M2 replica side):**
+    - A copy of the closed replica, taken with its key and restored after the device continued (I2, two more operations), starts I3, linked to (I1, 3) as I2 is.
+    - Across both copies, no origin triple names two operations.
+    - Exchanging the journals stores the new entries and returns `duplicate` for the three shared ones, with no security event.
+  - **The duplicate rules on a replica:**
+    - The same ID and digest is `duplicate`.
+    - The same ID with another digest is `identity_reuse`.
+    - Another ID with the same triple is `sequence_reuse`.
+    - Each refusal records a security event with both digests.
+    - Another dataset, a forged signature and an unknown device are refused before the rules apply.
+    - The replica's own operation relayed back is a duplicate.
+  - **The atomic local change rolls back:**
+    - An index failure rolls everything back: journal, generation, sequence, follow-ups and the index's own rows.
+    - So does `SQLITE_FULL`, forced with `max_page_count` inside the transaction and reported as "storage full".
+    - An earlier save stays intact, and the next save takes sequence 2.
+  - **The overlay stays until the canonical change installs (§8.6.4):**
+    - It stays through provisional and final receipts, and leaves when the row containing it installs.
+    - A repeated receipt, and a changed final decision, change nothing. A receipt for another digest is refused.
+    - An older row version is ignored, and a newer tombstone installs.
+    - A rejection leaves the view at once and stays in the journal.
+    - The local change journal records exactly these changes, in order.
+  - **Invalid commands:** an unknown operation or entity type, 33 dependencies, and a body over 64 KiB are refused before anything is written.
+  - **Local changes:** they are read in order after any generation, and sequences are consecutive within an incarnation.
+- **Full build and R1 suite after the span:** `m2/suite-after-replica-span1-20261124T205211Z/`. The debug build with tests has 0 warnings, and 376 tests in 66 suites passed. The runner is unchanged (`8816964d…`) because R1's tests link no R2 module.
+- **Result: PASS.**
+- **Still to come in M2:**
+  - the effective view through LisaMerge, and CausalRelease persisted;
+  - pages, cursors, memberships and deferred pages;
+  - staged installation (S-06);
+  - the reader monitor and the container exhaustion runs (S-17);
+  - kills at each step on real files.
