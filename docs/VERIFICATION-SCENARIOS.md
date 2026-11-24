@@ -772,3 +772,36 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **This replica's own device:** the revocation is recorded, and the saved capture stays pending, in the view and found by search.
 - **Full build and R1 suite:** `m2/suite-after-revocations-20261124T231238Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
+
+### M2-19 Peer custody kept apart from Core commitment (R2-L15 replica part, R2-SYNC-04; plan §8.6.1, §8.7)
+
+- **Code:**
+  - `CustodyAcknowledgement` and `SignedCustodyAcknowledgement` (LisaSyncProtocol).
+  - The `lisa-r2-custody-v1\n` domain and `CustodySigning` (LisaTrust).
+  - `recordCustody`, `custody(of:)`, `safety(of:)` and `OperationSafety`, with two error cases (LisaReplicaStore).
+  - `docs/SYNC-PROTOCOL.md` §4 and §8c.
+- **Harness:** `m2/harness-v50/`, 4/4 on its first run.
+- **Regression package v1** (`m2/make-regressions-v1.py`, run `m2/regressions-run-20261124T232437Z/`):
+  - **Method:** the current harnesses' test targets, copied byte-identically, in one package against the working tree. It is built once in the shared scratch path without the index store, and each target is run alone.
+  - **Results:** 18 targets pass again with their usual counts: v6, v9, v10, v13, v15, v19, v20, v25, v26, v28, v30, v36, v39, v43, v46, v48, v49 and v50. v35 and v47 each start their runner again with a child filter, so they ran in their own packages, and both pass.
+  - **Disk:** switching the shared scratch path's index setting rebuilt it, and the volume fell to 349 MB free. Superseded build output from before this run was then removed from `.build/` (`m2/disk-reclaim-20261124T232752Z.txt`, 7.1 GB), leaving 7.5 GB.
+- **Cases:**
+  - **Kept apart:** a local capture acknowledged by two peers.
+    - Each acknowledgement is recorded once.
+    - The entry stays pending and an overlay, with no receipt and no position, and its submit follow-up stays queued.
+    - `safety` reports saved here, held by both peers, and not synced with Core.
+    - Only Core's receipt makes it synced (epoch and position 12), with both holders still listed. Both survive a restart.
+  - **Only verified custody of the exact bytes counts.** Each of these is refused, and none changes anything:
+    - another device's signature over the holder's name (`invalidSignature`);
+    - a holder outside the roster (`unknownHolder`);
+    - another dataset;
+    - a malformed body;
+    - other bytes than the journal's;
+    - an unknown operation;
+    - this device's own acknowledgement;
+    - a device revoked meanwhile.
+  - **A relayed operation:** a peer holding another peer's relayed operation is custody only. The journal reports no safety for an operation it doesn't hold.
+  - **Wire form:** the vector of §8c, decoded back to the same value. An unknown field and a negative time are refused.
+- **Not on the replica yet:** Core's receipt format and its signature check (M3), and the relay over the nearby link (M6). The store records receipts the sync engine has verified.
+- **Full build and R1 suite:** `m2/suite-after-custody-20261124T232155Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
