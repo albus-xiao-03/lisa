@@ -178,17 +178,20 @@ enum ReplicaSchema {
         ) STRICT
         """,
         "CREATE INDEX canonical_operations_by_item ON canonical_operations (entity_type, entity_id)",
-        // Derived records from Core (§8.3.5, §8.4.2): calendar occurrences with their row version and bucket range; a
-        // deletion keeps its version with no body, so an older update can't bring the row back.
+        // Derived records from Core (§8.3.5, §8.4.2): calendar occurrences with their row version and bucket range, one
+        // version per generation (0 for pages, a repair's own for its snapshot, §8.4.3); readers take a row's newest
+        // version among published generations. A deletion keeps its version with no body, so an older update can't
+        // bring the row back.
         """
         CREATE TABLE derived_rows (
           record_type TEXT NOT NULL,
           record_id BLOB NOT NULL CHECK (length(record_id) = 16),
+          generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
           version INTEGER NOT NULL CHECK (version >= 1),
           body BLOB,
           first_bucket INTEGER,
           last_bucket INTEGER,
-          PRIMARY KEY (record_type, record_id),
+          PRIMARY KEY (record_type, record_id, generation),
           CHECK ((body IS NULL) = (first_bucket IS NULL) AND (first_bucket IS NULL) = (last_bucket IS NULL))
         ) STRICT, WITHOUT ROWID
         """,
@@ -199,16 +202,39 @@ enum ReplicaSchema {
           partition TEXT PRIMARY KEY,
           epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
           cursor INTEGER NOT NULL CHECK (cursor >= 0),
-          repairing INTEGER NOT NULL DEFAULT 0 CHECK (repairing IN (0, 1))
+          repairing INTEGER NOT NULL DEFAULT 0 CHECK (repairing IN (0, 1)),
+          published_generation INTEGER NOT NULL DEFAULT 0 CHECK (published_generation >= 0)
         ) STRICT
         """,
         """
         CREATE TABLE memberships (
           partition TEXT NOT NULL,
+          generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
           entity_type TEXT NOT NULL,
           entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
           version INTEGER NOT NULL CHECK (version >= 1),
-          PRIMARY KEY (partition, entity_type, entity_id)
+          PRIMARY KEY (partition, generation, entity_type, entity_id)
+        ) STRICT, WITHOUT ROWID
+        """,
+        // A partition repair (§8.4.3): its generation, snapshot root and cut, the cursor it started from, and the
+        // overlay watermark — the local state generation its staged view reflects.
+        """
+        CREATE TABLE repairs (
+          generation INTEGER PRIMARY KEY CHECK (generation >= 1),
+          partition TEXT NOT NULL UNIQUE,
+          epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+          cut INTEGER NOT NULL CHECK (cut >= 0),
+          start_cursor INTEGER NOT NULL,
+          page_count INTEGER NOT NULL CHECK (page_count >= 1),
+          merkle_root BLOB NOT NULL CHECK (length(merkle_root) = 32),
+          overlay_watermark INTEGER NOT NULL
+        ) STRICT
+        """,
+        """
+        CREATE TABLE repair_chunks (
+          generation INTEGER NOT NULL,
+          chunk_index INTEGER NOT NULL,
+          PRIMARY KEY (generation, chunk_index)
         ) STRICT, WITHOUT ROWID
         """,
         """
