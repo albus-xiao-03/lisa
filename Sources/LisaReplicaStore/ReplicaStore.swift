@@ -335,10 +335,14 @@ public final class ReplicaStore: Sendable {
                 arrivingID: envelope.operationID, arrivingDigest: digest, byID: byID, byOrigin: byOrigin)
             {
             case .duplicate:
-                guard let entry = try OperationJournal.entry(envelope.operationID, in: session) else {
+                if let entry = try OperationJournal.entry(envelope.operationID, in: session) {
+                    return .duplicate(state: entry.state)
+                }
+                // Known only from canonical state (a page or a snapshot): Core's decision is its state.
+                guard let state = try CanonicalTables.state(of: envelope.operationID, in: session) else {
                     throw ReplicaStoreError.corrupt("a duplicate's entry is missing")
                 }
-                return .duplicate(state: entry.state)
+                return .duplicate(state: state)
             case .identityReuse:
                 guard let byID else { throw ReplicaStoreError.corrupt("identity reuse without an entry") }
                 try OperationJournal.recordSecurityEvent(
