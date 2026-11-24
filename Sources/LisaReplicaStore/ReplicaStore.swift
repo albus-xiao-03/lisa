@@ -231,7 +231,8 @@ public final class ReplicaStore: Sendable {
     }
 
     /// Checks the command as the widest operation it can become (sequence 1 with an incarnation link, the largest
-    /// numbers), so a draft saved now can always be signed later within the 64 KiB body.
+    /// numbers), so a draft saved now can always be signed later within the 64 KiB body, and checks a payload whose
+    /// schema is defined (`ItemOperationPayload`) by its rules and value budget.
     static func validate(_ command: LocalCommand, operationID: Identifier128, configuration: ReplicaStoreConfiguration)
         throws(ReplicaStoreError)
     {
@@ -247,6 +248,8 @@ public final class ReplicaStore: Sendable {
                 observed: command.observed, policyVersion: configuration.policyVersion, legacyParent: nil,
                 createdAt: .max)
             _ = try envelope.canonicalBody()
+            try checkPayload(
+                operationType: command.operationType, entityType: command.item.entityType, payload: command.payload)
         } catch let error as OperationEnvelopeError {
             throw .invalidCommand(error)
         } catch {
@@ -254,9 +257,20 @@ public final class ReplicaStore: Sendable {
         }
     }
 
+    /// A payload whose schema is defined (`ItemOperationPayload`) is decoded and checked by its rules and value budget
+    /// (plan §8.3.3), and a task operation must name a task.
+    static func checkPayload(operationType: String, entityType: String, payload: CanonicalValue)
+        throws(OperationEnvelopeError)
+    {
+        guard ItemOperationPayload.operationTypes.contains(operationType) else { return }
+        _ = try ItemOperationPayload(operationType: operationType, payload: payload)
+        if operationType.hasPrefix("task."), entityType != "task" { throw .invalidField("entity.type") }
+    }
+
     // MARK: - Relayed operations and the duplicate rules (§8.2.1)
 
-    /// Verifies an arriving operation (dataset, origin key, signature) and applies the duplicate rules: same ID and
+    /// Verifies an arriving operation (dataset, origin key, signature, and a payload with a schema by its rules) and
+    /// applies the duplicate rules: same ID and
     /// digest is a duplicate; same ID with another digest, or the same origin triple under another ID, is refused with
     /// a security event.
     public func receive(
@@ -269,6 +283,12 @@ public final class ReplicaStore: Sendable {
                 operation, dataset: datasetID, deviceKey: deviceKey, coreKey: coreKey)
         } catch {
             throw .unverified(error)
+        }
+        do {
+            try Self.checkPayload(
+                operationType: envelope.operationType, entityType: envelope.entityType, payload: envelope.payload)
+        } catch {
+            throw .unverified(.malformed(error))
         }
         let digest = OperationDigest.of(body: operation.body)
         let time = now()
