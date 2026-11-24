@@ -805,3 +805,36 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Not on the replica yet:** Core's receipt format and its signature check (M3), and the relay over the nearby link (M6). The store records receipts the sync engine has verified.
 - **Full build and R1 suite:** `m2/suite-after-custody-20261124T232155Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
+
+### M2-20 The duplicate rules against canonical state, clock skew and an old device's replay (R2-SYNC-02; R2-L35 and R2-L10 replica parts; plan §8.2.1, §8.3, §8.6.1)
+
+- **Found while writing this case:** the replica checked the duplicate rules against its journal only.
+  - A relayed copy of an operation it knew only from canonical state, from a page or a full snapshot, was stored as a new pending journal entry and listed as an overlay.
+  - A changed body under such an operation's ID, or its origin triple under another ID, raised no security event. The second could even enter the view provisionally.
+  - §8.2.1 requires the rules on every replica with no exception.
+- **Code (fix):**
+  - Canonical operations keep their origin triple, with an index, in both the live and the staged table (`ReplicaSchema`, `SnapshotInstallation`, `CanonicalTables`).
+  - The lookups by ID and by triple consult canonical state after the journal (`OperationJournal`).
+  - `receive` returns a canonical-only duplicate in Core's state (`ReplicaStore`).
+  - `docs/SYNC-PROTOCOL.md` §8.
+- **Harness:** `m2/harness-v51/`, 4/4 on its first run, in the shared scratch path without the index store.
+  - Regression package v2 is v1 plus v51 (`m2/make-regressions-v2.py`, run `m2/regressions-run-20261124T233307Z/`). All 19 targets pass with their usual counts, and so do v35 and v47 in their own packages.
+- **Cases:**
+  - **The duplicate rules against canonical state:**
+    - An operation known from a page and relayed again is `duplicate` in state `accepted`. No journal entry and no overlay appear.
+    - Its ID under another body is `identity_reuse`, and its triple under another ID is `sequence_reuse`. Each security event names the canonical operation and its digest.
+    - After a full snapshot's swap, a relayed copy of a snapshot operation is a `duplicate`, and its triple under another ID is `sequence_reuse`: the staged table carried the triples.
+  - **R2-L35, skewed creation times:**
+    - Two concurrent title edits keep both candidates in four runs: either device's clock a day fast or a month slow, and either arrival order.
+    - An edit that observed both wins, though its clock says it was made a year earlier, and it arrived first.
+  - **R2-L35, a wall-clock step:** the replica's clock stepped back a day, then ahead a year, between three local saves.
+    - Generations and sequences 1, 2, 3 follow the saves, and the envelopes carry the clock's times as given.
+    - The last edit stands, and another replica receiving the three in reverse order shows the same.
+    - The monotonic clock for timeouts and budgets is M2-9's, and the planning zone change is M2-15's.
+  - **R2-L10, an old device's replay:** Core's pages committed a task, a note and then the deletion. An old device that had been offline then:
+    - sent the edit and the note it made before the deletion, which stay superseded;
+    - replayed the creation and the note, which are `duplicate`;
+    - created the same item again, which stays deleted.
+    - Search finds nothing, also after a restart.
+- **Full build and R1 suite:** `m2/suite-after-canonical-duplicates-20261124T232956Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
