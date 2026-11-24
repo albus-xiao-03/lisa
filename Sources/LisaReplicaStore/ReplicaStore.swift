@@ -439,6 +439,167 @@ public final class ReplicaStore: Sendable {
         }
     }
 
+    // MARK: - Change pages and partition cursors (§8.4.2, §8.4.3)
+
+    /// The cursor of `partition`, if the replica covers it.
+    public func partitionCursor(_ partition: String) throws(ReplicaStoreError) -> PartitionCursor? {
+        try read { session in try CanonicalTables.cursor(partition, in: session) }
+    }
+
+    /// Verifies one change page — Core's signature, its form, the dataset, and every entry's operation — and applies it
+    /// in one transaction, per listed partition by the cases of §8.4.2. Each entry is applied once, subject to its row
+    /// version; nothing missing from a page is read as deleted. A page that fails verification changes nothing.
+    @discardableResult
+    public func applyChangePage(
+        _ signed: SignedChangePage, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+    ) throws(ReplicaStoreError) -> [String: PartitionPageOutcome] {
+        guard let dataset = try identity().datasetID else { throw .notEnrolled }
+        let page: ChangePage
+        do {
+            page = try ChangePageSigning.verify(signed, dataset: dataset, coreKey: coreKey)
+        } catch {
+            throw .unverifiedPage(error)
+        }
+        var envelopes: [OperationEnvelope] = []
+        for entry in page.entries {
+            do {
+                envelopes.append(
+                    try OperationSigning.verify(
+                        entry.operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+            } catch {
+                throw .unverified(error)
+            }
+        }
+        return try write { session in try self.apply(page, signed: signed, envelopes: envelopes, only: nil, in: session)
+        }
+    }
+
+    /// Starts repairing `partition` (§8.4.3): pages that arrive for it meanwhile are kept, verified but unapplied.
+    public func beginRepair(_ partition: String, epochID: Identifier128) throws(ReplicaStoreError) {
+        try write { session in
+            let current = try CanonicalTables.cursor(partition, in: session)
+            try CanonicalTables.setCursor(
+                partition, epoch: current?.epochID ?? epochID, position: current?.position ?? 0, repairing: true,
+                in: session)
+        }
+    }
+
+    /// Publishes a repair at its snapshot cut, then applies the pages deferred meanwhile, oldest interval first, for
+    /// this partition only. The cursor becomes the cut if that is later; it never moves backward.
+    @discardableResult
+    public func finishRepair(
+        _ partition: String, cut: Int64, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+    ) throws(ReplicaStoreError) -> [PartitionPageOutcome] {
+        guard let dataset = try identity().datasetID else { throw .notEnrolled }
+        return try write { session in
+            guard let current = try CanonicalTables.cursor(partition, in: session), current.isRepairing else {
+                throw ReplicaStoreError.corrupt("\(partition) isn't being repaired")
+            }
+            try CanonicalTables.setCursor(
+                partition, epoch: current.epochID, position: max(current.position, cut), repairing: false, in: session)
+            var outcomes: [PartitionPageOutcome] = []
+            for signed in try CanonicalTables.takeDeferred(partition, in: session) {
+                let page = try ChangePageSigning.verify(signed, dataset: dataset, coreKey: coreKey)
+                var envelopes: [OperationEnvelope] = []
+                for entry in page.entries {
+                    envelopes.append(
+                        try OperationSigning.verify(
+                            entry.operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                }
+                if let outcome = try self.apply(
+                    page, signed: signed, envelopes: envelopes, only: partition, in: session)[
+                        partition]
+                {
+                    outcomes.append(outcome)
+                }
+            }
+            return outcomes
+        }
+    }
+
+    /// Applies a verified page inside the caller's transaction, for every listed partition or only `only`.
+    private func apply(
+        _ page: ChangePage, signed: SignedChangePage, envelopes: [OperationEnvelope], only: String?,
+        in session: SQLiteSession
+    ) throws -> [String: PartitionPageOutcome] {
+        var outcomes: [String: PartitionPageOutcome] = [:]
+        var from: [String: Int64] = [:]
+        for partition in page.partitions where only == nil || only == partition {
+            if let cursor = try CanonicalTables.cursor(partition, in: session) {
+                if cursor.epochID != page.epochID {
+                    outcomes[partition] = .otherEpoch
+                } else if cursor.isRepairing {
+                    try CanonicalTables.deferPage(signed, page: page, for: partition, in: session)
+                    outcomes[partition] = .deferred
+                } else if page.toPosition <= cursor.position {
+                    outcomes[partition] = .ignored(cursor: cursor.position)
+                } else if cursor.position < page.fromPosition {
+                    outcomes[partition] = .gap(cursor: cursor.position)
+                } else {
+                    from[partition] = cursor.position
+                }
+            } else if page.fromPosition == 0 {
+                from[partition] = 0
+            } else {
+                outcomes[partition] = .gap(cursor: nil)
+            }
+        }
+        var counts: [String: Int] = [:]
+        var operations: [Identifier128] = []
+        var items: [ReplicaItemKey] = []
+        for (entry, envelope) in zip(page.entries, envelopes) {
+            let touched = entry.partitions.filter { partition in from[partition].map { entry.position > $0 } ?? false }
+            guard !touched.isEmpty else { continue }
+            for partition in touched { counts[partition, default: 0] += 1 }
+            let item = ReplicaItemKey(entityType: envelope.entityType, entityID: envelope.entityID)
+            if let version = try CanonicalTables.rowVersion(item, in: session), entry.position <= version { continue }
+            try applyEntry(entry, envelope: envelope, epoch: page.epochID, item: item, in: session)
+            operations.append(envelope.operationID)
+            if !items.contains(item) { items.append(item) }
+        }
+        for partition in from.keys {
+            try CanonicalTables.setCursor(
+                partition, epoch: page.epochID, position: page.toPosition, repairing: false, in: session)
+            outcomes[partition] = .applied(cursor: page.toPosition, entries: counts[partition] ?? 0)
+        }
+        if !from.isEmpty {
+            try LocalChangeJournal.append(.canonicalPage, operations: operations, items: items, in: session)
+        }
+        for item in items { try reindex(item, in: session) }
+        return outcomes
+    }
+
+    /// One entry: a committed operation joins canonical state (its journal copy, if any, records the commit and stops
+    /// being an overlay), a rejected one leaves the view; either way its causal decision is made and the row's version
+    /// moves to the entry's position.
+    private func applyEntry(
+        _ entry: ChangeEntry, envelope: OperationEnvelope, epoch: Identifier128, item: ReplicaItemKey,
+        in session: SQLiteSession
+    ) throws {
+        let id = ReplicaColumns.id(envelope.operationID)
+        switch entry.decision {
+        case .accepted, .acceptedWithConflict:
+            try CanonicalTables.insertCanonical(
+                entry.operation, envelope: envelope, epoch: epoch, position: entry.position, decision: entry.decision,
+                in: session)
+            try session.query(
+                """
+                UPDATE operations SET state = ?, commit_epoch = ?, commit_position = ?, overlay = 0
+                WHERE operation_id = ? AND state != 'rejected'
+                """, [.text(entry.decision.rawValue), ReplicaColumns.id(epoch), .integer(entry.position), id])
+            try CausalReleaseTables.decide(envelope.operationID, .applied, in: session)
+        case .rejected:
+            try session.query(
+                """
+                UPDATE operations SET state = 'rejected', commit_epoch = ?, commit_position = ?, overlay = 0
+                WHERE operation_id = ?
+                """, [ReplicaColumns.id(epoch), .integer(entry.position), id])
+            try CausalReleaseTables.decide(envelope.operationID, .rejected, in: session)
+        }
+        try FollowUpQueue.remove(.submit, envelope.operationID, in: session)
+        try CanonicalTables.setRowVersion(item, entry.position, in: session)
+    }
+
     // MARK: - Causal release and the effective view (§8.2.2, §8.6.1)
 
     /// The advisory limit of notes per item (§8.3.2): past it the app asks the owner to archive.
@@ -496,12 +657,18 @@ public final class ReplicaStore: Sendable {
     public static func taskView(_ entityID: Identifier128, in session: SQLiteSession) throws -> TaskView? {
         let item = ReplicaItemKey(entityType: "task", entityID: entityID)
         let partition = CollectionPartition.name(forEntityType: "task") ?? "tasks"
-        let rows = try session.query(
+        // Canonical operations first, then the journal's applied, unrejected ones not already canonical: each once.
+        let canonical = try session.query(
+            "SELECT body, epoch_id, position FROM canonical_operations WHERE entity_type = ? AND entity_id = ?",
+            [.text(item.entityType), ReplicaColumns.id(entityID)])
+        let journal = try session.query(
             """
             SELECT o.body, o.commit_epoch, o.commit_position FROM operations o
             JOIN causal_decisions d ON d.operation_id = o.operation_id AND d.decision = 'applied'
             WHERE o.entity_type = ? AND o.entity_id = ? AND o.state != 'rejected'
+              AND NOT EXISTS (SELECT 1 FROM canonical_operations c WHERE c.operation_id = o.operation_id)
             """, [.text(item.entityType), ReplicaColumns.id(entityID)])
+        let rows = canonical + journal
         let drafts = try DraftStore.held(for: item, in: session)
         guard !rows.isEmpty || !drafts.isEmpty else { return nil }
         var state = TaskMergeState()
