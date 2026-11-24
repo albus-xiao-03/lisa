@@ -134,3 +134,42 @@ targets:
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Config/Proof-iOS.entitlements
         "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": Config/Proof-macOS.entitlements
         "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
+  # Owner-verification UI tests (plan R2 §10.8): they drive the actual apps; at M1 the X1 proof app. Linked by no
+  # product and never shipped. Later sessions point their test plans at LisaMac and LisaCompanion.
+  LisaOwnerUITests-iOS:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: OwnerVerification/Shared
+    dependencies:
+      - target: LisaProof
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.owner-ui-tests.ios
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LisaProof
+        TARGETED_DEVICE_FAMILY: "1,2"
+  LisaOwnerUITests-macOS:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: OwnerVerification/Shared
+    dependencies:
+      - target: LisaProof
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.owner-ui-tests.macos
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LisaProof
+schemes:
+  # The X1 entry point (plan R2 §10.6, §10.8): `xcodebuild test -scheme LisaProof -testPlan X1 -destination …`.
+  LisaProof:
+    build:
+      targets:
+        LisaProof: all
+    test:
+      testPlans:
+        - path: OwnerVerification/TestPlans/X1.xctestplan
+          defaultPlan: true
