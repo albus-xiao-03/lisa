@@ -94,7 +94,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-03 | The one legacy converter | M3, M9, X7 | Not run |
 | S-04 | First-contact owner-text key in both TLS modes | M3, X2 | Not run |
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
-| S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; still to come: kills inside a step, disk exhaustion during an installation, the windowed buckets' deferred pages and absence after the swap |
+| S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12); still to come: the windowed buckets' deferred pages and absence after the swap (with S-08) |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
 | S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | Not run |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
@@ -105,7 +105,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-14 | The destination policy at every redirect | M7, X1, X5 | Not run |
 | S-15 | VPN publishing | M4, target host | Not run |
 | S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); M3 and M6 parts not run |
-| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Parts run: the single-writer guard (M2-0), `SQLITE_FULL` in a save (M2-3), the reader monitor, the pinned reader and the burst on a container tmpfs (M2-4); a staged installation filling storage not yet (with S-06) |
+| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | M2 parts run: the single-writer guard (M2-0), `SQLITE_FULL` in a save (M2-3), the reader monitor, the pinned reader and the burst on a container tmpfs (M2-4), storage filling during a staged installation on the tmpfs and the peak sizes (M2-12); `max_page_count` on the Fedora host `NOT_RUN_ENVIRONMENT`; Core's part at M3 |
 | S-18 | Model accounting | M7 | Not run |
 | S-19 | Deletion and expiry propagation | M5, M8 | Not run |
 | S-20 | Health, CLI modes and the deployment wrappers | M3, M4 | Not run |
@@ -571,3 +571,33 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - process kills inside each step on real files. A step is one transaction, so these test SQLite's rollback; the restart cases above test the step boundaries.
   - disk exhaustion during an installation, on the container tmpfs, and the peak staging, index and WAL sizes (S-17);
   - the windowed buckets' deferred pages and absence after the swap (S-08).
+
+### M2-12 The staged installation under storage pressure and process kills (S-17 M2 installation parts, S-06 kills; plan §8.15.2, §8.6.3)
+
+- **Code:** `e06c79f` → `177763a`. Writes other than captures (release steps, staging a chunk, building the staged index, a catch-up pass, the installation point) read free space fresh at the start of each bounded transaction. Each stops with `reserveProtected` rather than use the capture reserve.
+- **Harnesses (first outcomes kept):**
+  - **v32:** never built. Read first, it needed five corrections.
+  - **v33:** 3 of 4 host tests passed. The reserve test then installed after staging only two of its four chunks.
+  - **v34:** 4/4 on the host. Its tmpfs run stopped at 2,000 captures before the disk was exhausted, so "the capture that doesn't fit" never happened; everything else passed.
+  - **v35:** captures until three are refused, 4/4 on the host and 1/1 in the container.
+  - v13, v15, v19, v20, v25, v28, v30 and v31 pass again.
+- **Cases:**
+  - **The reserve, with free space set to the reserve plus 1 KiB:** staging a chunk, a catch-up pass, a staged-index step, the installation point and a release step were all refused with `reserveProtected`. A capture saved meanwhile. With space back, staging finished and installed.
+  - **Peak sizes:**
+    - Installation: 10 chunks (2,000 tasks with 400-character notes), 50 captures after each chunk.
+    - Peaks: database file 6.4 MB, live WAL 4.6 MB, staged tables and indexes 5.4 MB (`dbstat`).
+    - The WAL was 0 bytes after the swap's truncating checkpoint, and 2,000 tasks were found.
+  - **Real SIGKILLs in a child process** (the harness's runner, started again with a killing indexer):
+    - inside the staging-index transaction;
+    - inside the swap transaction, while it applied its backlog.
+    - **After each:** the reopened replica had no cursor, the old capture searchable and nothing of the snapshot, so the old view survived. The staging was intact: the installation completed (cursor 100, 10 tasks found), and `integrity_check` was ok.
+  - **Storage filling during a staged installation, inside the pinned container:**
+    - **Setup:** `swift:6.4.2-trixie`, `sha256:9733821c…430097`, a 48 MiB tmpfs, no network, the rootful engine. Script `m2/container-20261124T2100Z/run-s17-v3.sh`, run `run-20261124T220823Z`.
+    - **What happened:** another writer left room for only part of a 15-chunk snapshot (3,000 tasks).
+      - Staging stopped at the reserve after 5 chunks.
+      - 2,848 captures were then saved. The ballast was used, and the next three were reported not saved.
+      - After space returned, the database was consistent, every saved capture was present, staging resumed, and the installation completed with 3,000 tasks found.
+    - **Earlier runs:** v34's run `run-20261124T220735Z` stopped at 2,000 captures, as recorded above.
+- **Full build and R1 suite:** `m2/suite-after-reserve-checks-20261124T221039Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Not run:** `max_page_count` on "the Fedora host" (plan §8.15.2) is `NOT_RUN_ENVIRONMENT`, because the platform is Debian 13. The in-database `SQLITE_FULL` case ran in M2-3.
