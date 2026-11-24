@@ -4,7 +4,7 @@
 
 /// One derived row, or its deletion.
 public struct DerivedRecord: Hashable, Sendable {
-    public static let types: Set<String> = ["occurrence"]
+    public static let types: Set<String> = ["occurrence", "zoneProof"]
 
     public let type: String
     public let id: Identifier128
@@ -14,9 +14,16 @@ public struct DerivedRecord: Hashable, Sendable {
     public init(type: String, id: Identifier128, row: CanonicalValue?) throws(OperationEnvelopeError) {
         guard Self.types.contains(type) else { throw .invalidField("record.type") }
         if type == "occurrence", let row { _ = try OccurrenceRow(canonicalValue: row) }
+        if type == "zoneProof", let row { _ = try ZoneProof(canonicalValue: row) }
         self.type = type
         self.id = id
         self.row = row
+    }
+
+    /// The zone proof it carries, if it is one.
+    public var zoneProof: ZoneProof? {
+        guard type == "zoneProof", let row else { return nil }
+        return try? ZoneProof(canonicalValue: row)
     }
 
     /// The occurrence it carries, if it is one and not a deletion.
