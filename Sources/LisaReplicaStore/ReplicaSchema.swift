@@ -178,6 +178,21 @@ enum ReplicaSchema {
         ) STRICT
         """,
         "CREATE INDEX canonical_operations_by_item ON canonical_operations (entity_type, entity_id)",
+        // Derived records from Core (§8.3.5, §8.4.2): calendar occurrences with their row version and bucket range; a
+        // deletion keeps its version with no body, so an older update can't bring the row back.
+        """
+        CREATE TABLE derived_rows (
+          record_type TEXT NOT NULL,
+          record_id BLOB NOT NULL CHECK (length(record_id) = 16),
+          version INTEGER NOT NULL CHECK (version >= 1),
+          body BLOB,
+          first_bucket INTEGER,
+          last_bucket INTEGER,
+          PRIMARY KEY (record_type, record_id),
+          CHECK ((body IS NULL) = (first_bucket IS NULL) AND (first_bucket IS NULL) = (last_bucket IS NULL))
+        ) STRICT, WITHOUT ROWID
+        """,
+        "CREATE INDEX derived_rows_by_range ON derived_rows (record_type, first_bucket, last_bucket)",
         // Partition cursors and repairs, membership records and deferred pages (§8.4.2, §8.4.3).
         """
         CREATE TABLE partition_cursors (
