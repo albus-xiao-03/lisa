@@ -44,6 +44,9 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case snapshotChunkNotIncluded(Int64)
     /// No snapshot installation is being staged.
     case noInstallation
+    /// A write other than a capture stopped before the capture reserve (§8.15.2): staging, a release step or an
+    /// installation; it is retried when space returns, and captures keep their room.
+    case reserveProtected
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
