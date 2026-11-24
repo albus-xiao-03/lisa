@@ -20,4 +20,26 @@ public struct VerifyActionRecord: Hashable, Sendable, Codable {
     public let outcome: String?
     public let createdAt: String
     public let updatedAt: String
+
+    public init(
+        actionID: String, runID: VerifyRunID, caseID: VerifyCaseID, position: Int, kind: VerifyActionKind,
+        targetAlias: String, operationID: String, slot: String?, confirmationDigest: String, retryOf: String?,
+        state: VerifyActionState, providerReference: String?, outcome: String?, createdAt: String, updatedAt: String
+    ) {
+        self.actionID = actionID
+        self.runID = runID
+        self.caseID = caseID
+        self.position = position
+        self.kind = kind
+        self.targetAlias = targetAlias
+        self.operationID = operationID
+        self.slot = slot
+        self.confirmationDigest = confirmationDigest
+        self.retryOf = retryOf
+        self.state = state
+        self.providerReference = providerReference
+        self.outcome = outcome
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
 }
