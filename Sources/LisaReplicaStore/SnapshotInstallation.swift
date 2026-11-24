@@ -104,11 +104,18 @@ extension ReplicaStore {
         }
         var envelopes: [OperationEnvelope] = []
         var operations: [(signed: SignedOperation, decision: ChangeEntry.Decision)] = []
+        var records: [(record: DerivedRecord, position: Int64, partitions: [String])] = []
+        var operationEntries: [ChangeEntry] = []
         for entry in chunk.entries {
-            // Derived records join full snapshots with their staged tables; bucket snapshots carry them now.
-            guard let operation = entry.operation, let decision = entry.decision else {
-                throw .unverifiedPage(.malformed(.invalidField("chunk.record")))
+            // A derived record is vouched for by the signed snapshot; it stages into the staged derived tables.
+            if let record = entry.record {
+                records.append((record, entry.position, entry.partitions.filter(chunk.partitions.contains)))
+                continue
             }
+            guard let operation = entry.operation, let decision = entry.decision else {
+                throw .unverifiedPage(.malformed(.invalidField("chunk.entry")))
+            }
+            operationEntries.append(entry)
             do {
                 envelopes.append(
                     try OperationSigning.verify(operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
@@ -127,7 +134,10 @@ extension ReplicaStore {
             } else {
                 try session.query("UPDATE installation_state SET partitions = ? WHERE singleton = 1", [.text(names)])
             }
-            for ((entry, envelope), operation) in zip(zip(chunk.entries, envelopes), operations) {
+            for (record, position, partitions) in records {
+                try Self.stageRecord(record, at: position, through: partitions, in: session)
+            }
+            for ((entry, envelope), operation) in zip(zip(operationEntries, envelopes), operations) {
                 try session.query(
                     """
                     INSERT OR IGNORE INTO staged_canonical_operations
@@ -253,10 +263,19 @@ extension ReplicaStore {
                 ALTER TABLE staged_canonical_rows RENAME TO canonical_rows;
                 DROP TABLE search_postings;
                 ALTER TABLE staged_search_postings RENAME TO search_postings;
+                DROP TABLE derived_rows;
+                ALTER TABLE staged_derived_rows RENAME TO derived_rows;
+                DROP TABLE memberships;
+                ALTER TABLE staged_memberships RENAME TO memberships;
+                DELETE FROM repairs;
+                DELETE FROM repair_chunks;
                 """)
+            // Every covered partition reads the snapshot's membership records (generation 0) from the first reader on.
             for partition in partitions {
                 try CanonicalTables.setCursor(
                     partition, epoch: state.epochID, position: state.cut, repairing: false, in: session)
+                try session.query(
+                    "UPDATE partition_cursors SET published_generation = 0 WHERE partition = ?", [.text(partition)])
             }
             try session.execute(
                 """
@@ -286,6 +305,52 @@ extension ReplicaStore {
     }
 
     // MARK: - Internals
+
+    /// Stages one derived record of a full snapshot: its row at generation 0 above any staged version, and a
+    /// membership record for each covered bucket it belongs to (§8.6.3: the swap installs every partition's membership
+    /// records at the cut).
+    static func stageRecord(
+        _ record: DerivedRecord, at position: Int64, through partitions: [String], in session: SQLiteSession
+    )
+        throws
+    {
+        let occurrence = record.occurrence
+        let proof = record.zoneProof
+        let range = occurrence?.buckets ?? proof?.buckets
+        let body: SQLiteValue =
+            try record.row.map {
+                .blob(Data(try CanonicalEncoder.encode($0, limits: CanonicalLimits(maxBytes: 1 << 16))))
+            }
+            ?? .null
+        try session.query(
+            """
+            INSERT INTO staged_derived_rows (record_type, record_id, generation, version, body, first_bucket, last_bucket,
+              source_id, zone, zone_dependent)
+            VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (record_type, record_id, generation) DO UPDATE SET version = excluded.version,
+              body = excluded.body, first_bucket = excluded.first_bucket, last_bucket = excluded.last_bucket,
+              source_id = excluded.source_id, zone = excluded.zone, zone_dependent = excluded.zone_dependent
+            WHERE excluded.version > staged_derived_rows.version
+            """,
+            [
+                .text(record.type), ReplicaColumns.id(record.id), .integer(position), body,
+                ReplicaColumns.optionalInteger(range?.lowerBound), ReplicaColumns.optionalInteger(range?.upperBound),
+                ReplicaColumns.optionalText(occurrence?.sourceID ?? proof?.sourceID),
+                ReplicaColumns.optionalText(occurrence?.expandedZone ?? proof?.zone),
+                .integer(occurrence?.movesWithZone == true ? 1 : 0),
+            ])
+        for partition in partitions {
+            guard let bucket = CalendarBuckets.bucket(ofPartition: partition), range?.contains(bucket) == true else {
+                continue
+            }
+            try session.query(
+                """
+                INSERT INTO staged_memberships (partition, generation, entity_type, entity_id, version) VALUES (?, 0, ?, ?, ?)
+                ON CONFLICT (partition, generation, entity_type, entity_id) DO UPDATE SET version = excluded.version
+                WHERE excluded.version > staged_memberships.version
+                """, [.text(partition), .text(record.type), ReplicaColumns.id(record.id), .integer(position)])
+        }
+    }
 
     /// The backlog rule and the never-backward rule, evaluated before anything is applied.
     static func invalidation(state: InstallationState, partitions: [String], backlog: Int, in session: SQLiteSession)
@@ -348,6 +413,8 @@ extension ReplicaStore {
             DROP TABLE IF EXISTS staged_canonical_operations;
             DROP TABLE IF EXISTS staged_canonical_rows;
             DROP TABLE IF EXISTS staged_search_postings;
+            DROP TABLE IF EXISTS staged_derived_rows;
+            DROP TABLE IF EXISTS staged_memberships;
             DELETE FROM installation_state;
             DELETE FROM installation_chunks;
             DELETE FROM installation_pending;
@@ -385,6 +452,29 @@ extension ReplicaStore {
               PRIMARY KEY (token, entity_type, entity_id)
             ) STRICT, WITHOUT ROWID;
             CREATE INDEX search_postings_by_item_\(suffix) ON staged_search_postings (entity_type, entity_id);
+            CREATE TABLE staged_derived_rows (
+              record_type TEXT NOT NULL,
+              record_id BLOB NOT NULL CHECK (length(record_id) = 16),
+              generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+              version INTEGER NOT NULL CHECK (version >= 1),
+              body BLOB,
+              first_bucket INTEGER,
+              last_bucket INTEGER,
+              source_id TEXT,
+              zone TEXT,
+              zone_dependent INTEGER NOT NULL DEFAULT 0 CHECK (zone_dependent IN (0, 1)),
+              PRIMARY KEY (record_type, record_id, generation),
+              CHECK ((body IS NULL) = (first_bucket IS NULL) AND (first_bucket IS NULL) = (last_bucket IS NULL))
+            ) STRICT, WITHOUT ROWID;
+            CREATE INDEX derived_rows_by_range_\(suffix) ON staged_derived_rows (record_type, first_bucket, last_bucket);
+            CREATE TABLE staged_memberships (
+              partition TEXT NOT NULL,
+              generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+              entity_type TEXT NOT NULL,
+              entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+              version INTEGER NOT NULL CHECK (version >= 1),
+              PRIMARY KEY (partition, generation, entity_type, entity_id)
+            ) STRICT, WITHOUT ROWID;
             """)
     }
 }
