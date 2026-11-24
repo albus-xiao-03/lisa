@@ -13,16 +13,28 @@ public struct LocalSearchIndex: ReplicaIndexing {
 
     /// Replaces `item`'s postings with the tokens of its effective view's searchable text.
     public func itemChanged(_ item: ReplicaItemKey, in session: SQLiteSession) throws {
-        let id = SQLiteValue.blob(Data(item.entityID.bytes))
-        try session.query(
-            "DELETE FROM search_postings WHERE entity_type = ? AND entity_id = ?", [.text(item.entityType), id])
-        var tokens: Set<String> = []
-        for text in try ReplicaStore.searchableText(of: item, in: session) {
-            tokens.formUnion(SearchTokenizer.tokens(text))
+        try write(
+            item, texts: try ReplicaStore.searchableText(of: item, in: session), into: "search_postings", in: session)
+    }
+
+    /// The same for a staged installation's index.
+    public func stage(_ item: ReplicaItemKey, searchableText: [String], into table: String, in session: SQLiteSession)
+        throws
+    {
+        try write(item, texts: searchableText, into: table, in: session)
+    }
+
+    private func write(_ item: ReplicaItemKey, texts: [String], into table: String, in session: SQLiteSession) throws {
+        guard table == "search_postings" || table == "staged_search_postings" else {
+            throw ReplicaStoreError.corrupt("an unknown postings table")
         }
+        let id = SQLiteValue.blob(Data(item.entityID.bytes))
+        try session.query("DELETE FROM \(table) WHERE entity_type = ? AND entity_id = ?", [.text(item.entityType), id])
+        var tokens: Set<String> = []
+        for text in texts { tokens.formUnion(SearchTokenizer.tokens(text)) }
         for token in tokens {
             try session.query(
-                "INSERT INTO search_postings (token, entity_type, entity_id) VALUES (?, ?, ?)",
+                "INSERT INTO \(table) (token, entity_type, entity_id) VALUES (?, ?, ?)",
                 [.text(token), .text(item.entityType), id])
         }
     }
