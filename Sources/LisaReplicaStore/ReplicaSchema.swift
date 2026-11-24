@@ -88,6 +88,8 @@ enum ReplicaSchema {
         """
         CREATE TABLE drafts (
           operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
+          entity_type TEXT NOT NULL,
+          entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
           command BLOB NOT NULL,
           original_input TEXT,
           created_at INTEGER NOT NULL,
@@ -95,6 +97,7 @@ enum ReplicaSchema {
           state TEXT NOT NULL CHECK (state IN ('held', 'signed', 'discarded'))
         ) STRICT
         """,
+        "CREATE INDEX drafts_held_by_item ON drafts (entity_type, entity_id) WHERE state = 'held'",
         // The local change journal (§8.6.3): one row per change, generation strictly increasing.
         """
         CREATE TABLE local_changes (
@@ -122,6 +125,7 @@ enum ReplicaSchema {
           PRIMARY KEY (dependency_id, dependent_id)
         ) STRICT, WITHOUT ROWID
         """,
+        "CREATE INDEX causal_edges_by_dependent ON causal_edges (dependent_id, dependency_id)",
         """
         CREATE TABLE causal_waiting (
           operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
