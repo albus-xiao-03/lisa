@@ -222,3 +222,20 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - `swift format lint` of `Sources`, `Tests`, `Harness`, `Apps` and `Package.swift`: only R1's own `Package.swift` line (R1 line 148), unchanged since `491c90a`.
 - **Evidence:** `m1/clean-20261124T134046Z/` (`*.log`, `*.exit`, `runner.sha256`, `matrix.sh`).
 
+## 2b. M2 (run `20261124-r2-5462`)
+
+### M2-0 SQLite's WAL-reset bug: the loaded library and the single-writer guard (S-17 part; `docs/DECISIONS.md` D-55)
+
+- **The library:** `libsqlite3-0` 3.46.1-7+deb13u2+dhi4.
+  - Debian's packaging for 3.46.1-7+deb13u2 was fetched from deb.debian.org; its SHA-256 matches the `.dsc`.
+  - Its changelog and 15 patches have no WAL fix. The DHI rebuild's changes aren't published.
+  - The library is therefore treated as unfixed (`m2/sqlite-src-20261124T134427Z/`).
+- **Code:** `SQLiteWriterLock`, `SQLiteCheckpointMode`, `SQLiteCheckpointResult` and `SQLiteWALDatabase` (`LisaSQLite`), `c9fed41`.
+- **Harness:** `m2/harness-v6/`, 4 tests.
+  - A second writer is refused in this process and from another process.
+  - Read-only connections can neither write nor checkpoint.
+  - A read-only connection closing last leaves the WAL and the database file byte-identical.
+  - The writer's TRUNCATE checkpoint empties the WAL.
+- **Result: PASS.** After the span, a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (`m2/suite-after-walguard-rerun-*`).
+- **Environment event:** the first suite run after the span failed to link: the project volume was full (49 GB, 5.6 MB free). The SwiftPM scratch outputs of superseded builds under `.build/` were removed (24 GB). They are ordinary build output, not temporary files (`CONSTRICTION.md`); their logs and runner hashes are kept in `.tmp/`, which wasn't touched. The rerun passed as above, and routine builds now reuse `.build/r2-run`.
+
