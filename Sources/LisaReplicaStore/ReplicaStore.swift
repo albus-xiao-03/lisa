@@ -17,17 +17,23 @@ public final class ReplicaStore: Sendable {
     public let configuration: ReplicaStoreConfiguration
     /// This launch's incarnation.
     public let incarnationID: Identifier128
+    /// The monitor of this replica's long reads: search, staging catch-up passes and export assembly (§8.15.2).
+    public let readers: SQLiteReaderMonitor
     private let database: SQLiteWALDatabase
     private let signing: any ReplicaSigning
     private let indexing: (any ReplicaIndexing)?
     private let now: @Sendable () -> Int64
+    private let freeSpace: @Sendable () -> Int64?
 
     /// Opens (or creates) the replica in `directoryPath` as its only writer, and starts a new incarnation.
-    /// - Parameter now: Unix milliseconds, for creation times; never used to order operations.
+    /// - Parameters:
+    ///   - now: Unix milliseconds, for creation times; never used to order operations.
+    ///   - freeSpace: the bytes available on the replica's file system, read fresh each time; `statvfs` by default.
     public init(
         directoryPath: String, configuration: ReplicaStoreConfiguration = ReplicaStoreConfiguration(),
         signing: any ReplicaSigning, indexing: (any ReplicaIndexing)? = nil,
-        now: @escaping @Sendable () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
+        now: @escaping @Sendable () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) },
+        freeSpace: (@Sendable () -> Int64?)? = nil
     ) throws(ReplicaStoreError) {
         let directory = try ReplicaDirectory.prepare(at: directoryPath)
         let incarnation = Identifier128.random()
@@ -54,7 +60,18 @@ public final class ReplicaStore: Sendable {
         } catch {
             throw ReplicaStoreError.classify(error)
         }
-        try directory.restoreBallast(bytes: configuration.captureReserveBytes)
+        let databasePath = directory.databasePath
+        let freeSpace = freeSpace ?? { SQLiteFreeSpace.availableBytes(at: databasePath) }
+        if FileManager.default.fileExists(atPath: directory.ballastPath) {
+            try Self.restoreBallastIfSpaceReturned(
+                directory, reserveBytes: configuration.captureReserveBytes, available: freeSpace())
+        } else {
+            try directory.restoreBallast(bytes: configuration.captureReserveBytes)
+        }
+        readers = SQLiteReaderMonitor(
+            database: database, reserveBytes: Int64(configuration.captureReserveBytes), freeSpace: freeSpace)
+        if let interval = configuration.readerSampleInterval { readers.start(interval: interval) }
+        self.freeSpace = freeSpace
         self.directory = directory
         self.configuration = configuration
         self.incarnationID = incarnation
@@ -89,12 +106,60 @@ public final class ReplicaStore: Sendable {
     // MARK: - The atomic local change (§8.6.1)
 
     /// Saves one owner command in one write transaction: signed when enrolled with a usable key, otherwise as a draft.
-    /// Every failure rolls everything back and is reported as it is (`storageFull`, `io`, `indexFailed`, …).
+    /// Every failure rolls everything back and is reported as it is (`storageFull`, `io`, `indexFailed`, …). This is
+    /// the capture path: on `SQLITE_FULL` it empties the ballast and retries once (§8.15.2); if that succeeds the
+    /// capture is saved and `storageIsAlmostFull` is true until the ballast is restored.
     public func save(_ command: LocalCommand) throws(ReplicaStoreError) -> LocalSaveResult {
         let operationID = Identifier128.random()
         try Self.validate(command, operationID: operationID, configuration: configuration)
         let time = now()
-        return try write { session in
+        do {
+            return try saveOnce(command, operationID: operationID, time: time)
+        } catch .storageFull where directory.ballastBytes > 0 {
+            try directory.releaseBallast()
+            return try saveOnce(command, operationID: operationID, time: time)
+        }
+    }
+
+    /// Whether the ballast has been used and not yet restored: the app says "Storage is almost full".
+    public var storageIsAlmostFull: Bool { directory.ballastBytes < configuration.captureReserveBytes }
+
+    /// Restores the ballast once the space has returned: a full reserve must stay free after it. Returns whether the
+    /// ballast is whole.
+    @discardableResult
+    public func restoreBallastIfSpaceReturned() throws(ReplicaStoreError) -> Bool {
+        try Self.restoreBallastIfSpaceReturned(
+            directory, reserveBytes: configuration.captureReserveBytes, available: freeSpace())
+    }
+
+    @discardableResult
+    static func restoreBallastIfSpaceReturned(_ directory: ReplicaDirectory, reserveBytes: Int, available: Int64?)
+        throws(ReplicaStoreError) -> Bool
+    {
+        let missing = reserveBytes - directory.ballastBytes
+        guard missing > 0 else { return true }
+        guard let available, available >= Int64(missing) + Int64(reserveBytes) else { return false }
+        return try directory.restoreBallast(bytes: reserveBytes)
+    }
+
+    /// Runs a long read (search, a catch-up pass, export assembly) on its own read-only connection under the reader
+    /// monitor. `readerReleased` means the monitor released it to protect storage or its budget: retry later.
+    public func withLongReader<T>(_ purpose: SQLiteReaderPurpose, _ body: (SQLiteSession) throws -> T)
+        throws(ReplicaStoreError) -> T
+    {
+        do {
+            return try readers.withReader(purpose, body)
+        } catch let error as SQLiteError where error.isInterrupted {
+            throw .readerReleased(purpose.name)
+        } catch {
+            throw ReplicaStoreError.classify(error)
+        }
+    }
+
+    private func saveOnce(_ command: LocalCommand, operationID: Identifier128, time: Int64) throws(ReplicaStoreError)
+        -> LocalSaveResult
+    {
+        try write { session in
             let identity = try Self.identity(in: session)
             if let datasetID = identity.datasetID, let deviceID = identity.deviceID,
                 let saved = try self.signAndStore(
