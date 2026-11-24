@@ -55,6 +55,8 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-nearby-auth-v1\n` | Each side's nearby authentication transcript (§8.7) |
 | `lisa-r2-paged-artifact-v1\n` | The header of a paged artifact (§8.1.3) |
 | `lisa-r2-archive-v1\n` | A protected archive's header and ciphertext digests (§8.6.6) |
+| `lisa-r2-change-page-v1\n` | Core's change page over its canonical body (§8.4.2; §8a) |
+| `lisa-r2-custody-v1\n` | A peer's custody acknowledgement over its canonical body (§8.6.1, §8.7; §8c) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -240,7 +242,9 @@ A full snapshot is a paged artifact (§9) of type `snapshot`, signed by Core. It
   - Otherwise the staged canonical tables and index are swapped in together, with the cursors at the cut.
   - A chunk that isn't included under the root is refused, and an incomplete set of chunks doesn't install.
 
-## 8c. Revocations on a replica (plan §8.1.3, §8.6.1; R2-L17)
+## 8c. Revocations and peer custody on a replica (plan §8.1.3, §8.6.1; R2-L17, R2-L15)
+
+### Revocations
 
 The sync engine verifies a roster and hands each revocation to the replica as `(device, epoch, position)` (`recordRevocation`). The roster's own format is specified at M3.
 - **Permanent:** the replica keeps every revocation it learned, as a union. Recording one again changes nothing, and no later roster, epoch or restore removes one.
@@ -257,6 +261,16 @@ The sync engine verifies a roster and hands each revocation to the replica as `(
   - A page carrying it applies as committed.
   - A Core rejection makes it `rejected`.
 - **This replica's own device:** only the record is kept, and its saved local work stays pending. What a revoked device does with its own work is specified at M3.
+
+### Peer custody (R2-SYNC-04)
+
+A receiver acknowledges that it durably holds an operation's exact bytes ("Also held by <device>"). The acknowledgement is signed with its operation key under `lisa-r2-custody-v1\n`, over the canonical body (`CustodyAcknowledgement`):
+- **Fields:** `{"acknowledgedAt", "datasetID", "digest", "holderDeviceID", "operationID"}`, at most 1 KiB. `digest` is SHA-256 of the operation's complete canonical signed body, and `acknowledgedAt` (Unix milliseconds, not negative) is for display and audit only.
+- **Vector:** dataset `0123456789abcdef0123456789abcdef`, holder `1111…` (32 hex digits), operation `2222…`, digest `3333…` (64) and time 1795560100000 encode as `{"acknowledgedAt":1795560100000,"datasetID":"0123456789abcdef0123456789abcdef","digest":"3333…","holderDeviceID":"1111…","operationID":"2222…"}`.
+- **On a replica** (`recordCustody`, `custody(of:)`, `safety(of:)`): the acknowledgement must verify by the holder's key in the newest roster, for the replica's dataset. It must name a journal entry by its exact digest and come from a device that is neither this one nor revoked; anything else is refused and changes nothing.
+- **Kept apart:** a custody record never changes the entry's Core state, receipt, overlay or follow-ups. The origin never discards an operation because of it.
+- **The three kinds of safety** are reported separately: saved on this device, held by peers, and synced with Core. Only a final Core acceptance, from a receipt or a page, gives the last (R2-L15). A peer receipt never becomes a Core-committed status.
+- **Not yet on the replica:** the store records receipts the sync engine verified. Core's receipt format and its signature check are specified with Core at M3, and the relay of receipts and acknowledgements over the nearby link at M6.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
