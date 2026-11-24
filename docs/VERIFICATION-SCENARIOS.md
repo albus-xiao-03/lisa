@@ -496,3 +496,42 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m2/suite-after-monotonic-clock-20261124T214341Z/`: debug build 0 warnings, 376 tests in 66 suites passed. `LisaTime` is linked by R1, so this run exercised the change.
   - **Correction to commit `437ca91`'s message:** the build relinked the suite's test library `LisaTests.so` (`443303a7…`, `testlib.sha256`). The runner launcher was rewritten but is byte-identical (`8816964d…`), because the suite's code is in the library.
 - **Result: PASS.** The clock's users (timeouts, backoff, freshness, `health.json`) adopt it at their milestones.
+
+### M2-10 Signed change pages and partition cursors on the replica (S-08 replica part, unwindowed partitions; plan §8.4.2, §8.4.3)
+
+- **Code:**
+  - LisaSyncProtocol, `839e52e` → `62ce432`: the entry, the page, the signed page.
+  - LisaTrust, `f0e04d8` → `6eeec5e`: the change-page domain and the verifier.
+  - LisaReplicaStore, `2fa6981` → `8afac3b`: `canonical_operations`, the cursor types, `CanonicalTables`, and the store's page application, repairs and canonical fold.
+  - Documented in `docs/SYNC-PROTOCOL.md` §8a.
+- **Harnesses (first outcomes kept):**
+  - **v27:** 5 of 6 passed. Its test roster left out the replica's own device key, so the replica's own committed operations in a page were refused as `originKeyMismatch`, which is correct.
+  - **v28:** the same tests with the full roster, 6/6.
+  - **v21:** its pinned table list predates `canonical_operations`. **v29** has the updated list, 10/10.
+  - v13, v15, v19, v20 and v25 pass again.
+- **Cases:**
+  - **The four cursor cases on one partition:**
+    - `(0,10]` with a creation at 3 and an edit at 7 → applied, cursor 10, the edited title shown.
+    - `(2,8]` → ignored at 10.
+    - `(8,15]` with entries at 9 and 12 → the one at 9 trimmed, the one at 12 applied, cursor 15.
+    - `(20,25]` → a gap at 15.
+    - `(15,20]` with no entries → proved unchanged, cursor 20.
+  - **Pending local operations decided through a page:**
+    - A pending note committed at 6 records its position, stops being an overlay, and is shown once.
+    - A pending edit rejected at 8 leaves the view; the creation's title returns, and no follow-up is left.
+  - **A repair:**
+    - While repairing, a page `(10,20]` is deferred, and the cursor stays at 10.
+    - Publishing at cut 12 applies the deferred page for that partition: cursor 20, the note shown.
+  - **One page over two partitions:** `tasks` (cursor 10) is applied through 14. `ideas`, which has no cursor, is a gap, because the page doesn't start at 0.
+  - **Refused, with nothing changed (no cursor, no view, generation 0):**
+    - a page whose partition list was altered after signing: `unverifiedPage(invalidSignature)`;
+    - a validly signed page carrying an operation by a device outside the roster: `unverified(originKeyMismatch)`.
+  - **A relayed edit waiting for its creation:** it is released once the creation arrives as a canonical entry. After a restart, the view and cursor are the same, and the same page is ignored.
+- **Full build and R1 suite:** `m2/suite-after-change-pages-20261124T215237Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Still to come for S-08's replica part:**
+  - windowed calendar buckets, with membership ranges and the absence rule;
+  - rolling windows;
+  - the planning-zone cases;
+  - the overlay watermark and constant-size publication;
+  - repairs from real bucket snapshots.
