@@ -202,7 +202,13 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
     - no cursor → applied only if the page starts at 0.
   - **A derived record** changes its row only above the row's version. For each bucket it touches, it records whether that bucket's proof delivered the row, and at which version (a membership record).
   - **The absence rule:** a bucket lists a row whose range overlaps it when its own proof delivered the row at its current version, or when the row's version is above the bucket's cursor (delivered through another bucket, until this one catches up). Otherwise the row is absent from that bucket.
-  - **A bucket repair publishes** a Core-signed paged artifact of type `bucket-snapshot` (version = the cut). Its chunks name only that bucket and list its members as record entries; the bucket's membership becomes exactly that.
+  - **A bucket repair** (§8.4.3) starts from a Core-signed paged artifact of type `bucket-snapshot`, whose version is the cut.
+    - Its chunks name only that bucket and list its members as record entries, at most 512 per chunk.
+    - A cut older than the bucket's cursor is refused, and another epoch abandons the repair.
+    - The chunks are staged in the repair's own generation, invisible to readers. While the bucket is repairing, pages listing it are deferred for it.
+    - **Publication** is one transaction of constant size. It re-checks the epoch, the cursor and the overlay watermark, then flips the bucket's published generation. Its membership is then exactly the snapshot's members, and its cursor is the cut.
+    - Readers resolve each row to its newest version among published generations, so they see one view or the other.
+    - The deferred pages then apply, each in its own transaction. Superseded generations are cleaned up in bounded chunks.
   - **A window roll** drops a bucket's cursor and memberships, and drops a row only when no covered bucket overlaps it.
   - **Each operation entry applies once,** and only when its position is above its row's version:
     - a committed entry joins canonical state, and the journal's copy, if any, records the commit and stops being an overlay;
