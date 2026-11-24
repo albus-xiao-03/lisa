@@ -11,8 +11,8 @@ Every device works offline and Lisa Core orders what arrives, yet **no clock dec
 | Edits to different fields | Both apply: each field is its own register | `MultiValueRegister` per field |
 | Concurrent edits to one field | Each edit replaces only the versions it observed. Every candidate nobody observed survives, and two survivors are a **conflict** | `MultiValueRegister` |
 | Your correction versus a model or source value | A model or source write never replaces your value, whether concurrent or later; it is kept as a **suggestion**. Your write replaces what you saw, whatever wrote it. A value whose authority a migration couldn't establish is protected like yours | `MergeAuthority`, `MultiValueRegister.suggestions` |
-| Concurrent notes | Both kept, as separate note pieces | Pieces keyed `(item, piece)` |
-| Tags added and removed at once | A removal removes only the additions it saw; a concurrent addition stays | `ObservedRemoveSet` |
+| Concurrent notes | Both kept, as separate note pieces. Replacing the notes you saw replaces exactly those; a note you didn't see stays | `NotePieces` |
+| Tags added and removed at once | A removal removes only the additions of its tag that it saw; a concurrent addition stays, and no removal ever reaches another tag | `ObservedRemoveSet`, one per tag in `TaskMergeState` |
 | Completion or cancellation versus another edit | The edit applies; the item stays completed or cancelled | `TerminalActions` |
 | Completed on one device, cancelled on another | Both kept: "completed and cancelled", shown for review; its reminders and deliveries stop | `TerminalActions.Status.completedAndCancelled` |
 | Reopening | Reopens exactly the completions and cancellations it names; one it didn't see stays in effect | `TerminalActions.reopen(naming:)` |
@@ -21,6 +21,8 @@ Every device works offline and Lisa Core orders what arrives, yet **no clock dec
 | Deleted on one device, edited on another | The deletion wins in any order; the edit is kept as superseded while retention allows; restoring creates a new item | `ItemTombstone` |
 | Two plans or briefs | Both kept as separate results, never merged | — |
 | A conflict in a planning field | Planned conservatively, marked uncertain, escalation held | §8.3.4 (M5) |
+
+**One task, merged.** `TaskMergeState` holds a register for each of the six fields, the note pieces, a tag set per tag, the completions and cancellations with their reopens, and the deletions. Each part is a join, so devices that applied the same operations show the same task, in any order. `TaskView` is what it shows: every field's surviving values (two or more is a conflict), the notes in order, the tags, the status, and whether it is deleted.
 
 ## What "observed" means
 
