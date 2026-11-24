@@ -94,7 +94,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-03 | The one legacy converter | M3, M9, X7 | Not run |
 | S-04 | First-contact owner-text key in both TLS modes | M3, X2 | Not run |
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
-| S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12); still to come: the windowed buckets' deferred pages and absence after the swap (with S-08) |
+| S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12), derived records with absence after the swap and a page during staging reflected once (M2-16): the M2 part complete |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
 | S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13, M2-14): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages, repairs by generation with the overlay watermark and constant-size publication, zone-unverified floating rows and all-day rows read in the planning zone (M2-15): the M2 replica part complete; Core's zone generations and re-expansion (M3) and the simulated link (M6) to come |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
@@ -706,3 +706,16 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Later milestones:**
   - Core's zone generations and re-expansion from retained civil inputs, including the Nuuk floating event and the interior DST day (M3);
   - the simulated link (M6).
+
+### M2-16 Derived records across a full snapshot's swap (S-06's last M2 case; plan §8.6.3 "Pages and absence across the swap")
+
+- **Code:** the last commit of `SnapshotInstallation.swift`. Full snapshots stage derived rows and membership records and swap them in with the canonical tables. Every covered bucket reads the snapshot's memberships from the first reader on, and the swap overtakes any bucket repairs.
+- **Harness:** `m2/harness-v46/`, 2/2. v45 didn't compile (an untried closure in an expectation) and is kept unchanged. v13, v15, v19, v20, v25, v30, v35, v36, v39, v43 and v44 pass again.
+- **Cases:**
+  - **Absence from the first reader on:** an event spans buckets A and B at 105, and a full snapshot at 150 holds it moved to B only.
+    - Right after the swap, A lists nothing, and B lists the moved event, proved there at 150.
+    - Delayed older snapshots of either bucket at 120, still holding the event in both, are refused as stale.
+    - The event never returns to A.
+  - **A page during staging:** an occurrence delivered by a page while a full snapshot that also holds it was staging is listed exactly once after the swap, at cursor 150.
+- **Full build and R1 suite:** `m2/suite-after-full-snapshot-records-20261124T224312Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.** S-06's M2 part is complete.
