@@ -144,11 +144,16 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `task.reopen` | `{"reopens": [IDs]}` | 1–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect |
 | `note.add`, `note.replaceObserved` | `{"text": <text>}` | Non-empty, within the text budget below; a replacement removes exactly the note pieces its observed set covers |
 | `tags.change` | `{"change": "add" \| "remove", "tag": <tag>}` | One tag of 1–64 characters; a removal covers only additions of its own tag that its observed set covers |
+| `conflict.resolve` | `{"field": <task field>, "value"?: <its value>}` | The value is read under the declared field. A single resolution carries its value; in a paged group (`observed.group`, pages numbered 1…count, each depending on the previous one) only the last page does. The candidates it resolves are its observed set |
 
 - **A deadline** is `{"kind":"instant","at": <UTC milliseconds>, "zone"?: <IANA name>}` or `{"kind":"date","date":"YYYY-MM-DD"}`.
   - The date must exist in the Gregorian calendar, for example `2028-02-29` but not `2026-02-29`.
   - The zone is 1–64 bytes of `A–Z a–z 0–9 / _ + -`.
   - A date-only deadline never becomes an invented time (R1's `Deadline`).
+- **A paged resolution group** (plan §8.3.2) applies atomically, as its last page observing every page's explicit candidates together with the last page's horizon.
+  - It applies once all `count` pages are present: one group ID, one count, one field and one list digest.
+  - The list digest must equal SHA-256 of the sorted, concatenated 16-byte IDs of every page.
+  - Until then, or with a mismatch, it changes nothing. A missing page leaves the later pages waiting under the dependency rules, and a candidate outside the list stays as a new conflict.
 - **A task operation must name a task:** `task.*` with another entity type is malformed. The replica store applies these checks both to its own saves and to arriving operations, refusing the latter as `malformed`.
 - **The note text budget:** a note's text may take `ItemOperationPayload.maximumTextBytes(type)` encoded bytes, measured after canonical escaping and excluding the quotes. That is the type's value budget plus one, because `{"text":…}` is one byte shorter than the budget's reference `{"value":…}`.
   - For `note.add` it is 53,983 bytes.
