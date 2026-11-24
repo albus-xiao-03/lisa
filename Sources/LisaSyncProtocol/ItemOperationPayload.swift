@@ -10,6 +10,8 @@
 //   note.replaceObserved   {"text": <the replacement>}   (replaces the observed note pieces)
 //   tags.change            {"change": "add" | "remove", "tag": <1–64 characters>}   (a removal covers what it observed)
 //   item.delete            {}
+//   conflict.resolve       {"field": <task field>, "value"?: <its value>}   (the value on a single resolution and on a
+//                          group's final page only; the candidates it resolves are its observed set, §8.3.2)
 //
 // A note's text is limited by the type's value budget (plan §8.3.3), measured on its encoded bytes after canonical
 // escaping, quotes excluded, before anything larger is built: `maximumTextBytes(operationType:)`.
@@ -25,6 +27,8 @@ public enum ItemOperationPayload: Hashable, Sendable {
     case noteReplaceObserved(text: String)
     case tagChange(tag: String, added: Bool)
     case itemDelete
+    /// A resolution of one field's conflict, or one page of a paged resolution group (no value before its last page).
+    case conflictResolve(field: TaskField, value: TaskFieldValue?)
 
     public static let maximumReopens = 32
     public static let maximumTagCharacters = 64
@@ -32,7 +36,7 @@ public enum ItemOperationPayload: Hashable, Sendable {
     /// The operation types these payloads belong to.
     public static let operationTypes: Set<String> = [
         "task.create", "task.edit", "task.complete", "task.cancel", "task.reopen", "note.add", "note.replaceObserved",
-        "tags.change", "item.delete",
+        "tags.change", "item.delete", "conflict.resolve",
     ]
 
     public var operationType: String {
@@ -46,6 +50,7 @@ public enum ItemOperationPayload: Hashable, Sendable {
         case .noteReplaceObserved: "note.replaceObserved"
         case .tagChange: "tags.change"
         case .itemDelete: "item.delete"
+        case .conflictResolve: "conflict.resolve"
         }
     }
 
@@ -66,6 +71,11 @@ public enum ItemOperationPayload: Hashable, Sendable {
             guard bytes <= limit else { throw .encoding(.tooLarge(bytes: bytes, limit: limit)) }
         case .tagChange(let tag, _):
             guard !tag.isEmpty, tag.count <= Self.maximumTagCharacters else { throw .invalidField("payload.tag") }
+        case .conflictResolve(let field, let value):
+            if let value {
+                guard value.field == field else { throw .invalidField("payload.value") }
+                _ = try TaskFieldValue(validating: value)
+            }
         }
         self = payload
     }
@@ -113,6 +123,10 @@ public enum ItemOperationPayload: Hashable, Sendable {
             case .tagChange(let tag, let added):
                 return .object(
                     try CanonicalObject([("change", .string(added ? "add" : "remove")), ("tag", .string(tag))]))
+            case .conflictResolve(let field, let value):
+                var pairs: [(String, CanonicalValue)] = [("field", .string(field.rawValue))]
+                if let value { pairs.append(("value", try value.canonicalValue)) }
+                return .object(try CanonicalObject(pairs))
             }
         }
     }
@@ -162,6 +176,14 @@ public enum ItemOperationPayload: Hashable, Sendable {
                     throw OperationEnvelopeError.invalidField("payload.change")
                 }
                 decoded = .tagChange(tag: try reader.string("tag"), added: change == "add")
+            case "conflict.resolve":
+                guard let field = TaskField(rawValue: try reader.string("field")) else {
+                    throw OperationEnvelopeError.invalidField("payload.field")
+                }
+                let value = try reader.optionalValue("value").map {
+                    try TaskFieldValue(field: field, canonicalValue: $0)
+                }
+                decoded = .conflictResolve(field: field, value: value)
             default:
                 throw OperationEnvelopeError.invalidField("type")
             }
