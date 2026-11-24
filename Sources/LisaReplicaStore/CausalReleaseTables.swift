@@ -36,6 +36,16 @@ enum CausalReleaseTables {
         return decision
     }
 
+    /// Whether `operation` no longer holds its dependents back: decided here, or committed in canonical state.
+    static func isSettled(_ operation: Identifier128, in session: SQLiteSession) throws -> Bool {
+        try !session.query(
+            """
+            SELECT 1 FROM causal_decisions WHERE operation_id = ?1
+            UNION ALL SELECT 1 FROM canonical_operations WHERE operation_id = ?1
+            """, [ReplicaColumns.id(operation)]
+        ).isEmpty
+    }
+
     /// An arriving operation from `origin` declaring `dependencies`.
     static func intake(
         _ operation: Identifier128, origin: Identifier128, dependencies: [Identifier128], in session: SQLiteSession
@@ -52,7 +62,7 @@ enum CausalReleaseTables {
             return .rejectedMalformed
         }
         var open: [Identifier128] = []
-        for dependency in dependencies where try decision(dependency, in: session) == nil { open.append(dependency) }
+        for dependency in dependencies where try !isSettled(dependency, in: session) { open.append(dependency) }
         guard !open.isEmpty else {
             try session.query(
                 "INSERT INTO causal_ready (operation_id, origin_key) VALUES (?, ?)",
@@ -128,6 +138,7 @@ enum CausalReleaseTables {
                 SELECT count(*) FROM causal_edges e
                 WHERE e.dependent_id = ? AND NOT EXISTS
                   (SELECT 1 FROM causal_decisions d WHERE d.operation_id = e.dependency_id)
+                AND NOT EXISTS (SELECT 1 FROM canonical_operations c WHERE c.operation_id = e.dependency_id)
                 """, [dependent]
             ).first?.first?.integer ?? 0
         guard open == 0,
