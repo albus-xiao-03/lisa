@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- PROOF ONLY: Lisa Proof for iPhone and iPad. Only the app's own keychain access group; no push, no background
+     modes, no multicast entitlement (Bonjour through Network framework needs none). -->
+<plist version="1.0">
+<dict>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)org.example.lisa.proof</string>
+	</array>
+</dict>
+</plist>
