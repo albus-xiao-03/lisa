@@ -302,7 +302,7 @@ public final class ReplicaStore: Sendable {
     /// Verifies an arriving operation (dataset, origin key, signature, and a payload with a schema by its rules) and
     /// applies the duplicate rules: same ID and
     /// digest is a duplicate; same ID with another digest, or the same origin triple under another ID, is refused with
-    /// a security event.
+    /// a security event. A new operation from a revoked device is stored `revoked`, for inspection only (§8.1.3).
     public func receive(
         _ operation: SignedOperation, deviceKey: (Identifier128) -> P256Verifier?, coreKey: P256Verifier?
     ) throws(ReplicaStoreError) -> OperationIntakeResult {
@@ -354,11 +354,20 @@ public final class ReplicaStore: Sendable {
                 return .rejectedSequenceReuse
             case .new:
                 let item = ReplicaItemKey(entityType: envelope.entityType, entityID: envelope.entityID)
+                let revoked =
+                    try envelope.origin.deviceTriple.map { try RevocationTables.isRevoked($0.device, in: session) }
+                    ?? false
                 let generation = try LocalChangeJournal.append(
-                    .journalEntry, operations: [envelope.operationID], items: [item], in: session)
+                    revoked ? .revocation : .journalEntry, operations: [envelope.operationID], items: [item],
+                    in: session)
                 try OperationJournal.insert(
                     operation, envelope: envelope, digest: digest, source: .relayed, generation: generation,
-                    fromDraft: false, in: session)
+                    fromDraft: false, state: revoked ? .revoked : .pending, in: session)
+                if revoked {
+                    // Kept for inspection, never applied or forwarded; decided, so nothing waits for it.
+                    try CausalReleaseTables.decide(envelope.operationID, .rejected, in: session)
+                    return .storedRevoked(generation: generation)
+                }
                 // It enters the effective view when a release step finds every dependency decided (§8.2.2).
                 _ = try CausalReleaseTables.intake(
                     envelope.operationID, origin: envelope.origin.deviceTriple?.device ?? Self.coreOrigin,
@@ -381,7 +390,9 @@ public final class ReplicaStore: Sendable {
 
     /// Records a verified receipt. A final decision stands, and repeating a receipt changes nothing; a rejection takes
     /// the entry out of the effective view, while an acceptance leaves its overlay until canonical state containing it
-    /// is installed (§8.6.4). Returns whether anything changed.
+    /// is installed (§8.6.4). For a revoked entry a provisional receipt changes nothing, and Core's acceptance
+    /// authorizes it: it returns as an overlay if it had entered the view, and otherwise with the canonical state that
+    /// contains it. Returns whether anything changed.
     @discardableResult
     public func recordReceipt(_ receipt: ReplicaReceipt) throws(ReplicaStoreError) -> Bool {
         try write { session in
@@ -392,12 +403,18 @@ public final class ReplicaStore: Sendable {
             guard !entry.state.isFinal, entry.state != receipt.state || entry.receipt != receipt.signedBytes else {
                 return false
             }
+            if entry.state == .revoked, receipt.status == .waitingForDependencies { return false }
             let rejected = receipt.status == .rejected
+            let restored =
+                try entry.state == .revoked && !rejected
+                && CausalReleaseTables.decision(receipt.operationID, in: session) == .applied
             try LocalChangeJournal.append(
                 rejected ? .rejection : .receipt, operations: [receipt.operationID], items: [entry.item], in: session)
-            try OperationJournal.record(receipt, overlay: entry.isOverlay && !rejected, in: session)
+            try OperationJournal.record(receipt, overlay: (entry.isOverlay && !rejected) || restored, in: session)
             if rejected {
                 try CausalReleaseTables.decide(receipt.operationID, .rejected, in: session)
+                try self.reindex(entry.item, in: session)
+            } else if entry.state == .revoked {
                 try self.reindex(entry.item, in: session)
             }
             try FollowUpQueue.remove(.submit, receipt.operationID, in: session)
@@ -446,6 +463,49 @@ public final class ReplicaStore: Sendable {
             else { return nil }
             return (try ReplicaColumns.integer(row[0]), ReplicaColumns.optionalBytes(row[1]))
         }
+    }
+
+    // MARK: - Revocations (§8.1.3, R2-L17)
+
+    /// Records a device revocation from a roster the sync engine verified (M3 defines the roster). Revocations are
+    /// permanent: the replica keeps every one it learned, and recording one again changes nothing. In the same
+    /// transaction, every relayed operation of that device that Core hasn't decided and canonical state doesn't hold
+    /// leaves the effective view and stays in the journal as `revoked`, its exact bytes kept for inspection. One still
+    /// waiting is decided rejected, so its dependents aren't held back, and none is forwarded. Operations Core accepted,
+    /// and canonical state, stay. For this replica's own device only the record is kept: its own work stays saved
+    /// (what a revoked device does with its own work is M3's). Returns the operations it revoked.
+    @discardableResult
+    public func recordRevocation(device: Identifier128, epochID: Identifier128, position: Int64)
+        throws(ReplicaStoreError) -> [Identifier128]
+    {
+        let time = now()
+        return try write { session in
+            guard try !RevocationTables.contains(device: device, epochID: epochID, position: position, in: session)
+            else { return [] }
+            let own = try Self.identity(in: session).deviceID == device
+            let affected = own ? [] : try RevocationTables.unauthorizedPending(of: device, in: session)
+            var items: [ReplicaItemKey] = []
+            for entry in affected where !items.contains(entry.item) { items.append(entry.item) }
+            let generation = try LocalChangeJournal.append(
+                .revocation, operations: affected.map(\.operationID), items: items, in: session)
+            try RevocationTables.insert(
+                device: device, epochID: epochID, position: position, learnedAt: time, generation: generation,
+                in: session)
+            for entry in affected {
+                try session.query(
+                    "UPDATE operations SET state = 'revoked', overlay = 0 WHERE operation_id = ?",
+                    [ReplicaColumns.id(entry.operationID)])
+                try CausalReleaseTables.decide(entry.operationID, .rejected, in: session)
+                try FollowUpQueue.remove(.submit, entry.operationID, in: session)
+            }
+            for item in items { try self.reindex(item, in: session) }
+            return affected.map(\.operationID)
+        }
+    }
+
+    /// Every revocation this replica learned, in the order it learned them.
+    public func revocations() throws(ReplicaStoreError) -> [ReplicaRevocation] {
+        try read { session in try RevocationTables.all(in: session) }
     }
 
     // MARK: - Change pages and partition cursors (§8.4.2, §8.4.3)
@@ -677,7 +737,7 @@ public final class ReplicaStore: Sendable {
     }
 
     /// The effective view of one task inside the caller's transaction, for `ReplicaIndexing`: every journal entry of
-    /// it that entered the view and wasn't rejected, with its commit position when known, and its held drafts, merged
+    /// it that entered the view and wasn't rejected or revoked, with its commit position when known, and its held drafts, merged
     /// by `TaskMergeState`. Merging is a join, so the order of application doesn't change the result; causal order
     /// decides only what has entered the view.
     public static func taskView(_ entityID: Identifier128, in session: SQLiteSession) throws -> TaskView? {
@@ -698,7 +758,7 @@ public final class ReplicaStore: Sendable {
             """
             SELECT o.body, o.commit_epoch, o.commit_position FROM operations o
             JOIN causal_decisions d ON d.operation_id = o.operation_id AND d.decision = 'applied'
-            WHERE o.entity_type = ? AND o.entity_id = ? AND o.state != 'rejected'
+            WHERE o.entity_type = ? AND o.entity_id = ? AND o.state NOT IN ('rejected', 'revoked')
               AND NOT EXISTS (SELECT 1 FROM \(canonicalTable) c WHERE c.operation_id = o.operation_id)
             """, [.text(item.entityType), ReplicaColumns.id(entityID)])
         let rows = canonical + journal
