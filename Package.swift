@@ -243,7 +243,6 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
             ]),
-        // The R1 test suite (plan §9, §10; spec §16): every library through its public API, in debug and release.
         // The owner-verification harness (plan §10.8): tracked, built from a clean checkout, linked by no product.
         .target(
             name: "LisaVerifyKit", dependencies: ["LisaCrypto", "LisaSQLite"], path: "Harness/Sources/LisaVerifyKit"),
@@ -253,6 +252,13 @@ let package = Package(
             dependencies: [
                 "LisaVerifyKit", "LisaVerifyCases", .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ], path: "Harness/Sources/lisa-verify"),
+        .target(
+            name: "LisaVerifyServers",
+            dependencies: [
+                .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+            ], path: "Harness/Sources/LisaVerifyServers"),
+        // The R1 test suite (plan §9, §10; spec §16): every library through its public API, in debug and release.
         .testTarget(
             name: "LisaTests",
             dependencies: [
