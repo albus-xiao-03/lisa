@@ -148,4 +148,11 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Vectors and cases:** roots for 1, 2, 3, 5, 7 and 8 pages and two inclusion proofs from an independent Python RFC 6962 implementation; for every tree of 1 to 33 pages, each page verifying at its own index under the signed size and at no other index, with an altered page, an out-of-range index and a shortened proof refused; a whole artifact accepted in any arrival order and refused for a dropped, repeated, swapped or altered page, a forged header and another dataset; a header inflated by one page refused without a new Core signature.
 - **Result: PASS** for the roots, the artifact cases and `MerkleTestsV2`. `MerkleTests`' proof test fails with exactly 448 issues, a harness error recorded in `m1/harness-v2/NOTES-2.md`: it expected verification to refuse a proof under a tree size one larger, which RFC 9162's algorithm does not authenticate. The Python implementation accepts the same 448 cases, so the Swift verifier matches it exactly, and the product takes the size only from Core's signed header.
 
+### M1-6 Protected archive codec (the codec part of S-13; its full cases are M5)
+
+- **Code:** `AESGCM256` and the archive domain, then `LisaArchive` through `505ee96`.
+- **Harness:** `m1/harness-v2/`, target `ArchiveTests`.
+- **Cases:** sealed to a Core roster key and this installation's key and signed: the file parses back identically, both keys open it to the exact entries, the device's signature verifies and another key's does not; an installation-only archive refused to another installation's key; another dataset refused; one ciphertext byte altered fails decryption and authenticity; a header changed and re-encoded canonically fails decryption (the header digest is the authenticated data) and authenticity; an unsigned archive opens but is never authentic; an archive sealed to a key later retired opens with that key; a bad magic, a truncated file, trailing bytes, a signature flag of 2, a signature with no named signer and a cut header refused.
+- **Result: PASS**, 4 tests.
+
 **After each span:** a full debug build has 0 warnings, `swift format lint` reports no finding in the changed modules, and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2).
