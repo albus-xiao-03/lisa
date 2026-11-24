@@ -218,6 +218,31 @@ enum ReplicaSchema {
         ) STRICT, WITHOUT ROWID
         """,
         "CREATE INDEX search_postings_by_item ON search_postings (entity_type, entity_id)",
+        // A full snapshot's staged installation (§8.6.3): the verified header, the cut, G0 and the last generation the
+        // staged tables reflect; the chunks staged so far; the items whose staged index entries are still to build.
+        """
+        CREATE TABLE installation_state (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          installation_id BLOB NOT NULL CHECK (length(installation_id) = 16),
+          header_body BLOB NOT NULL,
+          epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+          cut INTEGER NOT NULL CHECK (cut >= 0),
+          page_count INTEGER NOT NULL CHECK (page_count >= 1),
+          merkle_root BLOB NOT NULL CHECK (length(merkle_root) = 32),
+          partitions TEXT,
+          start_generation INTEGER NOT NULL,
+          applied_generation INTEGER NOT NULL,
+          passes INTEGER NOT NULL DEFAULT 0
+        ) STRICT
+        """,
+        "CREATE TABLE installation_chunks (chunk_index INTEGER PRIMARY KEY) STRICT",
+        """
+        CREATE TABLE installation_pending (
+          entity_type TEXT NOT NULL,
+          entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+          PRIMARY KEY (entity_type, entity_id)
+        ) STRICT, WITHOUT ROWID
+        """,
         // Peer custody (§8.6.1): a peer's signed acknowledgement that it durably holds these exact bytes.
         """
         CREATE TABLE custody_acknowledgements (
