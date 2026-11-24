@@ -13,7 +13,7 @@
 | OpenSSL | 3.5.9 |
 | libxml2, libcurl | 2.9.14 (`libxml2` 2.12.7+dfsg+really2.9.14-2.1+deb13u3+dhi3); 8.14.1 (`libcurl4t64` 8.14.1-2+deb13u7+dhi1) |
 | Container engine | Docker 29.10.0, rootful, inside the VM; Compose 5.8.0; Buildx 0.39.1. Not used by M0 |
-| Lockfile | `Package.resolved` SHA-256 `9608e8e024c6cbe0ea3fc269c5d80dcba8235c585f852de0e0c046a1dab37494` |
+| Lockfile | M0-1 to M0-6: `Package.resolved` SHA-256 `9608e8e024c6cbe0ea3fc269c5d80dcba8235c585f852de0e0c046a1dab37494` (R1's, kept by the frozen artifacts). From M0-7 on: `f846319595094d9399eccd89f565e571db298f5dab8c46543bcd7d95bc91e776` (swift-crypto 5.1.2, `docs/DECISIONS.md` D-53) |
 
 ## 2. M0 baseline (run `20261124-r2-5462`)
 
@@ -53,11 +53,35 @@ Compiler paths: `/opt/swift/swift-<version>-RELEASE-debian13/usr/bin/swift-drive
 
 ### M0-5 Frozen-client harness and R1 queue files (§8.18 steps 2–3)
 
-Not recorded yet: in progress in `m0/frozen-client/`.
+- **Harness:** a temporary SwiftPM package, `m0/frozen-client/harness3/`, depending only on `../../r1-src` by path and linking R1's `LisaClient` and `LisaAPIContract`. Built with Swift 6.4.2 and `--force-resolved-versions`: debug and release exit 0, 0 warnings; `frozen-client-harness` debug `51a0b06f960d86f09224d5cde6524bc3b9f4b11ac30e3bf3e882081faaf707ae`, release `990e6e06b6ff4100581d11d5dd5988d6ebdf7aec3d95a4aef3a72b5f05efdb15`. Its lockfile stayed `9608e8e0…a37494`. Three earlier attempts that failed to build are kept beside it, unchanged (`COMMANDS.md` explains each).
+- **Queue files:** 25 files in `m0/frozen-client/queues/`, each written by R1's own `OfflineQueue` and `FileQueueStorage` (release binary), driven by a scripted `APITransport` or, where marked live, R1's real `URLSessionTransport` against a loopback socket, with an injected clock. `MANIFEST.tsv` (SHA-256 `8e1b03e17095bf97f8c0a32e9174ad3aea399a5d0034f3984fbb71dc20829bdb`) lists each file's statuses, attempts, request identity, uncertainty, last error and SHA-256; `SHA256SUMS` (`e1f2c2e62f5711cad57c05d4568f01d264448b71a64ab547eb39983483eb1d56`) covers the 273 files outside `.build`. Every entry was checked field by field.
+- **Coverage (plan §8.14.3 histories):** `unsent` (all nine mutation kinds, captures with and without titles, an idea with a title); `single` done (201), conflict (R1's 409s: "the task changed since it was read", "the task cannot move from …", "the item changed since it was read; reload it and try again"), failed (400 "send between 1 and 50 changes", 400 "unknown action" as a scripted answer, 404, 422 request ID reused, 500), and pending after 401, 429, 502, 503 (two messages), 504, connection refused and host unreachable; `unresolved`: timeout, cancellation and interruption after delivery (R1's only uncertain cases), a 504 then a 401, requeued after a conflict and after a failure, expiry after 30 days.
+- **Not produced yet:** a raw `sending` file left by a killed process, with R1's recovery of it in a separate copy, and the before/after pair of completed-entry pruning. Both are due before S-01 (M3) and S-02 (M9) need them.
+- **R1 behavior recorded for M9 (S-02):** R1 marks only a timeout, a reset after delivery and a cancellation as uncertain (`LisaClient/QueueSendOutcome.swift:38-58`), never a 504 or a "still being processed" 503; after a 504 then a 401 the 504's `nextAttemptAt` remains (`OfflineQueue+Flush.swift:124-128`); on Linux a refused connection and an unreachable host map to the same text; "unknown action" cannot occur between an R1 client and an R1 host.
+- **Outside the run directory:** swift-corelibs-foundation created `~/.cache/org.swift.foundation.URLCache/frozen-client-harness/` when R1's transport first ran, as R1's own suite does for its runner; left in place.
 
 ### M0-6 Frozen R1 datasets (§8.18 step 3)
 
-Not recorded yet: in progress in `m0/frozen-datasets/`.
+- **Commands:** the frozen release `lisa` (`34ef4335…9bff`) and its CLI only, with synthetic configs; live delivery only to responders on 127.0.0.1, ports 47100–47199, with synthetic recipients. Every step's command, UTC time and exit code is in each dataset's `logs/`; `COMMANDS.md` regenerates them. Inspection used copies opened read-only.
+- **Datasets** in `m0/frozen-datasets/`: `ds-demo` and `ds-demo-debug` (`lisa demo`, release and debug, identical record counts) and `ds-deliveries`. `SHA256SUMS` (`ebfb139881c8cf643c17f752f32bcbe9d7a16491e33df34f13a1d051b9b7b641`) covers 206 files.
+- **Delivery states produced by R1's own code:** `capturedDryRun` (8 push, 3 email), `pending` (3: quiet hours, a call escalation inside its grace, a live email retrying after a 421 greeting), `suppressed` (4), `cancelled` (9), `failed` (3: a 554 greeting, an untrusted certificate, a 421 whose retry fell after expiry), and `outcomeUnknown` (1: `lisa` killed while submitting a live email to a responder that never answered; after the 30-second lease R1's recovery recorded "the host stopped while the request was being submitted").
+- **Also present:** one-off and daily repeating reminders, missed reminders suppressed by recovery, briefs, plans with proposed and locked blocks, schedule preferences, 11 tasks, an idea capture, 11 feed items, two paired devices and a revoked iPad.
+- **Not produced yet:** `acceptedByProvider` (R1 verifies SMTP certificates against the system trust store only, so a controlled TLS server can't be trusted through configuration), `confirmedDelivered` (needs a device receipt through `lisa serve`), `inProgress`, model-budget consumption, the capture-title and shared-URL cases of §8.14.3, richer task revision histories and plan-block actions. They are due before S-02 and S-13 (M9) need them.
+- **Clock:** except `lisa demo`, the commands used the real clock (2026-11-24, about 08:30–08:45 UTC), so a regeneration gets new identifiers and times.
+
+### M0-7 Dependency change: swift-crypto 5.1.2 (`docs/DECISIONS.md` D-53)
+
+- **Change:** `9e35866` (`Package.swift`, exact 5.1.2) and `fd94a78` (`Package.resolved`: revision `3280a5f72874d2f73bf25551bbb64f524c76d834`; lockfile `f8463195…c91e776`). SwiftPM's workspace state shows 5.1.2 checked out for both toolchains, with swift-asn1 1.7.4.
+- **Regression:** the M0-1 procedure in fresh scratch paths (`.build/r2-dep-20261124-r2-5462/swift-crypto-5.1.2/swift-<version>`), script `.tmp/r2/20261124-r2-5462/deps/run-regression.sh`. **PASS** for 6.4.2 and 6.4.3, debug and release: exit 0, 0 warnings, 376 tests in 66 suites, the demo 30 of 30 each; runner SHA-256 6.4.2 debug `30c9ecd2611d6062…`, release `6b950c33bb59117c…`, 6.4.3 debug `f9a0f554bae07cba…`, release `feece55d21f7ae31…`. Evidence: `.tmp/r2/20261124-r2-5462/deps/regression-swift-crypto-5.1.2/`.
+
+## 2a. M1 (run `20261124-r2-5462`)
+
+### M1-1 Canonical JSON, base64url and transfer budgets (R2-L32; S-16 M1 part)
+
+- **Code:** `LisaSyncProtocol` (`8244d48` … `4a8826b`).
+- **Harness:** `.tmp/r2/20261124-r2-5462/m1/harness/`, a temporary package depending on the root package by path, swift-testing, public API only; built with `--force-resolved-versions` against a copy of the project lockfile, which SwiftPM left unchanged.
+- **Vectors:** a representative value with every escape class, non-ASCII and astral text and the Int64 extremes, encoded byte for byte and decoded back; key order by Unicode scalar value (U+E000 before U+1F600, unlike UTF-16 order); canonically equivalent keys refused as duplicates and strings compared byte-exactly; nesting 16 accepted and 17 refused; size derivation with three-byte characters and escapes; refusal of whitespace, a BOM, empty input, trailing bytes, unsorted and duplicate keys, fractions, exponents, leading zeros, negative zero, Int64 overflow, seven invalid UTF-8 forms, lone surrogates, every non-minimal escape and raw control characters; an operation body of exactly 64 KiB accepted and one byte more refused; RFC 4648 base64url vectors and the plan's enrollment-token text `AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8`, with padding, foreign characters, impossible lengths and non-zero trailing bits refused; unknown, missing and mistyped fields refused; each transfer budget at its limit and one over.
+- **Result: PASS**, 16 tests in 5 suites (Swift 6.4.2, debug). With the target added, a full debug build has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites. `swift format lint` reports no finding in `Sources/LisaSyncProtocol`.
 
 ## 3. Scenario index (plan §10.2)
 
