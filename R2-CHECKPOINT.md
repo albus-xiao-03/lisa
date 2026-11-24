@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T08:20Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, in progress.
+**Updated:** 2026-11-24T08:55Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, complete at its boundary (two fixture groups are scheduled for M3 and M9, §5); M1 — Contracts and Apple proofs, in progress.
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -16,7 +16,7 @@ The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT
 | Start instruction | The owner, 2026-11-24: begin M0 in the Docker sandbox and execute the approved plan through M9 |
 | Platform | Docker Sandboxes VM `lisa.lab`: Debian 13 (trixie) x86_64, clone-mode Git workspace (commits stay in the sandbox until the owner fetches them), rootful Docker 29.10.0. Swift 6.4.2 primary, 6.4.3 for comparison |
 | Run | `20261124-r2-5462`, started 2026-11-24T07:42Z; Claude Code session `4e52d1e9-0d10-448b-8239-b9b21ceda630`; run directory `.tmp/r2/20261124-r2-5462/` (ignored by Git, exists only in this sandbox) |
-| Lockfile | `Package.resolved` SHA-256 `9608e8e024c6cbe0ea3fc269c5d80dcba8235c585f852de0e0c046a1dab37494`, unchanged before and after every build |
+| Lockfile | `Package.resolved` SHA-256 `f846319595094d9399eccd89f565e571db298f5dab8c46543bcd7d95bc91e776` since `fd94a78` (swift-crypto 5.1.2, `docs/DECISIONS.md` D-53). The M0 baseline and the frozen R1 artifacts use R1's `9608e8e0…a37494`, unchanged by every build |
 
 ## 2. Requirements
 
@@ -25,12 +25,12 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 | ID | Status now | Evidence |
 |---|---|---|
 | R2-L01 Portable debug and release builds without Apple SDKs | First run `PASS` for the R1 package (Claude; Debian 13 sandbox, Swift 6.4.2 and 6.4.3, 0 warnings). Final at M9 | §4 |
-| R2-L02 Applicable R1 regression behavior remains correct | Baseline `PASS`: the unmodified R1 suite, 376 tests in 66 suites, in debug and release with both toolchains; no failure to classify, no requirement replaced yet. Repeated at M3, M5, M8 and M9 | §4 |
+| R2-L02 Applicable R1 regression behavior remains correct | Baseline `PASS`: the unmodified R1 suite, 376 tests in 66 suites, in debug and release with both toolchains, before and after swift-crypto 5.1.2; no failure to classify, no requirement replaced yet. Repeated at M3, M5, M8 and M9 | §4 |
 
 ## 3. Files
 
 - **Uncommitted tracked changes:** none at this update.
-- **Commits in this run:** `9951cbd` and `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`), then this file.
+- **Commits in this run:** `9951cbd`, `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`); `0c037c7` (this file); `ad0338d`, `b079c44` (`docs/VERIFICATION-SCENARIOS.md`); `e0b0302` (`docs/REQUIREMENTS-MATRIX.md`); the swift-crypto span `9e35866` → `fd94a78` with `1a49709` (`docs/SETUP-LINUX.md`), `269a2ca` (`docs/ARCHITECTURE.md`) and `866c98d` (`docs/DECISIONS.md` D-53); the `LisaSyncProtocol` span `8244d48` → `4a8826b`; then this update.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -44,8 +44,10 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 | Offline demo | `lisa demo --data-dir <run>/demo-data --json` with each of the four builds | Exit 0; 8 steps, **30 of 30 checks** each | `m0/suite/*/demo.json` |
 | Frozen R1 sources | `git show --no-textconv 491c90a:<path>`, walking `git show 491c90a:<dir>/` (`m0/reconstruct-r1.py`) | 872 files, each byte-exact against `git rev-parse 491c90a:<path>`; manifest SHA-256 `5e0524fc…b46679` | `m0/r1-src/`, `m0/r1-src.manifest.tsv` |
 | Frozen R1 `lisa` | In `m0/r1-src/`: `swift build -c debug`, `swift build -c release` (Swift 6.4.2) | Exit 0 both; debug `220690d1…64f0`, release `34ef4335…9bff` | `m0/frozen/` |
-| Frozen-client harness and R1 queue files | A temporary package linking R1's `LisaClient` by path; R1's own `OfflineQueue` writes every queue state | In progress | `m0/frozen-client/` |
-| Frozen R1 datasets | The frozen `lisa` writes data directories with pending, uncertain and dry-run deliveries, schedules and budgets, live paths only against loopback controlled servers | In progress | `m0/frozen-datasets/` |
+| Frozen-client harness and R1 queue files | A temporary package linking R1's `LisaClient` by path; R1's own `OfflineQueue` writes the queue states | Debug and release build, 0 warnings; **25 queue files** across the §8.14.3 histories, each checked field by field; lockfile kept | `m0/frozen-client/` (`queues/MANIFEST.tsv`) |
+| Frozen R1 datasets | The frozen `lisa` and its CLI, live paths only against loopback controlled servers | **3 datasets**: dry-run, pending, suppressed, cancelled, failed and a genuine `outcomeUnknown` delivery; reminders, briefs, plans, preferences, devices and a revocation | `m0/frozen-datasets/` (`*/STATE.md`) |
+| Dependency change, swift-crypto 5.1.2 | The M0-1 procedure in fresh scratch paths | **PASS**: 376/66 in debug and release with 6.4.2 and 6.4.3, 0 warnings, demo 30/30 | `deps/regression-swift-crypto-5.1.2/` |
+| M1-1 canonical JSON, base64url, budgets | Temporary harness `m1/harness/` (swift-testing, public API) | **PASS**, 16 tests in 5 suites; full debug build 0 warnings; R1 suite 376/66 | `m1/` |
 
 The first outcomes passed, so M0 needed no production fix. Every run directory and log is new; first outcomes are kept as recorded.
 
@@ -61,6 +63,8 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Apple builds and devices (X1–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
+| Frozen fixtures not yet produced | A raw `sending` queue file left by a killed process and the pruning pair (due before S-01 at M3); `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
+| SQLite WAL-reset fix | Before M2 and M3 durability results are accepted: the DHI image carries no Debian changelog, so either Debian's patch is verified from its published source, or every relevant writer and checkpoint is shown to be serialized (§13 of the environment report) |
 
 **Process deviation, recorded:** before 08:08Z this run used five read-only Git commands outside the plan's allowed set (§3): `git worktree list`, `git merge-base --is-ancestor`, `git ls-files`, `git rev-list --max-parents=0` and `git symbolic-ref`. None changed anything. Each was replaced (by `rev-parse`, `log` or a `git show` walk), and only `status`, `diff`, `log`, `show`, `rev-parse`, `add` and `commit` are used since.
 
@@ -77,7 +81,7 @@ X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, wit
 
 ## 8. Last buildable checkpoint
 
-`051d9d4`: the R1 package builds in debug and release and passes its suite with Swift 6.4.2 and 6.4.3. Later commits in this run change documentation only.
+`4a8826b`: with `LisaSyncProtocol` declared, a full debug build with tests completes with 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); the M1 harness passes. The swift-crypto span's checkpoint `fd94a78` passed the full matrix (6.4.2 and 6.4.3, debug and release).
 
 ## 9. Quota monitoring, the guard, pause and resume
 
@@ -86,6 +90,8 @@ X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, wit
 - **The guard.** `.tmp/r2/20261124-r2-5462/guard/guard.py`, one detached process, bound to this account (hash `0c503c8f4594e0fb`), session lineage, sandbox checkout and run ID. It waits without model calls for a recorded quota pause or a verified quota interruption, confirms the reset with a fresh reading after the reported reset plus 180 s, checks the other plan windows, and launches one writer (`resume-launcher.sh`: a forked resume of the session) under the repository writer lock. The interactive session holds that lock through a lease helper. Rehearsed with simulated readings, a short clock and a harmless launcher at 08:02Z and 08:08Z: 10 of 10 scenarios passed. The real launcher has not run yet; its first use will be the first post-reset resume.
 - **Owner commands.** Inspect: `.tmp/r2/20261124-r2-5462/guard/guardctl status`. Stop: `guardctl stop --reason "<why>"` or `touch .tmp/r2/20261124-r2-5462/guard/live/STOP`. After a VM restart nothing restarts by itself: run `guardctl daemon --detach`, or resume Claude, which restarts it. A guard stopped by the owner restarts only with `--rearm "<reason>"`.
 - **Pause procedure.** At 80–85% used: drain workers and shorten batches; be paused by about 90%, earlier if the burn rate or in-flight work could consume the reserve. Before pausing: account for running processes, update this file, write a new `.tmp/r2/20261124-r2-5462/pause-<UTC>-<unique>.md` (HEAD, unfinished work, evidence, owner checks, measured usage and reset, the exact next safe action), record it with `guard.py pause`, release the writer lease, end the turn.
+- **Batch sizing.** Two concurrent agents plus this session used 11 points of the window in 4 minutes on 2026-11-24 (08:36–08:40Z). Agents now run one at a time unless usage is low, and a background watchdog that makes no model calls wakes this session at 70%.
+- **Evidence for the owner.** `python3 .tmp/r2/20261124-r2-5462/export/make_bundle.py` writes a redacted `bundle-<UTC>.tar.gz` with its SHA-256 (it refuses to package if a canary survives). To copy one out: publish a port once on the host (`sbx port publish lisa.lab 8765:8765`), ask Claude to run `export/serve-bundle.sh`, then `curl -fO http://localhost:8765/<bundle>.tar.gz`.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
@@ -94,6 +100,6 @@ No live action, external submission or owner check has been requested or perform
 
 ## 11. Next steps
 
-1. Finish M0: the frozen-client harness and queue files, the frozen datasets, their hashes and commands in `docs/VERIFICATION-SCENARIOS.md`, the R2 part of `docs/REQUIREMENTS-MATRIX.md`, then this file at the M0 boundary.
-2. After the freeze: swift-crypto 5.1.2 (and an assessment of SwiftNIO 2.105.1), each with revisions, rationale, lockfile change and the full R1 suite in debug and release.
-3. M1: contracts (LisaSyncProtocol, LisaTrust, LisaCrypto additions, the LisaArchive codec), `Apps/Proof` for X1 (both nearby designs, all three pairs and network conditions, Core-offline public fetching), and the tracked owner-verification harness core.
+1. M1, contracts: the operation envelope and receipts in `LisaSyncProtocol`; `LisaCrypto` additions (raw P-256 signatures over domain-separated bodies, key agreement, HKDF, HMAC, HPKE); `LisaTrust` (the enrollment-token vector, the Core signing-key DER and fingerprint, `lisa-pair:4:` and `lisa-reanchor:2:` decoding, signatures, roster and lineage checks, the nearby session layer); the `LisaArchive` codec; Merkle paging vectors; `docs/SYNC-PROTOCOL.md` with the vectors.
+2. M1, X1 deliverables: `Apps/Proof` (Designs A and B on all three pairs and network conditions, the Core-offline fetch probe, proof-only certificates checked with `openssl`), the portable modules for E-2, and the owner-verification harness core with the X1 runner, so the owner can test while M2–M5 continue.
+3. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
