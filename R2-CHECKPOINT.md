@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T20:56Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, in progress** (M2-0 to M2-3, §4). **Working:** resumed manually at 20:33Z after the VM restart (§5, §9); the second quota pause (13:58Z) was consumed by that resume. Fresh reading at 20:33:29Z: 2% used, reset 2026-11-25T01:20:00Z (20:20:00 EST).
+**Updated:** 2026-11-24T21:09Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, in progress** (M2-0 to M2-4, §4). **Working:** resumed manually at 20:33Z after the VM restart (§5, §9); the second quota pause (13:58Z) was consumed by that resume. Fresh reading at 20:33:29Z: 2% used, reset 2026-11-25T01:20:00Z (20:20:00 EST).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -33,7 +33,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 - **Commits in this run:** `9951cbd`, `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`); `0c037c7` (this file); `ad0338d`, `b079c44` (`docs/VERIFICATION-SCENARIOS.md`); `e0b0302` (`docs/REQUIREMENTS-MATRIX.md`); the swift-crypto span `9e35866` → `fd94a78` with `1a49709` (`docs/SETUP-LINUX.md`), `269a2ca` (`docs/ARCHITECTURE.md`) and `866c98d` (`docs/DECISIONS.md` D-53); the `LisaSyncProtocol` span `8244d48` → `4a8826b`; then this update.
 - **Commits since the 09:45Z pause:** the nearby frame header and hello form `c096983`–`c69586c`; D-54 `27769d1`; `Apps/Config` and `Apps/Proof` `bc11c09`–`559f4bb` (69 files, then `Apps/project.yml`); `docs/SYNC-PROTOCOL.md` `3079aa3`; the harness `8e58552`–`d0a9e53` (`LisaVerifyKit`, `LisaVerifyCases`, `LisaVerifyServers`, `lisa-verify`, `Harness/` documents and configuration example, `Apps/OwnerVerification`, test plan X1, the `LisaProof` scheme, each span ending in `Package.swift` or its last file); `docs/SETUP-APPLE.md` §9; `docs/REQUIREMENTS-MATRIX.md` `260a582`; then `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Commits since the M1 boundary:** D-55 `ce68f1a`; the WAL guard `c9fed41` (`LisaSQLite`, four files); `28ef7c8`; `LisaMerge` (eight files, then `Package.swift` `72797e1`); `CausalRelease` `386a738`; `6ccfa10`; `docs/CONFLICTS.md` `5b6e0e7`; `d31a943` (this file at the second pause).
-- **Commits since the resume at 20:33Z:** the observed set's canonical form `ef9f546`; `LisaReplicaStore`'s first span `5ddd7d2` → `3ee84a0` (28 files); D-56 `528f236`; `Package.swift` `818fe3c`; `docs/VERIFICATION-SCENARIOS.md` M2-3 `742675f`; then this file.
+- **Commits since the resume at 20:33Z:** the observed set's canonical form `ef9f546`; `LisaReplicaStore`'s first span `5ddd7d2` → `3ee84a0` (28 files); D-56 `528f236`; `Package.swift` `818fe3c`; `docs/VERIFICATION-SCENARIOS.md` M2-3 `742675f`; `4bb6f35` (this file); the reader monitor and capture path `5d9a9c6` → `0aac9d1` (`LisaSQLite` six files, `LisaReplicaStore` three); M2-4 `3455908`; then this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -60,6 +60,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 | M2-1 `LisaMerge` rule state | `m2/harness-v9/` (v7 and v8 superseded) | **PASS**, 7 tests, every permutation converging | M2-1 |
 | M2-2 causal readiness and bounded release | `m2/harness-v10/` | **PASS**, 4 tests: the nested fan-out of 105,001 operations within the 256 bounds | M2-2 |
 | M2-3 `LisaReplicaStore`, first span | `m2/harness-v12/` (v11 didn't compile, superseded); `m2/suite-after-replica-span1-20261124T205211Z/` | **PASS**, 9 tests: directory and schema, drafts, the restored copy's new incarnation with no sequence reuse (§8.6.4), the duplicate rules, the atomic change rolled back (index failure, `SQLITE_FULL`), the overlay until the canonical row installs; debug build 0 warnings, R1 suite 376/66 | M2-3 |
+| M2-4 the reader monitor and the capture path; **the first container use** | `m2/harness-v13/` (host; the first run failed once, product fixed); `m2/container-20261124T2100Z/` (rootful engine, `swift:6.4.2-trixie` `sha256:9733821c…430097`, 48 MiB tmpfs, no network); `m2/suite-after-storage-span-20261124T210553Z/` | **PASS**: a pinned reader released at its budget with the WAL truncated, a low-space release, the sampler never keeping the replica open; on the tmpfs, a burst filling the disk (ballast lets the first capture through, every failure reported, every save present after restart) and a pinned reader released at the space threshold; debug build 0 warnings, R1 suite 376/66 | M2-4 |
 
 The first outcomes passed, so M0 needed no production fix. Every run directory and log is new; first outcomes are kept as recorded.
 
@@ -76,6 +77,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
 | Frozen fixtures not yet produced | A raw `sending` queue file left by a killed process and the pruning pair (due before S-01 at M3); `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
+| Reopening the replica at 0 bytes free | Observed in M2-4: it fails with "storage full" (opening records a new incarnation, and WAL mode needs room for its `-wal` and `-shm` files); every save stays intact and it opens once space returns. The plan releases the ballast only on the capture path. **For the owner:** whether the ballast may also be released to open the replica at launch; otherwise the app (M5) reports "Storage is full" without the replica and retries the open when space returns |
 | SQLite WAL-reset fix | Settled by design (D-55, M2-0): the loaded library isn't shown to carry the fix, so every WAL database has one writer and checkpointer under an exclusive lock and read-only readers; the guard's checks pass. The production image's library is judged the same way at M4 |
 
 **Environment event (2026-11-24, the VM stopped):** the sandbox VM stopped after 16:57:14Z (the guard's last heartbeat) and before 17:53Z, when the guard would have taken its post-reset reading; it booted again at 20:25:22Z. The guard and its pending pause `P-20261124T135657Z-39d87a` didn't run in between, so nothing launched. The owner resumed Claude in the original interactive session; Claude inspected the files and processes (HEAD `d31a943`, clean tree, no writer, 21 GB free, toolchains and Docker present), took a fresh reading, took the writer lease with `--consume-pauses` at 20:33:37Z and restarted the guard (pid 2746). Nothing was lost: the last commit before the stop was the pause checkpoint.
@@ -99,7 +101,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-`818fe3c` (`LisaReplicaStore`'s first span): a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); harness v12 passes 9 tests. Before it, `386a738` (`CausalRelease`) and `c9fed41` (the WAL guard). `d0a9e53` is M1's clean-checkout checkpoint (debug and release, R1 suite, fixtures 9/9). Later commits change documents only.
+`0aac9d1` (the reader monitor and the capture path): a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); harnesses v12 (9 tests) and v13 (5, and the two container cases in the pinned image) pass. Before it, `818fe3c` (`LisaReplicaStore`'s first span), `386a738` (`CausalRelease`) and `c9fed41` (the WAL guard). `d0a9e53` is M1's clean-checkout checkpoint (debug and release, R1 suite, fixtures 9/9). Later commits change documents only.
 
 ## 9. Quota monitoring, the guard, pause and resume
 
@@ -120,13 +122,16 @@ No live action or external submission has been requested or performed in this ru
 
 ## 11. Next steps
 
-1. **M2, `LisaReplicaStore`, next span:** the effective view through `LisaMerge` (pieces and registers per item, the pending operations in causal order with `CausalRelease` persisted in the `causal_*` tables, recomputed per affected item, revoked and rejected operations leaving it), with `LisaMerge`, `LisaDomain` and `LisaTime` added to the target as they are used. Then:
+1. **M2, the effective view (next span).** The operation payloads are opaque to the envelope codec until each type's schema is implemented (`docs/SYNC-PROTOCOL.md` §8), so this span starts with the schemas:
+   - the task family, notes, tags and deletion, from R1's record shapes (`LisaDomain`), with vectors in `docs/SYNC-PROTOCOL.md`;
+   - then LisaMerge's per-item state (registers per field, note pieces, the tag set, terminal actions, the tombstone) and the projection to R1 record shapes;
+   - then the replica's effective view: canonical pieces plus pending operations in causal order, with `CausalRelease` persisted in the `causal_*` tables, recomputed per affected item;
+   - `LisaMerge`, `LisaDomain` and `LisaTime` are added to the store's target as they are used.
+2. **Then the rest of M2:**
    - signed change pages, partition cursors with the four page cases, membership records and the absence rule, deferred pages (§8.4.2, §8.4.3);
-   - the staged snapshot installation with the local change journal, catch-up passes, the backlog rule and the swap (§8.6.3; S-06), with kills at each step on real files;
+   - the staged snapshot installation (§8.6.3; S-06) with kills at each step, including storage filling during an installation and the peak staging, index and WAL sizes (S-17's last M2 parts);
    - `LisaLocalSearch` behind `ReplicaIndexing`;
-   - `LisaSQLite` additions (read connections, interrupt, the reader monitor) and the ballast path (§8.15.2);
-   - `LisaTime` additions;
-   - the first container run (the rootful engine, labeled), with S-17's tmpfs cases;
-   - then the M2 boundary: debug and release, lint, a clean checkout, fixtures.
-2. **While the owner runs X1:** import and evaluate the redacted results the owner shares; a nearby design is selected only from a passed proof (N-1), and M6 waits for it.
-3. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
+   - the `LisaTime` additions;
+   - the M2 boundary: debug and release, lint, a clean checkout, fixtures.
+3. **While the owner runs X1:** import and evaluate the redacted results the owner shares; a nearby design is selected only from a passed proof (N-1), and M6 waits for it.
+4. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
