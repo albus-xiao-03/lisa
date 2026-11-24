@@ -62,7 +62,7 @@ let package = Package(
     ],
     dependencies: [
         // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-06).
-        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1"),
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.2"),
         // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-01): the `lisa` command-line interface only.
         .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2"),
         // Approved by the owner on 2026-11-15 (plan §11, REC-DEP-03 and REC-DEP-04): the network API server only.
