@@ -1,0 +1,55 @@
+// Lisa owner-verification configuration (plan R2 §10.8). `lisa-verify quickstart` copies this file to
+// ~/LisaVerify/config.json5 (mode 0600). Every value below is a placeholder: put your own values only in your copy,
+// never in the repository. Secrets are never written here either — name them by reference:
+//   file:<path>        a file only you can read, for example an app-specific password
+//   keychain:<item>    an item in your login Keychain
+// Sections for later sessions are present now so the file's shape doesn't change; the harness reads each one when the
+// milestone that needs it delivers its cases (Apple at M1; the verification Core at M3; providers at M7 and M8).
+{
+  apple: {
+    // As in Apps/Config/Signing.local.xcconfig (DEVELOPMENT_TEAM).
+    teamID: "<your Team ID>",
+    devices: {
+      mac: "<your Mac's name>",
+      iphone: "<the iPhone's UDID, from `xcrun devicectl list devices`>",
+      ipad: "<the iPad's UDID>",
+    },
+    // X6 (M8): the APNs key reference — a path, never the key itself.
+    apns: { key: "file:<path to the .p8 key>", keyID: "<key ID>", environment: "development" },
+  },
+
+  // Dataset IDs of your production Core. The harness refuses any step aimed at them.
+  protectedDatasets: ["<production dataset ID>"],
+
+  // M3: the disposable verification Core's device listener, reachable from your devices.
+  verificationCore: { listen: "<address>:<port>" },
+
+  // M7 and M8: dedicated accounts and isolated registrations only (plan §8.19.1, §10.8).
+  providers: {
+    microsoft: {
+      account: "<dedicated Outlook.com address>",
+      verificationClients: ["<client ID registered only for verification>"],
+      protectedClients: ["<your production Core's client ID>"],
+    },
+    google: {
+      account: "<dedicated Gmail address>",
+      verificationClients: ["<full Desktop client ID of the verification-only project>"],
+      protectedClients: ["<full client ID your production Core uses>"],
+      // Owner-verified in Google Cloud: each client's project number (credentials and project settings screens).
+      clientProjects: { "<full client ID>": "<project number>" },
+      verificationProject: "<verification-only project number>",
+      protectedProjects: ["<every protected project number>"],
+      dedicatedSubject: "<the dedicated account's confirmed subject>",
+    },
+    icloud: { account: "<dedicated Apple Account>", appPassword: "file:<path to the app-specific password>" },
+    proton: { account: "<dedicated Proton address>" },
+    openai: { apiKey: "keychain:<item name>" },
+    anthropic: { apiKey: "keychain:<item name>" },
+    ollama: { endpoint: "<https URL of your Ollama server>", certificateSHA256: "<its certificate's SHA-256>" },
+    twilio: { accountSID: "keychain:<item name>", authToken: "keychain:<item name>", from: "<your Twilio number>" },
+  },
+
+  // Live runs refuse any recipient or number outside these lists.
+  approvedTestRecipients: ["<an address you approved for live tests>"],
+  approvedTestNumbers: ["<a number you approved for live calls>"],
+}
