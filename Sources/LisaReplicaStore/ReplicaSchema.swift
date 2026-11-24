@@ -176,10 +176,18 @@ enum ReplicaSchema {
           signature BLOB NOT NULL CHECK (length(signature) = 64),
           epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
           position INTEGER NOT NULL CHECK (position >= 1),
-          decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict'))
+          decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict')),
+          origin_device BLOB CHECK (origin_device IS NULL OR length(origin_device) = 16),
+          origin_incarnation BLOB CHECK (origin_incarnation IS NULL OR length(origin_incarnation) = 16),
+          origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1)
         ) STRICT
         """,
         "CREATE INDEX canonical_operations_by_item ON canonical_operations (entity_type, entity_id)",
+        // The duplicate rules look canonical operations up by origin triple too (§8.2.1).
+        """
+        CREATE INDEX canonical_operations_by_origin
+          ON canonical_operations (origin_device, origin_incarnation, origin_sequence)
+        """,
         // Derived records from Core (§8.3.5, §8.4.2): calendar occurrences with their row version and bucket range, one
         // version per generation (0 for pages, a repair's own for its snapshot, §8.4.3); readers take a row's newest
         // version among published generations. A deletion keeps its version with no body, so an older update can't
