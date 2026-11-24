@@ -246,11 +246,14 @@ let package = Package(
         // The owner-verification harness (plan §10.8): tracked, built from a clean checkout, linked by no product.
         .target(
             name: "LisaVerifyKit", dependencies: ["LisaCrypto", "LisaSQLite"], path: "Harness/Sources/LisaVerifyKit"),
-        .target(name: "LisaVerifyCases", dependencies: ["LisaVerifyKit"], path: "Harness/Sources/LisaVerifyCases"),
+        .target(
+            name: "LisaVerifyCases", dependencies: ["LisaVerifyKit", "LisaVerifyServers"],
+            path: "Harness/Sources/LisaVerifyCases"),
         .executableTarget(
             name: "lisa-verify",
             dependencies: [
-                "LisaVerifyKit", "LisaVerifyCases", .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "LisaVerifyKit", "LisaVerifyCases", "LisaVerifyServers",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ], path: "Harness/Sources/lisa-verify"),
         .target(
             name: "LisaVerifyServers",
