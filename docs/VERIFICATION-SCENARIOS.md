@@ -105,7 +105,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-14 | The destination policy at every redirect | M7, X1, X5 | Not run |
 | S-15 | VPN publishing | M4, target host | Not run |
 | S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); M3 and M6 parts not run |
-| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Parts run: the single-writer guard (M2-0) and `SQLITE_FULL` in a save (M2-3); the reader monitor and the container runs not yet |
+| S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Parts run: the single-writer guard (M2-0), `SQLITE_FULL` in a save (M2-3), the reader monitor, the pinned reader and the burst on a container tmpfs (M2-4); a staged installation filling storage not yet (with S-06) |
 | S-18 | Model accounting | M7 | Not run |
 | S-19 | Deletion and expiry propagation | M5, M8 | Not run |
 | S-20 | Health, CLI modes and the deployment wrappers | M3, M4 | Not run |
@@ -311,3 +311,40 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - staged installation (S-06);
   - the reader monitor and the container exhaustion runs (S-17);
   - kills at each step on real files.
+
+### M2-4 The reader monitor and the capture path, with the first container use (S-17 M2 parts; plan §8.15.2, §9 M2, O-10)
+
+- **Code:**
+  - `LisaSQLite`, `5d9a9c6` → `58aea5f`: interrupt, the interrupt and full error classes, free space, reader purposes and releases, and `SQLiteReaderMonitor`.
+  - `LisaReplicaStore`, `94cf891` → `0aac9d1`: the ballast on the capture path, and long reads under the monitor.
+- **Host harness:** `m2/harness-v13/`, run with `LISA_HARNESS_WORK` under the run directory.
+  - **First run** (`harness-v13-test-20261124T210301Z.log`): 2 of the 3 host tests passed. `theSamplerReleasesOnItsOwnAndNeverKeepsTheReplicaOpen` failed: the released reader's error arrived before the monitor had recorded the release and run its checkpoint. An immediate retry could therefore have pinned the WAL again before it was truncated.
+  - **Fix, in the product:** a released reader now returns only after the checkpoint (bounded at 5 s). The harness is unchanged.
+  - **Since then:** 5/5 (3 host tests and 2 container-only tests skipped on the host), and again after formatting.
+  - **Cases:**
+    - A reader pinned during 300 captures: the WAL grew from 144 KB to 12 MB. The reader was released at its budget (300 ms for the test), the truncating checkpoint wasn't blocked, the WAL ended at 0 bytes, and all 300 captures were present.
+    - Free space below the reserve released both readers within their 60 s budgets.
+    - A sampling thread at 100 ms released a reader on its own within 3 s. The released store didn't keep the replica open: the next launch opened it as the second incarnation.
+- **The first container use, labeled:**
+  - **Engine:** the rootful Docker daemon inside `lisa.lab`, authorized by the owner. This is not rootless; G2 still needs rootless evidence.
+  - **Platform:** Engine 29.10.0 (API 1.57), context `default`, the DHI Debian 13 VM, kernel 7.0.14, x86_64, cgroup v2 (cgroupfs), seccomp builtin.
+  - **Image:** `swift:6.4.2-trixie` pulled by its O-3 digest `sha256:9733821cc4c736ac43a2b400b2bd08aa54fc7d98c9f58270a7392d7623430097` (amd64 manifest `8287f5cc…69d90`). It ships Swift 6.4.2 and `libsqlite3-0` 3.46.1-7+deb13u2.
+  - **Test binary:** the v13 runner, built on this host, ran on the image's own Swift runtime (`LD_LIBRARY_PATH=/usr/lib/swift/linux`). Runner `1864bdb8…`, test library `fd7595d8…`.
+  - **Containers:** each test ran alone in a new container with no network, the repository mounted read-only, and the replica directory on `--tmpfs /tmpfs-work:size=48m`.
+  - **Evidence:** script `m2/container-20261124T2100Z/run-s17-v1.sh`; runs `run-20261124T210449Z` and `run-20261124T210552Z`, with the same binaries and outcomes.
+- **Container cases:**
+  - **A burst that fills the tmpfs between samples:**
+    - Five captures were saved first. Then another writer filled the tmpfs to 0 bytes free (45 MB), and kept refilling it after every capture.
+    - The first capture after that was saved through the ballast, and "Storage is almost full" held. The next 39 were all reported "Not saved".
+    - With space back, the replica opened with exactly the 6 captures reported saved. `integrity_check` was ok, and the ballast was restored.
+  - **A pinned reader (a 2 s search budget) during continuous captures:** 882 and 827 captures, WAL peaks of 41.9 MB and 39.2 MB. The reader was released at the space threshold after 0.25 s, the first sample, before its budget. The truncating checkpoint completed, leaving 0 WAL frames.
+- **Observation, not a failure of these checks:** at 0 bytes free the replica couldn't be reopened ("storage full"). Opening records a new incarnation, and WAL mode needs room for its `-wal` and `-shm` files.
+  - Every save stayed intact, and the replica opened as soon as space returned.
+  - The app's launch path (M5) reports "Storage is full" without the replica, and retries the open when space returns.
+  - Whether the ballast may also be released to open the replica is a question for the owner (`R2-CHECKPOINT.md` §5).
+- **Full build and R1 suite:** `m2/suite-after-storage-span-20261124T210553Z/` — debug build with tests, 0 warnings; 376 tests in 66 suites passed.
+- **Result: PASS** for these S-17 parts.
+- **S-17 at M2 still owes:**
+  - storage filling during a staged installation (with S-06);
+  - `max_page_count` on the in-database path of staging (the save path is M2-3);
+  - the peak staging, index and WAL sizes during an installation.
