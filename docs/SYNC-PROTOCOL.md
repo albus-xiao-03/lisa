@@ -198,6 +198,18 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
     - either way, its causal decision releases its dependents.
   - Nothing missing from a page is read as deleted.
 
+## 8b. Full snapshots (plan §8.4.3, §8.6.3)
+
+A full snapshot is a paged artifact (§9) of type `snapshot`, signed by Core. Its header's `version` is the cut, and its `epochID` is the snapshot's epoch.
+- **Each page is a chunk** (`SnapshotChunk`): `{"entries", "partitions"}`.
+  - `partitions` is the snapshot's coverage, the same on every chunk.
+  - `entries` holds the committed operations of those partitions as change-log entries (§8a), with no rejections, strictly ascending by position, each at or below the cut.
+- **On a replica** (`beginSnapshotInstallation`, `stageSnapshotChunk`, `buildStagedIndexStep`, `catchUpPass`, `installSnapshot`):
+  - Each chunk is verified against the signed root at its index, and every operation by the roster, before it is staged in its own transaction.
+  - At the installation point the backlog is evaluated first. Over 2,048 local changes, a cursor beyond the cut, another epoch, or a covered partition the snapshot doesn't cover each invalidate the staging, applying nothing.
+  - Otherwise the staged canonical tables and index are swapped in together, with the cursors at the cut.
+  - A chunk that isn't included under the root is refused, and an incomplete set of chunks doesn't install.
+
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
 Rosters with key history, causal summaries, snapshot manifests and reviewed-set artifacts can span several pages:
