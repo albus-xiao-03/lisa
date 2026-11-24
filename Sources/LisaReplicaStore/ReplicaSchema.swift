@@ -26,7 +26,9 @@ enum ReplicaSchema {
           dataset_id BLOB CHECK (dataset_id IS NULL OR length(dataset_id) = 16),
           device_id BLOB CHECK (device_id IS NULL OR length(device_id) = 16),
           created_at INTEGER NOT NULL,
-          local_generation INTEGER NOT NULL DEFAULT 0 CHECK (local_generation >= 0)
+          local_generation INTEGER NOT NULL DEFAULT 0 CHECK (local_generation >= 0),
+          planning_zone TEXT,
+          coverage_generation INTEGER NOT NULL DEFAULT 0 CHECK (coverage_generation >= 0)
         ) STRICT
         """,
         // One row per launch that opened the replica (§8.1.1); the link is fixed by the incarnation's first operation.
@@ -191,6 +193,9 @@ enum ReplicaSchema {
           body BLOB,
           first_bucket INTEGER,
           last_bucket INTEGER,
+          source_id TEXT,
+          zone TEXT,
+          zone_dependent INTEGER NOT NULL DEFAULT 0 CHECK (zone_dependent IN (0, 1)),
           PRIMARY KEY (record_type, record_id, generation),
           CHECK ((body IS NULL) = (first_bucket IS NULL) AND (first_bucket IS NULL) = (last_bucket IS NULL))
         ) STRICT, WITHOUT ROWID
@@ -215,6 +220,15 @@ enum ReplicaSchema {
           version INTEGER NOT NULL CHECK (version >= 1),
           PRIMARY KEY (partition, generation, entity_type, entity_id)
         ) STRICT, WITHOUT ROWID
+        """,
+        // Sources whose zone-dependent occurrences a local planning-zone change made unverified (§8.4.2 "On replicas"):
+        // cleared for a bucket by a zone proof of the source for the current zone.
+        """
+        CREATE TABLE unverified_sources (
+          source_id TEXT PRIMARY KEY,
+          zone TEXT NOT NULL,
+          since_generation INTEGER NOT NULL
+        ) STRICT
         """,
         // A partition repair (§8.4.3): its generation, snapshot root and cut, the cursor it started from, and the
         // overlay watermark — the local state generation its staged view reflects.
