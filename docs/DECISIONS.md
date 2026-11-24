@@ -812,3 +812,18 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 12. **Design B's unenrolled-identity case presents a second, throwaway Secure Enclave identity** that no roster lists, so the refusal happens in the peer's verify block during the handshake, which is what roster pinning has to show. (The draft refused it only at the session layer.)
 13. **The Mac proof runs in the App Sandbox** (network client and server, its keychain access group), unlike R1's unsandboxed Mac app (D-50), so X1 also observes `SecIdentity` formation and listening under the sandbox; E-10 remains X3's and X7's.
 14. **Not in the proof, and not needed for N-1, E-1 or E-2:** the 250 ms dial stagger and the restart on a path change (production retrieval, M7, X5); QR scanning (cards and the setup text are copied as text); the inventory and exchange phases (M6); removal of the Secure Enclave TLS keys and certificates by the app's reset.
+
+## D-55 — SQLite's WAL-reset bug: one writer and checkpointer per database (R2 M2, run 20261124-r2-5462; plan §1.5, §8.15.2; `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13)
+
+- **The condition.** SQLite's WAL-reset bug, fixed upstream in 3.51.3, needs two connections writing or checkpointing the same WAL database at the same instant (plan §1.5).
+- **The loaded library isn't shown to be fixed.** This host loads `libsqlite3-0` 3.46.1-7+deb13u2+dhi4, the Docker Hardened Images rebuild of Debian's 3.46.1-7+deb13u2, which carries no changelog.
+  - Debian's own packaging for 3.46.1-7+deb13u2 was fetched from deb.debian.org on 2026-11-24; its SHA-256 `59d33bc4…c21261` matches the `.dsc`.
+  - Its changelog and 15-patch series contain no WAL fix: packaging and build patches, the NOT NULL/IS NULL optimization fix, and CVE-2025-29087, CVE-2025-29088, CVE-2025-6965, CVE-2025-7709, CVE-2026-11822 and CVE-2026-11824 (FTS5, aggregates, `db_config`).
+  - What the `+dhi4` rebuild adds isn't published here.
+  - The production image's library is inventoried at M4 and judged the same way.
+- **So the design excludes the condition** for every database R2 opens in WAL mode (the replica store, the Core ledger, the recovery ledger and their auxiliaries):
+  1. one process at a time, under the data directory's exclusive lock (plan §8.5.1, §8.11.5);
+  2. inside it, exactly one read-write connection, which performs every write, the automatic checkpoint that follows its own commits, and every explicit checkpoint;
+  3. every other connection opened read-only (`SQLITE_OPEN_READONLY`), so it neither writes nor checkpoints, not even on close;
+  4. offline commands (backup, restore, fence, migrate) take the same exclusive lock with the service stopped, so they are never a second writer.
+- **Verification.** M2's `LisaSQLite` additions give each connection a declared role. The temporary harness (S-17) shows that a second read-write open of a held database is refused, a read-only connection neither writes nor checkpoints (the WAL is unchanged by its reads and its close), and checkpoints run only on the writer. M2 and M3 durability results are accepted only with these checks passing. If a later library carries the fix (3.51.3 or a verified backport), the rule stays: it costs nothing and removes the dependency on the library's version.
