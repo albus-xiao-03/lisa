@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T13:58Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, in progress** (M2-0 to M2-2, §4). **Paused for quota** at 13:58Z: 60% of the five-hour window used (fresh reading 13:55:54Z), reset at 17:49:59Z (12:49:59 EST). The pause is early because the next coherent span, the replica store, can't be finished in what remains before the 80–85% drain point; the pause note is `.tmp/r2/20261124-r2-5462/pause-20261124T1358Z-*.md`, and the guard resumes after the reset.
+**Updated:** 2026-11-24T20:56Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, in progress** (M2-0 to M2-3, §4). **Working:** resumed manually at 20:33Z after the VM restart (§5, §9); the second quota pause (13:58Z) was consumed by that resume. Fresh reading at 20:33:29Z: 2% used, reset 2026-11-25T01:20:00Z (20:20:00 EST).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -32,7 +32,8 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 - **Uncommitted tracked changes:** none at this update.
 - **Commits in this run:** `9951cbd`, `c40f5d0` (`DEVELOPMENT-ENVIRONMENT-REPORT.md`); `0c037c7` (this file); `ad0338d`, `b079c44` (`docs/VERIFICATION-SCENARIOS.md`); `e0b0302` (`docs/REQUIREMENTS-MATRIX.md`); the swift-crypto span `9e35866` → `fd94a78` with `1a49709` (`docs/SETUP-LINUX.md`), `269a2ca` (`docs/ARCHITECTURE.md`) and `866c98d` (`docs/DECISIONS.md` D-53); the `LisaSyncProtocol` span `8244d48` → `4a8826b`; then this update.
 - **Commits since the 09:45Z pause:** the nearby frame header and hello form `c096983`–`c69586c`; D-54 `27769d1`; `Apps/Config` and `Apps/Proof` `bc11c09`–`559f4bb` (69 files, then `Apps/project.yml`); `docs/SYNC-PROTOCOL.md` `3079aa3`; the harness `8e58552`–`d0a9e53` (`LisaVerifyKit`, `LisaVerifyCases`, `LisaVerifyServers`, `lisa-verify`, `Harness/` documents and configuration example, `Apps/OwnerVerification`, test plan X1, the `LisaProof` scheme, each span ending in `Package.swift` or its last file); `docs/SETUP-APPLE.md` §9; `docs/REQUIREMENTS-MATRIX.md` `260a582`; then `docs/VERIFICATION-SCENARIOS.md` and this file.
-- **Commits since the M1 boundary:** D-55 `ce68f1a`; the WAL guard `c9fed41` (`LisaSQLite`, four files); `28ef7c8`; `LisaMerge` (eight files, then `Package.swift` `72797e1`); `CausalRelease` `386a738`; `6ccfa10`; `docs/CONFLICTS.md` `5b6e0e7`; then this file.
+- **Commits since the M1 boundary:** D-55 `ce68f1a`; the WAL guard `c9fed41` (`LisaSQLite`, four files); `28ef7c8`; `LisaMerge` (eight files, then `Package.swift` `72797e1`); `CausalRelease` `386a738`; `6ccfa10`; `docs/CONFLICTS.md` `5b6e0e7`; `d31a943` (this file at the second pause).
+- **Commits since the resume at 20:33Z:** the observed set's canonical form `ef9f546`; `LisaReplicaStore`'s first span `5ddd7d2` → `3ee84a0` (28 files); D-56 `528f236`; `Package.swift` `818fe3c`; `docs/VERIFICATION-SCENARIOS.md` M2-3 `742675f`; then this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -58,6 +59,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 | M2-0 SQLite WAL-reset: the library and the single-writer guard (D-55) | Debian's packaging read from deb.debian.org (checksum-verified); `m2/harness-v6/` | The library is treated as unfixed; the guard **PASS**, 4 tests; full build and R1 suite 376/66 after the span | `docs/VERIFICATION-SCENARIOS.md` M2-0 |
 | M2-1 `LisaMerge` rule state | `m2/harness-v9/` (v7 and v8 superseded) | **PASS**, 7 tests, every permutation converging | M2-1 |
 | M2-2 causal readiness and bounded release | `m2/harness-v10/` | **PASS**, 4 tests: the nested fan-out of 105,001 operations within the 256 bounds | M2-2 |
+| M2-3 `LisaReplicaStore`, first span | `m2/harness-v12/` (v11 didn't compile, superseded); `m2/suite-after-replica-span1-20261124T205211Z/` | **PASS**, 9 tests: directory and schema, drafts, the restored copy's new incarnation with no sequence reuse (§8.6.4), the duplicate rules, the atomic change rolled back (index failure, `SQLITE_FULL`), the overlay until the canonical row installs; debug build 0 warnings, R1 suite 376/66 | M2-3 |
 
 The first outcomes passed, so M0 needed no production fix. Every run directory and log is new; first outcomes are kept as recorded.
 
@@ -75,6 +77,8 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
 | Frozen fixtures not yet produced | A raw `sending` queue file left by a killed process and the pruning pair (due before S-01 at M3); `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
 | SQLite WAL-reset fix | Settled by design (D-55, M2-0): the loaded library isn't shown to carry the fix, so every WAL database has one writer and checkpointer under an exclusive lock and read-only readers; the guard's checks pass. The production image's library is judged the same way at M4 |
+
+**Environment event (2026-11-24, the VM stopped):** the sandbox VM stopped after 16:57:14Z (the guard's last heartbeat) and before 17:53Z, when the guard would have taken its post-reset reading; it booted again at 20:25:22Z. The guard and its pending pause `P-20261124T135657Z-39d87a` didn't run in between, so nothing launched. The owner resumed Claude in the original interactive session; Claude inspected the files and processes (HEAD `d31a943`, clean tree, no writer, 21 GB free, toolchains and Docker present), took a fresh reading, took the writer lease with `--consume-pauses` at 20:33:37Z and restarted the guard (pid 2746). Nothing was lost: the last commit before the stop was the pause checkpoint.
 
 **Environment event (2026-11-24T13:47Z):** the project volume filled (49 GB, 5.6 MB free) and a link failed. The SwiftPM scratch outputs of superseded builds under `.build/` were removed (24 GB). They are ordinary build output, not temporary files (`CONSTRICTION.md`); their logs and runner hashes are kept in `.tmp/`, which wasn't touched. Routine builds now reuse `.build/r2-run`, and storage is checked before large builds.
 
@@ -95,7 +99,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-`386a738` (`CausalRelease`), with `c9fed41` (the WAL guard) before it: a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2; rerun after `c9fed41`); the M2 harnesses pass as recorded. `d0a9e53` is M1's clean-checkout checkpoint (debug and release, R1 suite, fixtures 9/9). Later commits change documents only.
+`818fe3c` (`LisaReplicaStore`'s first span): a full debug build with tests has 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); harness v12 passes 9 tests. Before it, `386a738` (`CausalRelease`) and `c9fed41` (the WAL guard). `d0a9e53` is M1's clean-checkout checkpoint (debug and release, R1 suite, fixtures 9/9). Later commits change documents only.
 
 ## 9. Quota monitoring, the guard, pause and resume
 
@@ -107,6 +111,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **Batch sizing.** Two concurrent agents plus this session used 11 points of the window in 4 minutes on 2026-11-24 (08:36–08:40Z). Agents now run one at a time unless usage is low, and a background watchdog that makes no model calls wakes this session at 70%.
 - **Evidence for the owner.** `python3 .tmp/r2/20261124-r2-5462/export/make_bundle.py` writes a redacted `bundle-<UTC>.tar.gz` with its SHA-256 (it refuses to package if a canary survives). To copy one out: publish a port once on the host (`sbx port publish lisa.lab 8765:8765`), ask Claude to run `export/serve-bundle.sh`, then `curl -fO http://localhost:8765/<bundle>.tar.gz`.
 - **The first real resume (2026-11-24):** the guard recorded pause `P-20261124T094325Z-14b7b7` at 09:43Z, took a fresh reading at 12:53:00Z (0%, reset confirmed after 12:49:59Z plus the 180 s buffer) and launched `L-3930e57701`, a forked headless resume of the session; it was acknowledged at 12:53:07Z by session `d0d5cdce-07e8-48a9-a66e-d38baa446cdf`, which is the writer since. Its fresh reading at 12:54:02Z showed 2%, next reset 17:49:59Z. A headless session runs no status line, so its readings come from `usage_read.py` alone.
+- **The third resume (2026-11-24T20:33Z, manual, after the VM restart):** fresh reading 20:33:29Z, 2% used, next reset 2026-11-25T01:20:00Z; lease `interactive:321` (holder pid 2737) consumed `P-20261124T135657Z-39d87a`; the guard restarted as pid 2746 with no pending pause. A new alarm, `usage/watchdog_v1.py` (reads the status-line log only, no model call), ends a background task at 70% so the session sees it.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
@@ -115,20 +120,13 @@ No live action or external submission has been requested or performed in this ru
 
 ## 11. Next steps
 
-1. **On resume:** acknowledge the launch, take a fresh reading, confirm HEAD with a clean tree (this file's commit), confirm no other writer (`guardctl status`), check free space (`df -h .`).
-2. **M2, `LisaReplicaStore`** (plan §8.6.1–§8.6.4, §8.4.2, §8.2.1). Read first: §8.1.1 (incarnations), §8.6.2 (drafts), §8.6.3 (installation and the local change journal), §8.4.2 (partitions, cursors, coverage), §8.15.2 (capacity). Then the first span:
-   - the replica directory: the database, staging, ballast and export staging, owner-only;
-   - a v1 schema on `SQLiteWALDatabase` (D-55), versioned by `user_version`, with:
-     - metadata: dataset, installation, device, the incarnation chain;
-     - the operation journal: signed body, digest, origin triple unique, state and receipt;
-     - drafts and the local change journal with its generation;
-     - `CausalRelease`'s edges, markers and ready queue;
-     - pieces, with commit positions and observed sets;
-     - partition cursors and custody acknowledgements;
-   - duplicate rules on every replica: same ID and digest, `duplicate`; same ID with another digest, `rejected: identity_reuse`; the same origin triple under another ID, `rejected: sequence_reuse`;
-   - the atomic local change of §8.6.1 in one write transaction;
-   - M2's replica-side acceptance: a copied replica restored after the device continued starts a new incarnation, with a correct chain and no sequence reuse, and the overlay stays visible until the canonical change installs.
-
-   Then the effective view through `LisaMerge`, `LisaLocalSearch`, the `LisaTime` additions, membership records and deferred pages, the first container run (the rootful engine, labeled), S-06/S-07/S-08 (replica parts) and S-17, then the M2 boundary (debug and release, lint, clean checkout, fixtures).
-3. **While the owner runs X1:** import and evaluate the redacted results the owner shares; a nearby design is selected only from a passed proof (N-1), and M6 waits for it.
-4. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
+1. **M2, `LisaReplicaStore`, next span:** the effective view through `LisaMerge` (pieces and registers per item, the pending operations in causal order with `CausalRelease` persisted in the `causal_*` tables, recomputed per affected item, revoked and rejected operations leaving it), with `LisaMerge`, `LisaDomain` and `LisaTime` added to the target as they are used. Then:
+   - signed change pages, partition cursors with the four page cases, membership records and the absence rule, deferred pages (§8.4.2, §8.4.3);
+   - the staged snapshot installation with the local change journal, catch-up passes, the backlog rule and the swap (§8.6.3; S-06), with kills at each step on real files;
+   - `LisaLocalSearch` behind `ReplicaIndexing`;
+   - `LisaSQLite` additions (read connections, interrupt, the reader monitor) and the ballast path (§8.15.2);
+   - `LisaTime` additions;
+   - the first container run (the rootful engine, labeled), with S-17's tmpfs cases;
+   - then the M2 boundary: debug and release, lint, a clean checkout, fixtures.
+2. **While the owner runs X1:** import and evaluate the redacted results the owner shares; a nearby design is selected only from a passed proof (N-1), and M6 waits for it.
+3. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
