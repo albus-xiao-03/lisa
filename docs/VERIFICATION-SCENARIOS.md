@@ -740,3 +740,35 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Inside a change page's application (§8.4.2):** the child is killed inside the transaction applying a page (0, 10] with a creation and an edit. After a restart the cursor and the view are as before. The same page then applies (cursor 10, 2 entries) and, sent again, is ignored.
   - `integrity_check` was ok after every kill.
 - **Result: PASS.**
+
+### M2-18 A revocation learned after provisional peer application (R2-L17, replica part; plan §8.1.3, §8.6.1, §8.2.2)
+
+- **Code:** in LisaReplicaStore: a `revoked` journal state, the `revocations` table (schema v1's 27th), `recordRevocation`, `revocations()` and `ReplicaRevocation`, `RevocationTables`. `receive` stores a revoked device's new operations as `storedRevoked`. The view leaves revoked entries out, and a final receipt can still authorize them. `docs/SYNC-PROTOCOL.md` §8c.
+- **Harness:** `m2/harness-v48/`, 6/6 on its first run. `m2/harness-v49/` is v44 with the table list naming `revocations`, 10/10. v44 now fails by design and is kept unchanged.
+  - v13, v15, v19, v20, v25, v28, v30, v35, v36, v39, v43, v46 and v47 pass again. Each rebuilt in its own `.build` directory, which together took about 200 MB; the volume then had 889 MB free.
+- **Cases:**
+  - **Pending effects leave the view at once:**
+    - **Setup:** a trusted peer created a trip, and the peer to be revoked created an errand with a note and renamed the trip. The trusted peer added a note to the errand. All of these were applied provisionally and found by search.
+    - **The revocation:**
+      - It revoked exactly the revoked peer's three operations, in one local change of kind `revocation`, naming both tasks. The generation advanced by one.
+      - The trip's title is the trusted peer's again.
+      - The errand's creation is gone (`exists` false), and only the trusted peer's note remains. Search finds nothing of the revoked peer.
+      - The three entries are `revoked`, no longer overlays, and their exact bytes still verify. The trusted peer's entries are still pending.
+    - **Permanent:** recording the same revocation again changes nothing, the generation included, and a second revocation for the device at another position is kept beside the first.
+  - **Core-accepted work stays:**
+    - An operation with a final Core receipt, and one committed through a page, keep their effects.
+    - Only the unreceipted note is revoked.
+  - **A waiting operation:** the revoked peer's edit was waiting for a missing dependency, and a trusted note waited for that edit.
+    - The revocation decided the edit, and the note was then released with the edit ignored.
+    - No waiting, ready or marker rows were left.
+  - **Later arrivals:**
+    - The revoked device's new operation is `storedRevoked`, outside the view and the queues. Sent again, it is a `duplicate` in state `revoked`.
+    - An operation that depends on it is not held back.
+    - After a restart the revocation still applies.
+  - **Core still decides:**
+    - Core's acceptance of a revoked note that had entered the view brings it back as an overlay, found by search.
+    - A provisional receipt for another revoked note changes nothing.
+    - A note revoked while waiting, then accepted, appears only with the canonical page that contains it.
+  - **This replica's own device:** the revocation is recorded, and the saved capture stays pending, in the view and found by search.
+- **Full build and R1 suite:** `m2/suite-after-revocations-20261124T231238Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
