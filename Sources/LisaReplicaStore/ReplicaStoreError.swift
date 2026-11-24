@@ -44,6 +44,12 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case snapshotChunkNotIncluded(Int64)
     /// No snapshot installation is being staged.
     case noInstallation
+    /// A partition snapshot's cut is older than the partition's cursor; it is refused (§8.4.3 step 1).
+    case staleSnapshot
+    /// A partition repair can't publish yet: chunks of its snapshot are missing.
+    case repairIncomplete(Int)
+    /// A partition repair's re-check failed (another epoch, or its cursor moved): the repair is abandoned.
+    case repairAbandoned(String)
     /// A write other than a capture stopped before the capture reserve (§8.15.2): staging, a release step or an
     /// installation; it is retried when space returns, and captures keep their room.
     case reserveProtected
