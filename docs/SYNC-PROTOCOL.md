@@ -54,6 +54,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-tls-anchors-v1\n` | Core's token-free TLS anchors bundle (§8.1.2 step 3) |
 | `lisa-nearby-auth-v1\n` | Each side's nearby authentication transcript (§8.7) |
 | `lisa-r2-paged-artifact-v1\n` | The header of a paged artifact (§8.1.3) |
+| `lisa-r2-archive-v1\n` | A protected archive's header and ciphertext digests (§8.6.6) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -137,6 +138,14 @@ Rosters with key history, causal summaries, snapshot manifests and reviewed-set 
 - **Acceptance** (`PagedArtifactVerification.assemble`): Core's header signature, the expected type, dataset and epoch, exactly `pageCount` pages with every index once, and every page verified at its index against the signed root. A dropped, repeated, swapped or altered page, a forged header or another dataset refuses the whole artifact. The proof does not authenticate the tree size (RFC 9162's algorithm accepts some size-n proofs under size n + 1), so the size is always taken from the signed header.
 - **Vectors** (pages are the ASCII strings `page-0`, `page-1`, …; reproduced with an independent Python implementation): roots for 1, 2, 3, 5, 7 and 8 pages: `db4a76ac8c461b45ae3bff430d7cac5c8f7ca6a24ed61f00c2cc3ac7d9cea390`, `9f986a9a86251bd8ca7582421873166e5bb6baaa0d5846f767b70c6d91127db2`, `e8cf1716052692337c090ad09676ed22f277f56547aa42a8d566439a0a42adbe`, `4b51c34223a04defb1dee194c7a543843ff28d4886c008c09f7506ce38a93f7a`, `87f45200cc7e94818a4341e9f82fdd3d333be87069a21fdb36b28c41152e2709`, `5de10b435c206d44950064dc0ac4d84cad4e608bbff864ebc3dddd62f296bf77`. The proof of page 5 in 7 pages is `dc4e1dfabb0f278819e31d357612c989b62f153a51f4e707c7f4aaedb23f838b`, `1afc45a4da64f47b7f7be075c1e01de71ee14aaabb9adf448674dc790c60cf91`, `ecfaf8a423d8a78f097fdaa35167814e8abbeef186835e034e8057ebe98ecc47`; of page 4 in 5 pages, the last of those alone.
 
-## 10. Not yet specified here
+## 10. Protected archive `lisa-archive` v1 (plan §8.6.6)
 
-Receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the protected archive format and nearby frames. Each is added with its vectors when its milestone implements it.
+- **File layout** (`ArchiveContainer`): the 16 ASCII bytes `LISA-ARCHIVE-V1\n`; the header length as 4 bytes big-endian and the canonical header; the ciphertext length as 8 bytes big-endian (equal to the header's `payloadLength`) and the AES-256-GCM ciphertext with its 16-byte tag; one byte, 0 or 1; then the 64-byte signature exactly when that byte is 1, which must agree with the header naming a signer. Nothing may follow.
+- **Header** (`ArchiveHeader`, canonical JSON): `format` `lisa-archive`, `formatVersion` 1, `archiveID`, `datasetID`, `originDeviceID`, `incarnations` (strictly ascending), `createdAt`, `rosterVersion`, `head` (known at export), `recipients` (at least one, strictly ascending by `keyID`: `{"kind": "core-roster" | "owner-supplied-core-key" | "installation-only", "keyID", "encapsulatedKey", "sealedKey"}`), `signerKeyID` (absent when unsigned), `payloadNonce` (12 bytes), `payloadLength`. A key ID is SHA-256 of the public key's canonical DER.
+- **Sealing:** a random 256-bit key encrypts the payload with AES-256-GCM, with SHA-256 of the canonical header as authenticated data. The key is sealed to each recipient with HPKE base mode (DHKEM(P-256, HKDF-SHA256), HKDF-SHA256, AES-256-GCM), with info `lisa-archive-v1 payload key\n` ‖ archive ID and authenticated data `kind` ‖ 0x00 ‖ key ID. The exporting device signs `lisa-r2-archive-v1\n` ‖ SHA-256(header) ‖ SHA-256(ciphertext), or the archive stays unsigned when its key is unavailable.
+- **Payload:** entries, each one kind byte, a 4-byte big-endian length and the exact bytes (at most 16 MiB): 1 signed operation, 2 blob, 3 draft, 4 conflict, 5 quarantined legacy bytes, 6 rollback acknowledgement, 7 reviewed-set artifact. Each kind's schema is specified when it is produced (M5 and later).
+- **Opening** (`ArchiveReader`): only for the expected dataset and only with a recipient's key; opening only decrypts. Authenticity is a separate check against the exporting device's key in the trusted roster, and an unsigned archive is never authentic. Eligibility against trusted revocation evidence is the importer's rule (M5).
+
+## 11. Not yet specified here
+
+Receipts, dependency release, change pages and interval coverage, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
