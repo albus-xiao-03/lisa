@@ -161,6 +161,14 @@ public final class ReplicaStore: Sendable {
         -> LocalSaveResult
     {
         try write { session in
+            // Aggregate limits are advisory (§8.3.2): checked only here, from this replica's own view, never while
+            // merging, so merging stays deterministic.
+            if command.operationType == "note.add", command.item.entityType == "task",
+                let view = try Self.taskView(command.item.entityID, in: session),
+                view.notes.count >= Self.advisoryNotesPerItem
+            {
+                throw ReplicaStoreError.aggregateLimit("notes")
+            }
             let identity = try Self.identity(in: session)
             if let datasetID = identity.datasetID, let deviceID = identity.deviceID,
                 let saved = try self.signAndStore(
@@ -252,7 +260,8 @@ public final class ReplicaStore: Sendable {
                 createdAt: .max)
             _ = try envelope.canonicalBody()
             try checkPayload(
-                operationType: command.operationType, entityType: command.item.entityType, payload: command.payload)
+                operationType: command.operationType, entityType: command.item.entityType, payload: command.payload,
+                observed: command.observed)
         } catch let error as OperationEnvelopeError {
             throw .invalidCommand(error)
         } catch {
@@ -262,12 +271,21 @@ public final class ReplicaStore: Sendable {
 
     /// A payload whose schema is defined (`ItemOperationPayload`) is decoded and checked by its rules and value budget
     /// (plan §8.3.3), and a task operation must name a task.
-    static func checkPayload(operationType: String, entityType: String, payload: CanonicalValue)
-        throws(OperationEnvelopeError)
-    {
+    /// A resolution carries its value exactly when it is a single resolution or a group's last page.
+    static func checkPayload(
+        operationType: String, entityType: String, payload: CanonicalValue, observed: ObservedSet?
+    ) throws(OperationEnvelopeError) {
         guard ItemOperationPayload.operationTypes.contains(operationType) else { return }
-        _ = try ItemOperationPayload(operationType: operationType, payload: payload)
+        let decoded = try ItemOperationPayload(operationType: operationType, payload: payload)
         if operationType.hasPrefix("task."), entityType != "task" { throw .invalidField("entity.type") }
+        if case .conflictResolve(_, let value) = decoded {
+            if let group = observed?.group {
+                // Pages are numbered 1…count (ResolutionGroupPage); only the last carries the value.
+                guard (value != nil) == (group.index == group.count) else { throw .invalidField("observed.group") }
+            } else if value == nil {
+                throw .invalidField("payload.value")
+            }
+        }
     }
 
     // MARK: - Relayed operations and the duplicate rules (§8.2.1)
@@ -289,7 +307,8 @@ public final class ReplicaStore: Sendable {
         }
         do {
             try Self.checkPayload(
-                operationType: envelope.operationType, entityType: envelope.entityType, payload: envelope.payload)
+                operationType: envelope.operationType, entityType: envelope.entityType, payload: envelope.payload,
+                observed: envelope.observed)
         } catch {
             throw .unverified(.malformed(error))
         }
@@ -422,6 +441,9 @@ public final class ReplicaStore: Sendable {
 
     // MARK: - Causal release and the effective view (§8.2.2, §8.6.1)
 
+    /// The advisory limit of notes per item (§8.3.2): past it the app asks the owner to archive.
+    public static let advisoryNotesPerItem = 1_000
+
     /// The origin key of Core's legacy translation in round-robin release.
     // Sixteen bytes always make an identifier.
     static let coreOrigin = try! Identifier128(bytes: [UInt8](repeating: 0, count: 16))
@@ -483,6 +505,9 @@ public final class ReplicaStore: Sendable {
         let drafts = try DraftStore.held(for: item, in: session)
         guard !rows.isEmpty || !drafts.isEmpty else { return nil }
         var state = TaskMergeState()
+        var groups:
+            [Identifier128: [(envelope: OperationEnvelope, payload: ItemOperationPayload, commit: CommitPosition?)]] =
+                [:]
         for row in rows {
             let envelope = try OperationEnvelope.decode(body: ReplicaColumns.bytes(row[0]))
             guard ItemOperationPayload.operationTypes.contains(envelope.operationType) else { continue }
@@ -493,9 +518,21 @@ public final class ReplicaStore: Sendable {
             {
                 commit = CommitPosition(epochID: epoch, partition: partition, position: position)
             }
+            if case .conflictResolve = payload, let group = envelope.observed?.group {
+                groups[group.groupID, default: []].append((envelope, payload, commit))
+                continue
+            }
             state.apply(
                 payload, id: envelope.operationID, observed: envelope.observed.map(ObservedCoverage.init) ?? .nothing,
                 commit: commit)
+        }
+        // A paged resolution group applies atomically, as its last page observing every page's candidates, once all
+        // its pages are present and their sorted IDs match the list digest; until then it changes nothing (§8.3.2).
+        for pages in groups.values {
+            guard let resolution = Self.completeGroup(pages.map { ($0.envelope, $0.payload) }),
+                let last = pages.first(where: { $0.envelope.operationID == resolution.operationID })
+            else { continue }
+            state.apply(last.payload, id: resolution.operationID, observed: resolution.observed, commit: last.commit)
         }
         for draft in drafts {
             guard ItemOperationPayload.operationTypes.contains(draft.command.operationType) else { continue }
@@ -505,6 +542,34 @@ public final class ReplicaStore: Sendable {
                 payload, id: draft.operationID, observed: draft.command.observed.map(ObservedCoverage.init) ?? .nothing)
         }
         return state.view
+    }
+
+    /// A complete, consistent resolution group: every index of one count and list digest present once, one field, and
+    /// the SHA-256 of the sorted, concatenated 16-byte IDs of all pages equal to the list digest. Returns the last page's
+    /// operation ID and the coverage it applies with: its horizon and every page's explicit candidates.
+    static func completeGroup(_ pages: [(envelope: OperationEnvelope, payload: ItemOperationPayload)])
+        -> (operationID: Identifier128, observed: ObservedCoverage)?
+    {
+        guard let first = pages.first?.envelope.observed?.group, pages.count == Int(first.count) else { return nil }
+        var byIndex: [Int64: (envelope: OperationEnvelope, payload: ItemOperationPayload)] = [:]
+        var field: TaskField?
+        for page in pages {
+            guard let group = page.envelope.observed?.group, group.count == first.count,
+                group.listDigest == first.listDigest, byIndex[group.index] == nil,
+                case .conflictResolve(let pageField, _) = page.payload, field == nil || field == pageField
+            else { return nil }
+            field = pageField
+            byIndex[group.index] = page
+        }
+        guard let last = byIndex[first.count], (1...first.count).allSatisfy({ byIndex[$0] != nil }) else {
+            return nil
+        }
+        let ids = Set(pages.flatMap { $0.envelope.observed?.pieces ?? [] }).sorted {
+            $0.bytes.lexicographicallyPrecedes($1.bytes)
+        }
+        let digest = [UInt8](Digests.sha256(Data(ids.flatMap(\.bytes))))
+        guard digest == first.listDigest.bytes else { return nil }
+        return (last.envelope.operationID, ObservedCoverage(horizon: last.envelope.observed?.horizon, pieces: Set(ids)))
     }
 
     /// The texts of `item`'s effective view that a search finds it by, inside the caller's transaction: a task's
