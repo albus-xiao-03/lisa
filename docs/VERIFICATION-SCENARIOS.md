@@ -393,3 +393,40 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - the other types' payloads, the authority path's source and model values in these registers, and restores;
   - the replica's effective view through `TaskMergeState`;
   - S-07's paged resolution group with 1,000 candidates.
+
+### M2-6 The replica's effective view and its persisted causal release (S-16 replica part, R2-L11 part; plan §8.2.2, §8.6.1)
+
+- **Code:** `83791b1` → `09cf01a`:
+  - collection partitions;
+  - LisaMerge joining the store;
+  - draft items and the edge index in schema v1;
+  - `CausalStep` and `CausalReleaseTables`;
+  - the store's view and release.
+- **The rules:**
+  - A local operation enters the effective view at once.
+  - A relayed one waits until every dependency is decided. Each step is its own transaction.
+  - An expansion step reads at most 256 edges in all, across the oldest markers.
+  - A release step applies at most 256 ready operations, oldest first and round-robin across origins.
+  - A task's view merges its applied, unrejected entries, with their commit positions, and its held drafts through `TaskMergeState`.
+- **Harness:** `m2/harness-v19/`, 4/4 on its first run.
+  - **v18 was never run.** Its step counts assumed one marker per expansion step, which leaves one empty step for every released operation. The product was changed to read edges across markers within the same 256-edge bound before v18 was built.
+  - Harnesses v13, v15 and v17 pass again.
+- **Cases:**
+  - **Local changes:**
+    - A draft before enrollment is already in the view, and stays there once signed.
+    - An edit that observed the creation replaces its title. When Core rejects the edit, the view returns to the creation's title.
+    - An unknown task has no view.
+  - **A relayed edit that arrives before its creation:**
+    - It is stored but not in the view, and the task has no view.
+    - Once the creation arrives, the steps are exactly: release the creation; expand (1 edge, 1 enqueued); release the edit; expand (0).
+    - The view then shows the renamed title. The local change journal records the two releases in causal order.
+  - **Fan-out (S-16 replica part):**
+    - 700 note dependents of one relayed creation arrived first: 600 from one peer, 100 from another.
+    - Releases came in sizes of 1, 256, 256 and 188, with no step over 256 edges, enqueues or releases.
+    - The first full release held all 100 of the second peer's operations, round-robin.
+    - The replica was closed after three steps and reopened, and the drain resumed from the tables: 10 steps in all.
+    - 701 operations were released exactly once, and the view shows 700 notes.
+  - **A forged two-operation cycle:** both members are rejected when the second arrives, nothing waits, one step clears their markers, and neither enters the view.
+- **Full build and R1 suite:** `m2/suite-after-effective-view-20261124T212729Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Still to come:** process kills inside a step on real files (a step is one transaction, so SQLite's rollback is what they test), canonical rows from Core's pages in the view (M3 defines their pieces), and the other types' views.
