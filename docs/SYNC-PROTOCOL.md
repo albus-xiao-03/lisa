@@ -92,7 +92,7 @@ Its checksum is `OrichA`. Checked independently of Lisa's code: OpenSSL parses t
 
 ## 7. Nearby session layer (plan §8.7)
 
-- **Hello** (`NearbyHello`): protocol version 1, device ID, roster epoch and version, confirmed head (a `Digest256`), and a 32-byte nonce.
+- **Hello** (`NearbyHello`): protocol version 1, device ID, roster epoch and version, confirmed head (a `Digest256`), and a 32-byte nonce. **Wire form:** canonical JSON of at most 4 KiB, `{"deviceID", "head", "nonce" (base64url), "protocolVersion": 1, "rosterEpoch", "rosterVersion"}`, decoded strictly (another protocol version, an unknown or missing member, a wrong length or a non-canonical form is refused). **Vector** (reproduced with Python's `json` and `base64`): device ID `00 01 … 0f`, epoch `10 11 … 1f`, version 7, head `20 21 … 3f`, nonce `40 41 … 5f` → `{"deviceID":"000102030405060708090a0b0c0d0e0f","head":"202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f","nonce":"QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8","protocolVersion":1,"rosterEpoch":"101112131415161718191a1b1c1d1e1f","rosterVersion":7}` (262 bytes).
 - **Authentication:** each side signs, under `lisa-nearby-auth-v1\n`, the canonical object
   `{"exporter": <32 bytes, base64url>, "head": <signer's head>, "initiator": {"deviceID", "nonce"}, "protocolVersion": 1, "responder": {"deviceID", "nonce"}, "rosterEpoch": <signer's>, "rosterVersion": <signer's>, "signer": "initiator" | "responder"}`.
   The exporter is the TLS exporter value with label `EXPORTER-lisa-nearby-v1`, 32 bytes, so a relay that terminates two sessions presents a different value on each and both signatures fail. Each side verifies the other's signature with the operation key from its newest roster; an unknown or revoked device has none. The two hellos must name different devices.
@@ -103,7 +103,7 @@ Its checksum is `OrichA`. Checked independently of Lisa's code: OpenSSL parses t
   - rejoin identity = the first 16 bytes of `HMAC-SHA256(K_ij, "lisa-rejoin-v1" ‖ window)`.
 
   **Vectors** (reproduced with Python's `hmac`): discovery secret `00 01 … 1f`, window 2,000,000 (Unix second 1,800,000,000), device ID `00 01 … 0f` → tag `218c28976c2415b1d21ea358c0878b45`; pair key `20 21 … 3f`, window 2,000,000 → rejoin identity `c4267b18478e985a535b7512bbf4758b`.
-- **Frames:** 8-byte header and payload within the frame budget (§3); the header layout is specified when M6 implements the frames.
+- **Frames** (`NearbyFrameHeader`): an 8-byte header, then the payload; the whole frame is at most 1 MiB (§3). Header bytes 0–3: the total length including the header, unsigned big-endian, 8 to 1,048,576; byte 4: the kind (the session layer's registry, M6); byte 5: header version 1; bytes 6–7: zero. A receiver reads exactly 8 bytes and refuses a total outside the budget, another version or non-zero reserved bytes before reading or allocating the payload. Example: kind 3 with a 5-byte payload → `00 00 00 0d 03 01 00 00`; the largest frame's header → `00 10 00 00 <kind> 01 00 00`.
 
 ## 8. Operation envelope (plan §8.2.1–§8.2.3, §8.3.2, §8.3.3)
 
