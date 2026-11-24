@@ -141,14 +141,18 @@ extension ReplicaStore {
                 try session.query(
                     """
                     INSERT OR IGNORE INTO staged_canonical_operations
-                      (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                      (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision,
+                       origin_device, origin_incarnation, origin_sequence)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         ReplicaColumns.id(envelope.operationID), .text(envelope.entityType),
                         ReplicaColumns.id(envelope.entityID), ReplicaColumns.bytes(operation.signed.body),
                         ReplicaColumns.bytes(operation.signed.signature), ReplicaColumns.id(state.epochID),
                         .integer(entry.position), .text(operation.decision.rawValue),
+                        ReplicaColumns.optionalID(envelope.origin.deviceTriple?.device),
+                        ReplicaColumns.optionalID(envelope.origin.deviceTriple?.incarnation),
+                        ReplicaColumns.optionalInteger(envelope.origin.deviceTriple?.sequence),
                     ])
                 try session.query(
                     """
@@ -435,9 +439,14 @@ extension ReplicaStore {
               signature BLOB NOT NULL CHECK (length(signature) = 64),
               epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
               position INTEGER NOT NULL CHECK (position >= 1),
-              decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict'))
+              decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict')),
+              origin_device BLOB CHECK (origin_device IS NULL OR length(origin_device) = 16),
+              origin_incarnation BLOB CHECK (origin_incarnation IS NULL OR length(origin_incarnation) = 16),
+              origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1)
             ) STRICT;
             CREATE INDEX canonical_operations_by_item_\(suffix) ON staged_canonical_operations (entity_type, entity_id);
+            CREATE INDEX canonical_operations_by_origin_\(suffix)
+              ON staged_canonical_operations (origin_device, origin_incarnation, origin_sequence);
             CREATE TABLE staged_canonical_rows (
               entity_type TEXT NOT NULL,
               entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
