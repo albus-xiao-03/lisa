@@ -13,6 +13,6 @@ struct LisaVerifyCommand: AsyncParsableCommand {
             CasesCommand.self, GuideCommand.self, PairSessionCommand.self, ObserveCommand.self,
             ImportDiagnosticsCommand.self, ReportCommand.self, ExportCommand.self, ActionsCommand.self,
             AuthorizeRetryCommand.self, CleanupCommand.self, RunCommand.self, ResumeCommand.self, RetryCommand.self,
-            FixtureActionCommand.self,
+            PreflightCommand.self, FixtureActionCommand.self,
         ])
 }
