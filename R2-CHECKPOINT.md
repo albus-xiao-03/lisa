@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T09:20Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, complete at its boundary (two fixture groups are scheduled for M3 and M9, §5); M1 — Contracts and Apple proofs, in progress: `LisaSyncProtocol`, `LisaCrypto` additions, `LisaTrust` and `docs/SYNC-PROTOCOL.md` committed; `Apps/Proof` being drafted.
+**Updated:** 2026-11-24T09:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 — Baseline, complete at its boundary (two fixture groups are scheduled for M3 and M9, §5); M1 — Contracts and Apple proofs, in progress. **Paused for quota** at 09:45Z: 71% of the five-hour window used (fresh reading 09:42:32Z), reset at 12:49:59Z (07:49:59 EST). The pause note is `.tmp/r2/20261124-r2-5462/pause-20261124T0945Z-*.md`; the guard resumes after the reset.
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -84,7 +84,7 @@ X1 (after M1: N-1 on all nine cells, E-1, E-2), X2 (after M3), X3 (after M5, wit
 
 ## 8. Last buildable checkpoint
 
-`13ce72c` (the paging span): a full debug build with tests completes with 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); the M1 harnesses pass as recorded. Earlier checkpoints of this run: `4a8826b` (`LisaSyncProtocol`), `2abce7e` (`LisaCrypto` additions), `822ffe5` (`LisaTrust`), `e7e5085` (envelope), and the swift-crypto span's `fd94a78`, which passed the full matrix (6.4.2 and 6.4.3, debug and release).
+`505ee96` (the `LisaArchive` span) and, before it, `13ce72c` (the paging span): a full debug build with tests completes with 0 warnings and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2); the M1 harnesses pass as recorded. Earlier checkpoints of this run: `4a8826b` (`LisaSyncProtocol`), `2abce7e` (`LisaCrypto` additions), `822ffe5` (`LisaTrust`), `e7e5085` (envelope), and the swift-crypto span's `fd94a78`, which passed the full matrix (6.4.2 and 6.4.3, debug and release).
 
 ## 9. Quota monitoring, the guard, pause and resume
 
@@ -103,6 +103,7 @@ No live action, external submission or owner check has been requested or perform
 
 ## 11. Next steps
 
-1. M1, contracts still to do: receipts; roster, lineage and key-history verification; the `LisaArchive` codec (§8.6.6); nearby frames are M6. Done: canonical JSON, identifiers, budgets, the operation envelope with digests, verification and identity rules, `LisaCrypto` additions, the token vector, owner texts with the shared fixture, the nearby session layer and Design A derivations, Merkle paging, `docs/SYNC-PROTOCOL.md`.
-2. M1, X1 deliverables: `Apps/Proof` (Designs A and B on all three pairs and network conditions, the Core-offline fetch probe, proof-only certificates checked with `openssl`), the portable modules for E-2, and the owner-verification harness core with the X1 runner, so the owner can test while M2–M5 continue.
-3. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
+1. **On resume:** acknowledge the launch, take a fresh reading, confirm HEAD `c8b5f89` with a clean tree, then review the `Apps/Proof` proposal in `.tmp/r2/20261124-r2-5462/m1/proof-proposal/` (70 current Swift files, configuration, `project.yml` addition; `NOTES.md` with five open questions and the parts not done; `PORTABLE-NEEDS.md`; the certificate encoder checked with `openssl`, `swiftc -parse` on every file). Integrate it file by file only after review against HEAD, recording each open-question decision.
+2. M1, still to do: the owner-verification harness core (`Harness/`, §10.8) with the X1 runner (`Apps/OwnerVerification`, test plan `X1`, `pair-session`), the X1 sheet in `docs/SETUP-APPLE.md`, receipts, roster, lineage and key-history verification. Nearby frames are M6. Done: canonical JSON, identifiers, budgets, the operation envelope with digests, verification and identity rules, `LisaCrypto` additions, the token vector, owner texts with the shared fixture, the nearby session layer and Design A derivations, Merkle paging, the `LisaArchive` codec, `docs/SYNC-PROTOCOL.md`.
+3. Then X1 is handed to the owner (entry point, prerequisites, case IDs, expected observations, redacted results to return), and M2–M5 continue while the owner tests.
+4. The deferred frozen fixtures before S-01 (M3) and S-02/S-13 (M9).
