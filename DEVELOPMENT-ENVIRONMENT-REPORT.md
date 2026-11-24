@@ -5,6 +5,8 @@
 
 **Scope.** The development environment was built on a new, unconfigured platform and checked with the project's existing build, test, lint, syntax and demo commands. **No R2 implementation has started.** M0 waits for the owner's instruction, and nothing here is milestone evidence. `plans/R2.md` was not changed. The only repository change is this file, committed on its own.
 
+**Amended on 2026-11-24 (§13).** The owner's start instruction of that day began M0 (run `20261124-r2-5462`) and settled the open decisions of §10 that concern this platform. §13 records them. Statements above that say no implementation has started describe the environment build, before that instruction.
+
 **The platform changed after the plan was approved, and the plan doesn't record it.** Revision 13 (approved 2026-11-23) describes a Fedora 45 host (§1.2, §3, §10.1). Development now happens on a Debian 13 sandbox. On 2026-11-24 the owner confirmed the change and asked that it be recorded only in reports and Claude's memory, not in the plan. Section 8 lists every plan statement the change affects.
 
 ## 1. Summary
@@ -234,3 +236,49 @@ Three temporary files are kept from failed or partial first attempts, because `C
 - `tool-inventory.txt` is a partial inventory.
 
 **One temporary file was created outside `.tmp/` by mistake.** It is `snap-body.txt` in Claude's session scratch directory under `/tmp/claude-1000/`. It holds the response bodies of three public snapshot.ubuntu.com probes; the last one remains, a 186-byte error page. It contains no private data. It was left in place, as the no-removal rule requires.
+
+## 13. Amendment of 2026-11-24: the owner's start instruction (run `20261124-r2-5462`)
+
+The owner's instruction of 2026-11-24 started M0 and asked that its environment and execution decisions be recorded here, in a dated amendment, and referenced from `R2-CHECKPOINT.md`. `plans/R2.md` stays unchanged, as §10 item 1 allowed: this report is the record of the platform change.
+
+### 13.1 Decisions (owner, 2026-11-24)
+
+| Subject | Decision |
+|---|---|
+| Container engine | **Authorized:** the private rootful Docker daemon inside `lisa.lab`, for R2 development and testing: pulling all required images, building locally, Compose and disposable containers, operating controlled services, and installing necessary development prerequisites inside the VM. This covers P-02, P-03 and the account-free P-09a tests at their planned milestones, and needs no further approval of this engine. **Kept by the owner:** the owner's host, accounts, image publication, production deployment and real-data cutover |
+| Baseline | Debian 13 amd64 with Swift 6.4.2 is the primary baseline for host evidence and the frozen R1 build; Swift 6.4.3 is built and tested beside it for comparison (§10 item 2) |
+| Production images | The approved O-3 digests stay: `swift:6.4.2-trixie` `sha256:9733821c…430097` and `swift:6.4.2-trixie-slim` `sha256:42571ee8…cccea0d` (§5) |
+| Labels | Results from this VM name it: Debian 13 sandbox `lisa.lab`, x86_64, rootful engine. None is labeled Fedora or rootless |
+| G2 (container deployment) | Still needs genuine rootless amd64 evidence, including UID/GID mapping and secret access. The rootful guest can't supply it |
+| Target host | VPN and off-VPN reachability over IPv4 and IPv6 and SELinux confinement stay the owner's checks |
+| Unavailable here | Fedora 45 with Swift 6.3.2 (§4 C8, §8.18 step 2, the toolchain list in P-08) and E-5 (libxml2 2.15, OpenSSL 4.0): `NOT_RUN_ENVIRONMENT` (Claude; Swift 6.3 has no Debian 13 build, and Debian 13 ships libxml2 2.9.14 and OpenSSL 3.5.9) |
+| arm64 | Historical arm64 results belong to R1 (`IMPLEMENTATION-REPORT.md`). R2 arm64 stays `NOT_RUN_ENVIRONMENT` |
+| Dependencies | After R1 is frozen, existing dependency versions may change when necessary or beneficial: swift-crypto 5.1.2 first, then an assessment of SwiftNIO 2.105.1; any other change is justified against the project's actual use. Each change records its exact revisions, rationale, lockfile change and regression results (§10 item 4). P-08 still needs the owner's approval of the exact swift-certificates pin if the device proof selects mutual TLS. P-09a still specifies Proton Mail Bridge 3.27.2 on amd64 |
+| Setup recipe | Privileged extraction requires a valid signature from the expected signer (§11, corrected; §13.2) |
+| Before later milestones | Before M2 and M3 durability results are accepted: verify the loaded SQLite library's WAL-reset fix, or show that every relevant writer and checkpoint excludes the affected condition (§8). At M4: inventory the libraries in the actual image. Before X2: a private verification Core the owner's devices can reach. Before large image pulls: check available storage. Before relying on the M7 Bridge build: verify the exact signed Ubuntu snapshot inputs |
+
+§10 items 1–4 are settled by this table. Item 5 (the toolchain tarballs kept in `.tmp/`) is unchanged.
+
+### 13.2 The corrected recipe, tested
+
+§11 now runs `sudo tar` only after `gpgv --status-fd`, with a keyring that holds only the pinned key, reports a GOODSIG, a VALIDSIG whose primary-key fingerprint is `52BB7E3DE28A71BE22EC05FFEF80A866B47A981F`, and none of BADSIG, ERRSIG, EXPSIG, EXPKEYSIG, REVKEYSIG or NO_PUBKEY. Checked on 2026-11-24 against the files in `.tmp/r2/20261124-devenv/downloads/`, only read:
+
+| Case | gpgv status | Result |
+|---|---|---|
+| 6.4.2 tarball, its signature | GOODSIG, VALIDSIG from the pinned primary key | Extraction reached |
+| 6.4.3 tarball, its signature | GOODSIG, VALIDSIG from the pinned primary key | Extraction reached |
+| 6.4.3 tarball with the 6.4.2 signature | BADSIG | Refused, exit 1 |
+| Another key from `all-keys.asc` pinned (`7463A81A…412B37AD`) | ERRSIG, NO_PUBKEY | Refused, exit 1 |
+| §11's text run as written, `curl` and `sudo` stubbed: the genuine 6.4.2 tarball, then a substituted tarball | — | The first reaches `sudo tar`; the second stops with "not extracting", exit 1 |
+
+Evidence: `.tmp/r2/20261124-r2-5462/notes/recipe-test/`. The earlier extraction on 2026-11-24 followed the old recipe; its recorded verification (`gpg-verify-*.log`) shows a VALIDSIG from the pinned key for both installed toolchains.
+
+### 13.3 Settings changed for quota monitoring
+
+The owner authorized reading the plan-usage metadata available to this signed-in Claude Code session. The monitor and the guard are temporary and uncommitted, in `.tmp/r2/20261124-r2-5462/usage/` and `guard/`; `R2-CHECKPOINT.md` describes how they work. Two entries in the agent account's `~/.claude/settings.json` changed:
+- `statusLine.command` runs a tap that records only the rate-limit fields, then hands identical input to the original `/usr/local/bin/sbx-claude-hook claude-status` and returns its output, so the status line behaves as before;
+- `hooks.StopFailure` gained a second command, the guard's `hook-stop-failure`, beside the original, which stays.
+
+The original file is kept as `.tmp/r2/20261124-r2-5462/usage/settings.json.orig-20261124T0750Z`. Both entries are restored when the guard is disarmed.
+
+**Unchanged by the amendment:** `plans/R2.md`, the toolchains, the Debian packages, `Package.swift`, `Package.resolved` and the Git configuration.
