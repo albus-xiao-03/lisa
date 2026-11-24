@@ -96,7 +96,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
 | S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12); still to come: the windowed buckets' deferred pages and absence after the swap (with S-08) |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
-| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13, M2-14): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages, repairs by generation with the overlay watermark and constant-size publication; still to come: the zone-unverified floating rows and all-day rows read in the planning zone, searches around a repair, Core (M3) and the simulated link (M6) |
+| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13, M2-14): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages, repairs by generation with the overlay watermark and constant-size publication, zone-unverified floating rows and all-day rows read in the planning zone (M2-15): the M2 replica part complete; Core's zone generations and re-expansion (M3) and the simulated link (M6) to come |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
 | S-10 | Re-anchoring, restore, fences and admission | M3 | Not run |
 | S-11 | Delivery holds after a restore; (l) recorded against KF-1 | M3, M4, M8 | Not run |
@@ -675,3 +675,34 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m2/suite-after-repair-generations-20261124T222922Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
 - **What the watermark covers so far:** derived occurrences have no local overlay or search entries yet, so a local change keeps a staged repair current just by advancing its watermark. When event-attached notes and their search entries arrive, the same transaction recomputes them for every staged generation holding the row (§8.4.3 step 3).
+
+### M2-15 The planning zone on the replica: zone-unverified floating rows and all-day rows in the planning zone (S-08 replica part; plan §8.4.2)
+
+- **Code:**
+  - LisaSyncProtocol, `38410d9` → `fff21bd`: `ZoneProof`; on `OccurrenceRow`, the `unknown` zone class, the expansion zone and civil inputs; zone proofs as derived records.
+  - LisaReplicaStore, `e3c987b` → `c5b5cb1`: the schema columns and `unverified_sources`, derived rows storing source and zone, `PlanningDayView`, `PlanningZone`.
+  - Documented in `docs/SYNC-PROTOCOL.md` §8a.
+- **Harnesses (first outcomes kept):**
+  - **v41:** 3 of 4. One expectation placed a UTC event at 23:30Z on the 24th on the wrong local day at UTC−12, where it is 11:30 on the 24th. The product was right.
+  - **v42:** the corrected test, but its manifest's header comment broke the manifest.
+  - **v43:** the corrected test under a valid manifest, 4/4.
+  - **v40:** its pinned table list predates `unverified_sources`. **v44** has the updated list, 10/10.
+  - v13, v15, v19, v20, v25, v30, v35, v36 and v39 pass again.
+- **Cases:**
+  - **All-day rows and a UTC call:**
+    - An all-day holiday on 2026-11-24 is on the 24th at both UTC+14 and UTC−12, and on no 25th.
+    - A UTC call at 23:30Z on the 24th falls on the 24th at UTC−12 and on the 25th at UTC+14.
+    - Free time is offered on both verified days.
+  - **A zone change, New York to Berlin:**
+    - **Before:** a floating lunch expanded in New York, a UTC call and an all-day holiday make a verified day.
+    - **After the change:** only the lunch is unverified, its source is marked, and no free time is offered.
+    - **Core's re-expansion arrives:** the lunch, re-expanded for Berlin, is verified on its own. Its source stays unverified, so still no free time.
+    - **A zone proof arrives** (`calendar:personal`, Europe/Berlin, the window's buckets): everything is verified and free time returns.
+  - **A migrated row without civil inputs**, beside one that kept them: after a change from America/Nuuk to UTC, both days its source could move into offer no free time, and the retained civil start is available to show.
+  - **No free time** on a day whose bucket is repairing, or on an uncovered day.
+- **Full build and R1 suite:** `m2/suite-after-planning-zone-20261124T223742Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **What M2's replica part of S-08 now covers:** deferral, the overlay watermark and constant-size publication, absence in both orders with what an older proof shows, zone-unverified floating rows, and all-day rows read in the planning zone, as plan §9's M2 row lists.
+- **Later milestones:**
+  - Core's zone generations and re-expansion from retained civil inputs, including the Nuuk floating event and the interior DST day (M3);
+  - the simulated link (M6).
