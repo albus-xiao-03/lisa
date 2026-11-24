@@ -22,5 +22,11 @@ public struct SQLiteError: Error, Hashable, Sendable, CustomStringConvertible {
     /// Whether the database was busy or locked.
     public var isBusy: Bool { code == 5 || code == 6 }
 
+    /// Whether the statement was interrupted (`SQLITE_INTERRUPT`), as the reader monitor does (plan §8.15.2).
+    public var isInterrupted: Bool { code == 9 }
+
+    /// Whether the database or the disk is full (`SQLITE_FULL`, also `ENOSPC` while writing).
+    public var isFull: Bool { code == 13 }
+
     public var description: String { "SQLite error \(extendedCode): \(message)" }
 }
