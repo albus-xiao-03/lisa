@@ -36,7 +36,7 @@ sudo apt-get update
 sudo apt-get install --no-install-recommends libsqlite3-dev libxml2-dev libcurl4-openssl-dev pkg-config libicu-dev openssl
 ```
 
-Cryptography comes from swift-crypto 5.1.1, which vendors BoringSSL, so no system cryptography package is needed for it. Every third-party Swift package is pinned in `Package.resolved`.
+Cryptography comes from swift-crypto 5.1.2 (R2 M0, `docs/DECISIONS.md` D-53), which vendors BoringSSL, so no system cryptography package is needed for it. Every third-party Swift package is pinned in `Package.resolved`.
 
 ## 3. Resolve and build
 
