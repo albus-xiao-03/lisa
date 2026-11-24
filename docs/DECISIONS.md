@@ -839,3 +839,12 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - Signing stays behind the `ReplicaSigning` port: a Keychain or Secure Enclave key on Apple devices, `SoftwareReplicaSigner` in harnesses.
   - LisaMerge, LisaDomain and LisaArchive join when the effective view, the record projections and export assembly use them.
   - No module outside the plan's set is added, and the graph stays acyclic: LisaTrust and LisaCrypto depend on neither the store nor anything that uses it.
+
+## D-57 — LisaLocalSearch uses LisaSyncProtocol directly (R2 M2, run 20261124-r2-5462; plan §7.2.1, §8.6.1)
+
+- **The plan's table** lists LisaLocalSearch's direct dependencies as LisaSQLite, LisaDomain and LisaReplicaStore.
+- **Why it needs LisaSyncProtocol.** The index names items by `ReplicaItemKey`, whose ID is LisaSyncProtocol's `Identifier128`, so the module imports LisaSyncProtocol directly. LisaSyncProtocol is already in the graph through LisaReplicaStore.
+- **What it reads, and where its table lives:**
+  - It reads an item's searchable text through `ReplicaStore.searchableText(of:in:)`, inside the change's transaction, so it needs no LisaMerge.
+  - Its postings table belongs to the replica schema, so the store can swap a staged index with the rest of an installation (plan §8.6.3).
+  - LisaDomain joins when other item types are indexed.
