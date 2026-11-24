@@ -94,7 +94,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-03 | The one legacy converter | M3, M9, X7 | Not run |
 | S-04 | First-contact owner-text key in both TLS modes | M3, X2 | Not run |
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
-| S-06 | Snapshot installation under writes | M2 | Not run |
+| S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; still to come: kills inside a step, disk exhaustion during an installation, the windowed buckets' deferred pages and absence after the swap |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
 | S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | Not run |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
@@ -535,3 +535,39 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - the planning-zone cases;
   - the overlay watermark and constant-size publication;
   - repairs from real bucket snapshots.
+
+### M2-11 The full snapshot's staged installation (S-06 M2 parts, S-17 latency part; plan §8.6.3, §8.4.3)
+
+- **Code:** `23a56b9` → `ab0f695`:
+  - the snapshot chunk;
+  - the staged-index port and `LocalSearchIndex.stage`;
+  - the installation tables;
+  - canonical operations counting as settled for causal readiness;
+  - views over the live or a staged canonical table;
+  - `SnapshotInstallation` and its outcome.
+  - Documented in `docs/SYNC-PROTOCOL.md` §8b.
+- **Harness:** `m2/harness-v30/`, 7/7 on its first run.
+  - v29's pinned table list predates the three installation tables. **v31** has the updated list, 10/10.
+  - v13, v15, v19, v20, v25 and v28 pass again.
+- **Cases:**
+  - **Under writes, with searches** (the S-06 search cases on unwindowed tasks):
+    - A canonical task "Dentist appointment" is edited locally to "Orthodontist…".
+    - A snapshot at cut 20 (creation and a note) begins staging. Its first chunk is staged, and Core rejects the edit.
+    - Then 20 captures arrive, the rest is staged, passes run, and it installs.
+    - Searches matched the view at every point: before the rejection, during staging, after the swap and after a restart. "orthodontist" appeared only while the edit stood. "dentist referral" found the task after the swap, and the 20 captures were found.
+    - Cursor 20.
+    - **Capture latency:** p95 2.6 ms during staging; the swap took 8.7 ms.
+  - **The burst the passes absorb:** 3,000 changes before the first pass. Five passes ran, the backlog at the installation point was 440, and it installed, with all 3,000 found.
+  - **Above the threshold:** the same 3,000, plus 600 during each of the five passes. The backlog was 3,440, and the staging was invalidated without applying anything: no cursor, no canonical task, and the 3,000 live captures intact.
+  - **The boundary:** a backlog of 2,048 installs, and 2,049 invalidates.
+  - **A newer page and an older cut:**
+    - A page through 25, installed during staging at cut 20, invalidates (`newerCanonicalPage`), and the live page's note stays.
+    - Staging the same cut-20 snapshot again under cursor 25 is refused the same way.
+  - **Staging across a restart:** one chunk is staged, then a page `(5,15]` carrying a note that is also in the snapshot is applied, and the installation reports one chunk missing. After a restart, staging continues and installs: the note appears once, at cursor 20.
+  - **A chunk with one bit flipped:** refused as not included at its index, and the installation stays incomplete.
+- **Full build and R1 suite:** `m2/suite-after-installation-20261124T220211Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS** for these parts.
+- **Not yet:**
+  - process kills inside each step on real files. A step is one transaction, so these test SQLite's rollback; the restart cases above test the step boundaries.
+  - disk exhaustion during an installation, on the container tmpfs, and the peak staging, index and WAL sizes (S-17);
+  - the windowed buckets' deferred pages and absence after the swap (S-08).
