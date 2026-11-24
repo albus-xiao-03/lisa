@@ -240,6 +240,24 @@ A full snapshot is a paged artifact (§9) of type `snapshot`, signed by Core. It
   - Otherwise the staged canonical tables and index are swapped in together, with the cursors at the cut.
   - A chunk that isn't included under the root is refused, and an incomplete set of chunks doesn't install.
 
+## 8c. Revocations on a replica (plan §8.1.3, §8.6.1; R2-L17)
+
+The sync engine verifies a roster and hands each revocation to the replica as `(device, epoch, position)` (`recordRevocation`). The roster's own format is specified at M3.
+- **Permanent:** the replica keeps every revocation it learned, as a union. Recording one again changes nothing, and no later roster, epoch or restore removes one.
+- **Pending effects leave the view at once.** In the same transaction:
+  - Every relayed operation of the device that Core hasn't decided, and that canonical state doesn't hold, moves to `revoked`. It leaves the effective view and the index, in one local change of kind `revocation`.
+  - Its exact signed bytes stay in the journal for inspection ("rejected (revoked), kept for inspection").
+  - Its submit follow-up is dropped, so it is never forwarded.
+  - One still waiting is decided rejected, so the operations waiting for it are released with it ignored (§8.2.2).
+- **What stays:** operations Core accepted (a final receipt or a page), canonical state, and other devices' operations, including ones that depend on a revoked operation.
+- **Later arrivals** from a revoked device are verified and checked against the duplicate rules as usual. A new one is stored `revoked` (`storedRevoked`): never applied, never waiting, never forwarded.
+- **Core still decides:**
+  - A provisional receipt for a revoked operation changes nothing.
+  - Core's final acceptance authorizes it. If it had entered the view it returns as an overlay. If it was decided while waiting, it appears with the canonical state that contains it.
+  - A page carrying it applies as committed.
+  - A Core rejection makes it `rejected`.
+- **This replica's own device:** only the record is kept, and its saved local work stays pending. What a revoked device does with its own work is specified at M3.
+
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
 Rosters with key history, causal summaries, snapshot manifests and reviewed-set artifacts can span several pages:
@@ -259,4 +277,4 @@ Rosters with key history, causal summaries, snapshot manifests and reviewed-set 
 
 ## 11. Not yet specified here
 
-The payloads of the other operation types (captures, ideas, reminders, occurrences, proposals, preferences, plans, suggestions, conflicts, devices, authority writes, restores), receipts, dependency release, windowed partitions' bucket ranges and interval coverage, membership records, snapshots and chunks, manifests, blobs, rosters and revocation, lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
+The payloads of the other operation types (captures, ideas, reminders, occurrences, proposals, preferences, plans, suggestions, conflicts, devices, authority writes, restores), receipts, dependency release, windowed partitions' bucket ranges and interval coverage, membership records, snapshots and chunks, manifests, blobs, rosters and their revocation evidence (§8c covers a replica's handling), lineage and confirmations, enrollment request and result bodies, challenges, assignments and reports, legacy import items, the archive entries' schemas and nearby frames. Each is added with its vectors when its milestone implements it.
