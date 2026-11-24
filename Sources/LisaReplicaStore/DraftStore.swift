@@ -12,11 +12,13 @@ enum DraftStore {
     ) throws {
         try session.query(
             """
-            INSERT INTO drafts (operation_id, command, original_input, created_at, reason, state)
-            VALUES (?, ?, ?, ?, ?, 'held')
+            INSERT INTO drafts (operation_id, entity_type, entity_id, command, original_input, created_at, reason, state)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'held')
             """,
             [
-                ReplicaColumns.id(operationID), ReplicaColumns.bytes(try encode(command)),
+                ReplicaColumns.id(operationID), .text(command.item.entityType),
+                ReplicaColumns.id(command.item.entityID),
+                ReplicaColumns.bytes(try encode(command)),
                 ReplicaColumns.optionalText(command.originalInput), .integer(createdAt), .text(reason.rawValue),
             ])
     }
@@ -29,6 +31,17 @@ enum DraftStore {
             WHERE state = 'held' ORDER BY rowid LIMIT 1
             """
         ).first.map(decode)
+    }
+
+    /// The held drafts of `item`, in save order.
+    static func held(for item: ReplicaItemKey, in session: SQLiteSession) throws -> [ReplicaDraft] {
+        try session.query(
+            """
+            SELECT operation_id, command, original_input, created_at, reason, state FROM drafts
+            WHERE state = 'held' AND entity_type = ? AND entity_id = ? ORDER BY rowid
+            """,
+            [.text(item.entityType), ReplicaColumns.id(item.entityID)]
+        ).map(decode)
     }
 
     /// Every draft, in save order.
