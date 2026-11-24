@@ -63,6 +63,7 @@ let package = Package(
         .library(name: "LisaTrust", targets: ["LisaTrust"]),
         .library(name: "LisaArchive", targets: ["LisaArchive"]),
         .library(name: "LisaMerge", targets: ["LisaMerge"]),
+        .library(name: "LisaReplicaStore", targets: ["LisaReplicaStore"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -110,6 +111,10 @@ let package = Package(
         .target(name: "LisaTrust", dependencies: ["LisaCrypto", "LisaSyncProtocol"]),
         // R2 protected archive format, sealing and opening (plan §7.2.1, §8.6.6).
         .target(name: "LisaArchive", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaCrypto"]),
+        // R2 client database (plan §7.2.1, §8.6): journal, drafts, receipts, local change journal, incarnations. It
+        // digests and verifies operations itself, so it uses LisaTrust and LisaCrypto directly (docs/DECISIONS.md D-56);
+        // LisaMerge, LisaDomain and LisaArchive join with the effective view, record projections and export assembly.
+        .target(name: "LisaReplicaStore", dependencies: ["LisaSQLite", "LisaSyncProtocol", "LisaTrust", "LisaCrypto"]),
         .target(
             name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
         .target(
