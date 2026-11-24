@@ -209,6 +209,17 @@ enum ReplicaSchema {
           CHECK (to_position > from_position)
         ) STRICT
         """,
+        // The search index (§8.6.1), written by `ReplicaIndexing` in the change's own transaction: one posting per
+        // folded token of an item's effective view.
+        """
+        CREATE TABLE search_postings (
+          token TEXT NOT NULL,
+          entity_type TEXT NOT NULL,
+          entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+          PRIMARY KEY (token, entity_type, entity_id)
+        ) STRICT, WITHOUT ROWID
+        """,
+        "CREATE INDEX search_postings_by_item ON search_postings (entity_type, entity_id)",
         // Peer custody (§8.6.1): a peer's signed acknowledgement that it durably holds these exact bytes.
         """
         CREATE TABLE custody_acknowledgements (
