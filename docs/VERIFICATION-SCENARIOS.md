@@ -96,7 +96,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-05 | Bounded device-only retry and the test-only enrollment-result fault | M3, X2 | Not run |
 | S-06 | Snapshot installation under writes | M2 | M2 parts run (M2-11): installation under writes with searches, the backlog cases and boundary, a newer page and an older cut, restarts between steps, tampered and incomplete snapshots; kills inside the staging and swap transactions (M2-12); still to come: the windowed buckets' deferred pages and absence after the swap (with S-08) |
 | S-07 | Pieces, value limits, reviewed-set artifacts | M2, M3, M5 | Not run |
-| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | Not run |
+| S-08 | Interval coverage and the planning-zone change | M2, M3, M6 | M2 parts run (M2-10, M2-13): the cursor cases, deferral, the absence rule in both orders, non-nesting windows, rolling windows and moves, stale relayed pages; still to come: the planning-zone cases, the overlay watermark and constant-size publication, readers during a repair, Core (M3) and the simulated link (M6) |
 | S-09 | Backup lineage, anchors and discovery | M3 | Not run |
 | S-10 | Re-anchoring, restore, fences and admission | M3 | Not run |
 | S-11 | Delivery holds after a restore; (l) recorded against KF-1 | M3, M4, M8 | Not run |
@@ -601,3 +601,47 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m2/suite-after-reserve-checks-20261124T221039Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
 - **Not run:** `max_page_count` on "the Fedora host" (plan §8.15.2) is `NOT_RUN_ENVIRONMENT`, because the platform is Debian 13. The in-database `SQLITE_FULL` case ran in M2-3.
+
+### M2-13 Calendar buckets on the replica: memberships, the absence rule, repairs and rolling windows (S-08 replica part; plan §8.4.2, §8.4.3, §8.3.5)
+
+- **Code:**
+  - LisaSyncProtocol, `e1309be` → `737477b`: `OccurrenceRow`, `CalendarBuckets`, `DerivedRecord`, and `ChangeEntry` with the record form.
+  - LisaReplicaStore, `ea589e2` → `e838a98`: `derived_rows`, `DerivedRows`, record entries in pages, `OccurrenceListing`, `CalendarBucketStore`.
+  - Documented in `docs/SYNC-PROTOCOL.md` §8a.
+- **Harness:** `m2/harness-v36/`, 6/6 on its first run.
+  - v31's pinned table list predates `derived_rows`. **v37** has the updated list, 10/10.
+  - v13, v15, v19, v20, v25, v28, v30 and v35 pass again.
+- **Cases (each one of the plan's §8.4.2 acceptance cases):**
+  - **Bucket ranges:**
+    - 2026-11-24 maps to the right day; 1969-12-31 is −1, and instant −1 ms is in bucket −1.
+    - A one-hour event, an event crossing midnight, an event ending exactly at midnight, and a zero-length event each fall in the buckets R1's overlap rule gives.
+    - An all-day event on 2026-11-24 covers buckets day − 1 through day + 1.
+  - **Absence in both orders, with what a replica shows from an older proof:**
+    - Setup: an event spans buckets A and B, delivered at 105, and both are proved through 110. Both are repaired.
+    - (1) A's snapshot at 150, without the event, is published first, then B's delayed snapshot at 120, which still holds it. (2) The reverse order.
+    - **From A's publication on, in both orders:** A never lists the event. B lists it as of 120, proved there.
+    - **Before A's publication:** A showed it as of 110, from its older proof.
+    - **Final cursors:** A = 150, B = 120.
+  - **Windows that don't nest:**
+    - Setup: a replica covering days 30–90 receives a page listing days 1–60, with a deletion on day 40 and nothing on day 45.
+    - Day 40's event is gone; day 45 advances on the empty proof; days 30–60 move to 20.
+    - Days 61–90 stay at 10, with day 70's event still listed. Days 1–29 are not covered: `gap(nil)`.
+  - **A rolling window:**
+    - An event spanning days 29–31 stays when day 29 is dropped, and counts on day 30.
+    - When it moves to days 33–34, the entry names the old range too, so days 30 and 31 stop listing it, and 33 and 34 list it.
+    - Dropping every bucket it overlaps drops the row.
+  - **A page during a bucket repair:**
+    - Setup: day 31 is repairing when a page `(120,150]` for days 31 and 32 arrives.
+    - Day 31 defers it, and day 32 reports a gap at 100. Fetched again from 100, day 32 reaches 150.
+    - Publishing day 31's snapshot at cut 120 applies the deferred page, ending at 150, never at 120. Both days list the event.
+  - **A stale relayed page `(90,120]` for A (cursor 150) and B (cursor 100):**
+    - A ignores it. B applies `(100,120]`: the entry at 95 is trimmed, and B moves to 120.
+    - The row, updated at 130 through A, keeps its 130 value in both buckets. In B it counts as not yet proved there.
+- **Full build and R1 suite:** `m2/suite-after-calendar-buckets-20261124T222022Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Still to come for S-08's replica part:**
+  - the planning-zone cases: floating and unknown-zone rows marked unverified until authoritative proof; all-day rows read in the planning zone; the Nuuk gap; retained civil inputs;
+  - the overlay watermark and constant-size publication;
+  - readers before, during and after a repair (see one view or the other);
+  - derived records in full snapshots;
+  - searches scoped to days.
