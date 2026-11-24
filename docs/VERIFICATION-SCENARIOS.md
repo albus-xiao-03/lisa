@@ -104,7 +104,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-13 | Export, rollback and installation of either v4 database | M5, M9, X3, X7 | Not run |
 | S-14 | The destination policy at every redirect | M7, X1, X5 | Not run |
 | S-15 | VPN publishing | M4, target host | Not run |
-| S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | Not run |
+| S-16 | Size boundaries and bounded dependency release | M1, M3, M6 | M1 part PASS (M1-1, M1-7: budgets, frame header); M3 and M6 parts not run |
 | S-17 | SQLite readers, exhaustion and bursts | M2, M3 | Not run |
 | S-18 | Model accounting | M7 | Not run |
 | S-19 | Deletion and expiry propagation | M5, M8 | Not run |
@@ -112,7 +112,7 @@ Not run unless a row says otherwise. Each scenario's full content is in plan §1
 | S-21 | Mail and calendar connectors against controlled servers | M7 | Not run |
 | S-22 | Model adapters and the controlled local Ollama server | M7 | Not run |
 | S-23 | Outbound email and calls against controlled servers | M8 | Not run |
-| S-24 | The owner-verification harness itself | M1, then every milestone | Not run |
+| S-24 | The owner-verification harness itself | M1, then every milestone | M1 part PASS (M1-9: fixture mode, the ledger's four interruption variants, resume and retry, observations and paired joins, the redacted export, signed entitlements, cleanup); host steps (M3), provider grant isolation (M7) and the owners' signed builds not run |
 | N-A | Narrative §19.1 | M3, M4, M8 | Not run |
 | N-B | Narrative §19.2 | M9, X7 | Not run |
 
@@ -156,3 +156,69 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Result: PASS**, 4 tests.
 
 **After each span:** a full debug build has 0 warnings, `swift format lint` reports no finding in the changed modules, and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2).
+
+### M1-7 Nearby wire contracts: frame header and hello form (R2-L32; S-16 M1 part; plan §8.7, §8.16.2)
+
+- **Code:** `NearbyFrameError` and `NearbyFrameHeader` (`LisaSyncProtocol`), `NearbyHello+CanonicalBody` (`LisaTrust`): `c096983`–`c69586c`.
+- **Harness:** `m1/harness-v3/` (v2's current targets linked, plus `NearbyWireTests`; the superseded v1 tests and the type-check directories left out).
+- **Cases:**
+  - the documented header layout, with exact bytes for a 5-byte payload, an empty frame and the 1 MiB frame;
+  - a round trip over every boundary length and several kinds;
+  - refusal of 1 MiB + 1, `Int.max` (no overflow trap), negative and `Int.min` payloads;
+  - headers of 7, 9 and 0 bytes, totals 0–7 and above the budget, version 0 or 2, and non-zero reserved bytes, each refused before any payload;
+  - the hello against a vector computed independently with Python;
+  - another protocol version, an unknown or missing member, a short nonce, uppercase hex, whitespace, wrong key order, a trailing byte and a body over 4 KiB, each refused.
+- **Result: PASS**, 6 tests in 2 suites, with all 46 tests of v3's other targets.
+
+### M1-8 The X1 proof app `Apps/Proof` (plan §8.7, §8.9.3, §10.5 N-1 and E-1, §10.6 X1; `docs/DECISIONS.md` D-54)
+
+- **Code:** 69 Swift files, 4 configuration files and the `LisaProof` target: `bc11c09`–`559f4bb`. The draft was reviewed against HEAD and the plan before integration.
+- **Linux checks** (no Apple build or run is claimed; that is X1's):
+  - `swiftc -parse`: 69 of 69 files (`m1/proof-parse-repo-*.log`).
+  - The 38 files without an Apple-only import type-checked against HEAD's `LisaCrypto`, `LisaSyncProtocol`, `LisaTrust` and `LisaHTTP`, with Linux stand-ins only for Apple-only types (`m1/proof-typecheck-repo-*`): exit 0, no warning.
+  - The certificate encoder's DER verified with OpenSSL 3.5.9 (`m1/proof-proposal/cert-check/`).
+- **First failures and fixes, found by the review and the type-check:**
+  - `Result<…, String>` doesn't compile, since `String` isn't an `Error`; it now returns a refusal type.
+  - A missing `import Security`.
+  - Design B's unenrolled-identity fault presented the enrolled certificate, so roster pinning was never exercised. It now presents a throwaway Secure Enclave identity that no roster lists.
+  - References to temporary notes were replaced by D-54.
+  - The frame header and hello now come from the portable modules.
+- **Result:** ready for X1 (owner-run). N-1, E-1 and E-2 stay open until the owner's results.
+
+### M1-9 The owner-verification harness core and S-24 at M1 (plan §10.8; R2-DEV-02)
+
+- **Code** (`Harness/`, linked by no product, `Package.resolved` unchanged):
+  - `LisaVerifyKit`: IDs, statuses, case model, result schema, run store, action ledger, pair sessions, observations, imports, report, redaction and export, Apple preflight, cleanup.
+  - `LisaVerifyCases`: the X1 and harness catalogues, the fixture action executor and crash points.
+  - `LisaVerifyServers`: the counting and classifying controlled servers, SMTP and HTTP in the APNs, OpenAI, Anthropic, Ollama and Twilio shapes, on SwiftNIO.
+  - `lisa-verify`: quickstart, preflight, cases, guide, run, pair-session, observe, import-diagnostics, report, export, resume, retry, actions, authorize-retry, cleanup.
+  - Documents: `Harness/README.md`, `Harness/docs/` (`SETUP-APPLE.md`, `PAIRED-SESSIONS.md`, `RESULTS.md`, `CASES.md`, `CLEANUP.md`), `Harness/config/owner-verify.example.json5`.
+  - `Apps/OwnerVerification`: the UI smoke test, test plan X1, the `LisaProof` scheme.
+  - Commits `8e58552`–`d0a9e53`.
+- **Temporary checks:**
+  - `m1/harness-v4/`: 13 tests (IDs, run store, proof-shaped lines, ledger rules, imports, report, observation, canary export).
+  - `m1/harness-v5/`: 3 tests (the servers over real loopback connections).
+  - An end-to-end CLI run (`m1/cli-e2e-*`).
+- **S-24 fixture run** (`lisa-verify run --mode fixture`, `m1/s24-20261124T133622Z/`, run `run-20261124T133622Z-kldvy6`): **9 of 9 PASS**, 25 logical actions.
+  - (i) Killed by SIGKILL after the intent: resumed in a new process with one accepted submission, for each of email, push, model request and call.
+  - (ii) Killed after the server accepted: found by the server's lookup and recorded "accepted (observed)", never resent.
+  - (iii) Accepted and dropped with the lookup disabled: ambiguous. Resume sent nothing, `authorize-retry` without the typed phrase sent nothing, and with it exactly one more was accepted, reported as a possible duplicate.
+  - (iv) A new action refused under the old confirmation, then accepted under a new one.
+  - An interrupted case resumed, and one failed case reran alone.
+  - A manual observation, and paired results joined only under one nonce.
+  - No planted canary in the export.
+  - Signed entitlements decided for both platform keys, a missing key, mismatched environment and topic, an unlisted device and an expired profile.
+  - Cleanup of the run's own data only.
+- **Not covered at M1:** host steps and the verification Core (M3), provider grant isolation (M7), and validation of the owner's actual signed builds (X1 onward). `preflight apple` reports `NOT_RUN_ENVIRONMENT` on this Linux host.
+
+### M1 boundary: a clean checkout (plan §9: builds, lint, harness from a clean checkout in fixture mode)
+
+- **Method:** `d0a9e53` reconstructed with `git show` into `m1/clean-20261124T134046Z/tree/`: 1,084 files, each byte-exact against `git rev-parse`; manifest SHA-256 `4febba75…713236`.
+- **Results** (Swift 6.4.2, fresh scratch paths; the commits after `d0a9e53` change documents only):
+  - Debug build with tests: exit 0, 0 warnings.
+  - The unmodified R1 suite: **376 tests in 66 suites passed**.
+  - `swift run lisa-verify run --mode fixture` (run `run-20261124T134144Z-4x753a`): **9 of 9 PASS**.
+  - Release build: exit 0, 0 warnings.
+  - `swift format lint` of `Sources`, `Tests`, `Harness`, `Apps` and `Package.swift`: only R1's own `Package.swift` line (R1 line 148), unchanged since `491c90a`.
+- **Evidence:** `m1/clean-20261124T134046Z/` (`*.log`, `*.exit`, `runner.sha256`, `matrix.sh`).
+
