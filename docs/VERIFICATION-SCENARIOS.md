@@ -430,3 +430,29 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m2/suite-after-effective-view-20261124T212729Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
 - **Result: PASS.**
 - **Still to come:** process kills inside a step on real files (a step is one transaction, so SQLite's rollback is what they test), canonical rows from Core's pages in the view (M3 defines their pieces), and the other types' views.
+
+### M2-7 LisaLocalSearch: the token index behind ReplicaIndexing (S-06 and S-08 search parts, in their M2 preliminaries; plan §8.6.1, §8.15.2)
+
+- **Code:** `8b5cb7e` → `cd37d4f`. The postings table is in schema v1, and the store provides `searchableText`. `SearchTokenizer` and `LocalSearchIndex` follow, with D-57 and `Package.swift`.
+- **The rules:**
+  - An item's postings are replaced in the same transaction as its effective view.
+  - Tokens are folded for case, diacritics and width.
+  - A search finds the items holding every query token, on one snapshot, as a long reader under the reader monitor.
+- **Harness:** `m2/harness-v20/`, 3/3 on its first run.
+  - **v17, rerun after this span:** 1 of 10 failed. Its pinned table list predates `search_postings`; v17 is kept as recorded.
+  - **v21:** the updated list, 10/10.
+  - v13, v15 and v19 pass again.
+- **Cases:**
+  - **A local edit and its rejection:**
+    - "Dentist appointment" is found by "dentist", whatever the case.
+    - After the edit to "Orthodontist…", "dentist" finds nothing and "orthodontist" finds the task.
+    - After Core rejects the edit, the reverse holds again.
+  - **A note and a deletion:** a note "Bring the Zürich referral" is found by "zurich referral", but not by "zurich invoice". After deletion, nothing is found.
+  - **A relayed rename waiting for its creation:** neither title is found while it waits. Once released, the new title is found and the old one isn't, and so after a restart.
+  - **A seeded random sequence:** 300 steps over five tasks (creations, title edits observing the last, notes, rejections, deletions). After every step, each of 6 probe words found exactly the tasks whose view holds it, with 0 mismatches.
+- **Full build and R1 suite:** `m2/suite-after-local-search-20261124T213244Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Still to come:**
+  - the staged index and its swap (S-06);
+  - the searches scoped to days (S-08);
+  - a materialized effective view: today the view is folded on demand. The random sequence took 16 s, mostly that fold, and staged installation needs materialized view tables anyway.
