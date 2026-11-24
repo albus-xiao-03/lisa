@@ -348,3 +348,48 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - storage filling during a staged installation (with S-06);
   - `max_page_count` on the in-database path of staging (the save path is M2-3);
   - the peak staging, index and WAL sizes during an installation.
+
+### M2-5 The task family's payload schemas and one task merged (R2-L11 part, S-07 M2 replica part; plan §8.2.3, §8.3.1–§8.3.3)
+
+- **Code:**
+  - LisaSyncProtocol `57c50b0` → `75326ea`: the deadline, task fields and values, the creation, and `ItemOperationPayload`.
+  - LisaMerge `f093e69` → `8e0e73b`: `NotePieces`, `TaskView`, `TaskMergeState`.
+  - The replica store's payload checks, on saves and on arrivals: `4e0c1e3`.
+  - Documented in `docs/SYNC-PROTOCOL.md` "Item payloads" (`43b5369`) and `docs/CONFLICTS.md` (`fae2ba7`).
+- **Harnesses (first outcomes kept):**
+  - **v14:** never built. Read before its first build, its test file had the same mixed-error `do` block as v11.
+  - **v15:** v14 corrected, 7/7 on its first run.
+  - **v12, rerun after the schemas:** 7 of 9 failed. Their fixtures send `task.create` with only a title, which the store now refuses as an invalid command. That is the intended behavior; v12 is kept as recorded.
+  - **v16:** v12's tests with schema payloads, plus an arriving-payload test. 9 of 10 passed. The new test expected the decoder to name `confirmation` as the missing field; it names the first missing field in field order, `priority`. Because of that, the test never reached its "nothing stored" check.
+  - **v17:** v16 corrected, 10/10.
+  - **v13:** 5/5 again.
+- **Cases:**
+  - **Payloads:** canonical forms round-trip for every type (the vectors in `docs/SYNC-PROTOCOL.md`). Each of these is refused:
+    - an empty or 201-character title (200 is accepted);
+    - a missing or unknown field;
+    - an unknown priority, an estimate of 0, an unknown field name, or a value of the wrong type;
+    - 2026-02-29 (2028-02-29 is accepted);
+    - a zone containing other characters;
+    - an empty or unsorted reopen list;
+    - an unknown tag change, or a 65-character tag;
+    - fields on `task.complete`;
+    - an empty note.
+  - **The note budget (S-07, M2 replica part):**
+    - The largest note, 53,983 encoded bytes built from `\u0001` escapes, is saved; its operation body is 54,422 bytes.
+    - One byte more is refused as `invalidCommand(encoding(tooLarge(53984, 53983)))` before the operation is built.
+    - A `task.complete` naming an idea is refused.
+  - **An arriving `task.create` with only a title:** refused as `unverified(malformed(missing priority))`, with nothing stored and the generation unchanged.
+  - **Convergence (R2-L11 part):** every permutation gives one state and one view.
+    - **Concurrent title edits, a priority edit, two notes and a replacement that saw one of them** (5,040 orders): a title conflict between the two edits; priority high; the unseen note kept beside the replacement. Re-applying operations changes nothing.
+    - **Tags and status** (5,040 orders): a removal of "health" that also observed the "errands" addition leaves "errands". Concurrent completion and cancellation, with a reopen naming only the completion, end cancelled.
+    - **A deletion with concurrent edits** (24 orders): deleted, with both edits recorded as superseded.
+    - **Horizons through position 12** (40,320 orders):
+      - A replacement removes the note committed at 11, but not the one at 13 or a pending one.
+      - A tag removal removes "health" (committed at 12), but not "errands", committed at the same position.
+      - Applying everything pending and learning the commits afterwards gives the same state.
+- **Full build and R1 suite:** `m2/suite-after-payload-schemas-20261124T211753Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Result: PASS.**
+- **Still to come:**
+  - the other types' payloads, the authority path's source and model values in these registers, and restores;
+  - the replica's effective view through `TaskMergeState`;
+  - S-07's paged resolution group with 1,000 candidates.
