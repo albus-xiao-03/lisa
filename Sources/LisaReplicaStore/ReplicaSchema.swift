@@ -328,5 +328,35 @@ enum ReplicaSchema {
           PRIMARY KEY (device_id, epoch_id, position)
         ) STRICT, WITHOUT ROWID
         """,
+        // Which Core this device trusts and how it reaches it (§8.1.2 step 6): the signing key from the owner text, the
+        // TLS policy (mode, intended host, the owner CA and the intermediates from the verified bundle, as canonical
+        // JSON), and the enrollment whose verified result bound them. One row once enrolled; never any token or
+        // request bytes.
+        """
+        CREATE TABLE trust_state (
+          singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+          core_url TEXT NOT NULL,
+          core_signing_key BLOB NOT NULL,
+          tls_mode TEXT NOT NULL CHECK (tls_mode IN ('ca', 'pin')),
+          tls_host TEXT NOT NULL,
+          ca_certificate BLOB,
+          intermediates BLOB NOT NULL,
+          enrollment_id BLOB NOT NULL CHECK (length(enrollment_id) = 16),
+          request_digest BLOB NOT NULL CHECK (length(request_digest) = 32),
+          device_id BLOB NOT NULL CHECK (length(device_id) = 16),
+          completed_at INTEGER NOT NULL,
+          CHECK ((tls_mode = 'ca') = (ca_certificate IS NOT NULL))
+        ) STRICT
+        """,
+        // Every verified roster (§8.1.3), as its exact wire bytes; the newest version is the one in use.
+        """
+        CREATE TABLE trust_rosters (
+          epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+          version INTEGER NOT NULL CHECK (version >= 1),
+          signed BLOB NOT NULL,
+          verified_at INTEGER NOT NULL,
+          PRIMARY KEY (epoch_id, version)
+        ) STRICT
+        """,
     ]
 }
