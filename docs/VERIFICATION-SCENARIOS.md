@@ -1032,3 +1032,86 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Full build and R1 suite:** `m3/suite-after-ballast-at-open-io-20261125T060530Z/`, debug build 0 warnings, 376 tests in 66 suites passed.
 - **Regressions:** regression package v6 (`m2/run-regressions-v7.sh`, run `m2/regressions-run-20261125T060539Z/`) passes all 23 targets with their usual counts, and v35 and v47 pass in their own packages.
 - **Result: PASS.**
+
+### M3-5a Enrollment and the roster end to end over loopback HTTP (S-05's Core and device rules; R2-TRUST-01, -02 in part; plan §8.1.2, §8.1.3, §8.12.1)
+
+- **Code:**
+  - `TrustRoster` and `EnrollmentMessages` (LisaSyncProtocol); `RosterSigning`, `EnrollmentSigning`, `CoreCredential` and the domain `lisa-r2-device-authorization-v1\n` (LisaTrust).
+  - Schema v6 (LisaStore), `CoreTrust` (LisaCoreLedger), and `CoreAPIRouter(trust:)` with `POST /v2/enrollments`, `GET /v2/trust/tls-anchors` and `GET /v2/trust`.
+  - `ReplicaTrust` (LisaReplicaStore), `CoreEnrollment` (LisaSyncEngine) and `HTTPEnrollmentTransport` (LisaSyncHTTP).
+  - Records: `docs/DECISIONS.md` D-62; `docs/SYNC-PROTOCOL.md` §8f.
+- **Full build and R1 suite:**
+  - `m3/suite-after-enrollment-20261125T065306Z/`: before lint formatting.
+  - `m3/suite-after-enrollment-formatted-20261125T065446Z/`: the committed sources.
+  - Each: debug build 0 warnings, 376 tests in 66 suites passed with schema v6. `swift format lint` is clean on every new and changed file.
+- **Harness:** `m3/harness-v10/`, R1's host serving the v2 routes on its devices listener over loopback HTTP. It passed 8/8 on its first run (`harness-v10-test-20261125T065354Z.log`) and again on the committed sources.
+  - **The rerun's evidence** carries an empty timestamp, from a shell slip: `harness-v10-test-.log`, `harness-v10-work-`. It is kept as written.
+  - **Earlier versions,** kept unchanged: v8 was corrected before its first build, and v9 failed to compile (a missing import, five `#expect(a && (try b))`).
+  - **The pending item:** a file-backed stand-in for the Keychain item, which writes new numbered files and deletion markers.
+- **Cases:**
+  - **`pin` mode:**
+    - No anchors GET, and one POST under the owner text's pin and host.
+    - The verified result completes in one replica transaction (dataset, device ID, trust state, roster), and the pending item goes.
+    - Core lists the device as never seen. The capture saved before pairing is signed after enrollment and accepted with the new credential; the device is then seen.
+    - `GET /v2/trust` serves the signed roster, and refuses an unknown credential (401). The anchors route is a 404.
+    - No token byte, token text or credential byte appears in any replica or Core file.
+  - **`ca` mode:**
+    - The anchors GET under the bootstrap pin, then the POST under the verified CA and intermediates. The roster's `anchorsDigest` is the bundle's.
+    - A tampered bundle, a bundle signed by another key, a wrong CA digest, an old-format text (`lisa-pair:3:`) and a damaged text stop with zero POSTs and no pending item. The enrollment stays open with no attempt.
+  - **The attempt limit:**
+    - Four wrong tokens (403 `enrollment_rejected`, each kept pending) and a bad signature are counted; the fifth failure invalidates.
+    - The genuine text is then refused with 410 `enrollment_invalidated`, which removes the pending item. Each failure is a trust event.
+    - An unknown enrollment gets 404.
+  - **Concurrent requests:** one consumes, the other digest gets 409 `enrollment_consumed` with a security event and its item removed. One device.
+  - **A lost answer:**
+    - After the enrollment's expiry, a restarted client replays the identical bytes and gets the stored result. An exact replay returns the same bytes.
+    - After 7 days Core answers 409 `enrollment_response_purged` naming the device, and the response is no longer kept.
+    - A client past its retry deadline (expiry plus 24 hours) stops locally, with no POST.
+  - **Tampered results after one valid POST:** an altered response, another enrollment's correctly signed result (`binding("enrollment")`) and a replaced roster (`binding("rosterDigest")`) each leave trust uninstalled with the item kept. The exact replay then completes: two devices, two consumptions, five POSTs.
+  - **The device limit,** configured to 2: 409 `enrollment_device_limit`, counted, the enrollment still open.
+  - **Signer rotation:**
+    - A Core restarted under a new key invalidates an open enrollment issued under the old one (410, `signer_rotated`).
+    - An already consumed exact replay still returns its original result, which the device verifies with the original issuer.
+    - Core's current roster verifies only under the new key.
+  - **Revocation:**
+    - A new roster version records the revocation at the current epoch and position 1. Repeating it changes nothing.
+    - The revoked device's credential gets 401, and its operation relayed by another device is `unverified`.
+    - The peer accepts the newer roster, records the revocation, drops the key, and refuses the older roster.
+    - The revoked device's committed task stays at Core.
+- **Regressions:**
+  - **Regression package v7** (`m2/make-regressions-v7.py`, v6's targets plus harness v10; run `m2/regressions-run-20261125T065639Z/`): 23 of 24 targets pass, and so do v35 and v47.
+    - M2's harness v49 failed one expectation: it pins the replica schema's exact table list, which now has `trust_rosters` and `trust_state`.
+    - This was the intended schema change, not a change in behaviour.
+  - **Its successor,** `m3/harness-v12/`, is v49 with the two names added to the list, nothing else.
+  - **Regression package v8** (`m2/make-regressions-v8.py`, v49 replaced by v12; runner `m2/run-regressions-v9.sh`; run `m2/regressions-run-20261125T070034Z/`): all 24 targets pass, and so do v35 and v47.
+  - The generated regression manifests' comments still name an older scratch path; the runners use the root-volume path.
+- **Result: PASS** for this slice.
+
+### M3-5b S-04 and S-05 over R1's real TLS server with the test-only libcurl pinning transport (R2-TRUST-01, -02; plan §8.1.2 step 3, §8.1.4 TLS rotation, §8.6.5, §10.4)
+
+- **Harness:** `m3/harness-v14/`, 5/5 on its first run (`harness-v14-test-20261125T070718Z.log`).
+  - v11 was corrected before its first build, and v13 failed to compile (a `do` block mixing error types). Both are kept unchanged.
+  - Certificates and P-256 keys are made at run time with the openssl CLI (OpenSSL 3.5.9) in each test's own directory, valid for 30 days. Pins are computed by openssl, independently of Lisa.
+  - R1's host serves Core's v2 routes over native TLS (SwiftNIO) on its devices listener, with the chain and key passed as secrets.
+- **The transport** (`PinTransport.CurlPinAPITransport`, harness-only), an `APITransport`, so LisaSyncHTTP's own enrollment and sync transports run over it.
+  - **libcurl 8.14.1,** through a C shim whose header never includes `curl.h`, so its module can't clash with R1's CCurl.
+  - **Every exchange** uses a fresh connection, with no redirects, no proxy and TLS 1.2 or later. The host is always checked, and libcurl's `PINNEDPUBLICKEY` holds the authorized pins.
+  - **`pin` mode:** a handshake-only probe checks the host and pins. The leaf it saw becomes the only anchor of the exchange's own connection, which checks host, pins and validity again.
+  - **`ca` mode:** the owner CA is the only anchor, with no partial chain and the default CA path disabled. The bundle's intermediates help build the chain.
+  - A debug callback records every byte sent before encryption. `CURLOPT_CONNECT_TO` keeps the owner text's URL (`https://core.lisa.test:8443`) while connecting to the loopback port.
+- **Cases:**
+  - **`pin` mode** with a self-signed leaf and with a CA-issued leaf: enrollment with no anchors GET, then sync under the roster's pins. The capture holds the POST's exact request body, a positive control that it would show a token sent.
+  - **`ca` mode** with the root omitted (leaf and intermediate served), a leaf signed directly by the root (leaf alone), and an intermediate the server omits, supplied from the signed bundle. Each runs the anchors GET under the bootstrap pin, the POST under the CA, then sync. Without the bundle's intermediate, the omitted-intermediate chain fails.
+  - **Before the POST**, with zero enrollment POSTs at Core, no saved request, and no POST, token byte or token text in the device's captured bytes:
+    - **A wrong pin:** the probe fails, with no GET either.
+    - **A wrong CA digest:** one token-free GET, then `binding("caDigest")`.
+    - **A bundle signed by another key than the owner text's:** one token-free GET, then `invalidSignature`.
+    - **A leaf naming another host:** the probe fails on the host check, with no GET.
+    - **A server chain the bundle's CA doesn't anchor:** the POST's own connection fails its handshake before sending a byte.
+  - **TLS rotation (§8.1.4):**
+    - A renewal that keeps the leaf key needs nothing.
+    - Core announces the new key's pin as next (pins `[A, B]`), and the device that fetched that roster accepts the newly keyed leaf.
+    - The device holding the older roster (`[A]`) is refused, then recovers by taking the peer's newer roster.
+  - **A lost answer in both modes:** the pending item keeps the saved policy, and the replay repeats every TLS check with the identical request body. One device, one consumption, two POSTs.
+- **Not yet covered here:** an expired certificate, Design B certificates, and the X2 device runs (owner).
+- **Result: PASS** for this slice.
