@@ -17,7 +17,7 @@ public struct Migration: Hashable, Sendable {
 
 /// Lisa's migrations, oldest first.
 public enum Migrations {
-    public static let all: [Migration] = [version1, version2, version3, version4]
+    public static let all: [Migration] = [version1, version2, version3, version4, version5]
 
     /// The newest schema version this build understands.
     public static var latestVersion: Int { all.map(\.version).max() ?? 0 }
@@ -138,5 +138,112 @@ public enum Migrations {
                 END) || ':' || json_extract(body, '$.requestID')
             WHERE json_extract(body, '$.requestID') IS NOT NULL
             """
+        ])
+
+    /// The R2 Core ledger (plan §8.4.1): the dataset, epoch and recovery state; the operations with their decisions,
+    /// receipts and commit positions, unique by origin triple; dependencies, release markers and the ready queue; the
+    /// change log with each entry's partitions; tombstones; and the duplicate rules' security events. R1's
+    /// collections are untouched: intake projects each entity into them in the same transaction. Every table keeps its
+    /// rowid, as R1's maintenance and its tests read tables in rowid order.
+    static let version5 = Migration(
+        version: 5, summary: "R2 Core ledger: operations, receipts, causal release, change log, tombstones",
+        statements: [
+            """
+            CREATE TABLE core_dataset (
+              singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+              dataset_id BLOB NOT NULL CHECK (length(dataset_id) = 16),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              recovery_state TEXT NOT NULL CHECK (recovery_state IN ('normal')),
+              last_position INTEGER NOT NULL CHECK (last_position >= 0),
+              created_at INTEGER NOT NULL
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_operations (
+              operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
+              digest BLOB NOT NULL CHECK (length(digest) = 32),
+              body BLOB NOT NULL,
+              signature BLOB NOT NULL CHECK (length(signature) = 64),
+              origin_device BLOB CHECK (origin_device IS NULL OR length(origin_device) = 16),
+              origin_incarnation BLOB CHECK (origin_incarnation IS NULL OR length(origin_incarnation) = 16),
+              origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1),
+              entity_type TEXT NOT NULL,
+              entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+              operation_type TEXT NOT NULL,
+              state TEXT NOT NULL CHECK (state IN ('waiting', 'accepted', 'accepted_with_conflict', 'rejected')),
+              reason TEXT,
+              position INTEGER UNIQUE CHECK (position IS NULL OR position >= 1),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              received_at INTEGER NOT NULL,
+              receipt BLOB,
+              UNIQUE (origin_device, origin_incarnation, origin_sequence),
+              CHECK ((origin_device IS NULL) = (origin_incarnation IS NULL)
+                AND (origin_device IS NULL) = (origin_sequence IS NULL)),
+              CHECK ((state = 'waiting') = (position IS NULL))
+            ) STRICT
+            """,
+            "CREATE INDEX core_operations_by_item ON core_operations (entity_type, entity_id, position)",
+            """
+            CREATE TABLE core_change_log (
+              position INTEGER PRIMARY KEY CHECK (position >= 1),
+              operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
+              partitions TEXT NOT NULL,
+              decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict', 'rejected')),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16)
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_causal_edges (
+              dependency_id BLOB NOT NULL CHECK (length(dependency_id) = 16),
+              dependent_id BLOB NOT NULL CHECK (length(dependent_id) = 16),
+              PRIMARY KEY (dependency_id, dependent_id)
+            ) STRICT
+            """,
+            "CREATE INDEX core_causal_edges_by_dependent ON core_causal_edges (dependent_id, dependency_id)",
+            """
+            CREATE TABLE core_causal_waiting (
+              operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
+              origin_key BLOB NOT NULL
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_causal_markers (
+              marker_id INTEGER PRIMARY KEY,
+              operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
+              cursor BLOB CHECK (cursor IS NULL OR length(cursor) = 16)
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_causal_ready (
+              ready_id INTEGER PRIMARY KEY,
+              operation_id BLOB NOT NULL UNIQUE CHECK (length(operation_id) = 16),
+              origin_key BLOB NOT NULL
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_causal_decisions (
+              operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
+              decision TEXT NOT NULL CHECK (decision IN ('applied', 'rejected'))
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_tombstones (
+              entity_type TEXT NOT NULL,
+              entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+              position INTEGER NOT NULL CHECK (position >= 1),
+              PRIMARY KEY (entity_type, entity_id)
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_security_events (
+              event_id INTEGER PRIMARY KEY,
+              kind TEXT NOT NULL CHECK (kind IN ('identity_reuse', 'sequence_reuse')),
+              operation_id BLOB NOT NULL CHECK (length(operation_id) = 16),
+              arriving_digest BLOB NOT NULL CHECK (length(arriving_digest) = 32),
+              known_operation_id BLOB NOT NULL CHECK (length(known_operation_id) = 16),
+              known_digest BLOB NOT NULL CHECK (length(known_digest) = 32),
+              recorded_at INTEGER NOT NULL
+            ) STRICT
+            """,
         ])
 }
