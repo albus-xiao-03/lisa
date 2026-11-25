@@ -40,4 +40,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let receipt = SigningDomain("lisa-r2-receipt-v1\n")
     /// Core's authorization record for one device, returned at enrollment with the roster (plan §8.1.2 step 5.7).
     public static let deviceAuthorization = SigningDomain("lisa-r2-device-authorization-v1\n")
+    /// A device's credential-reset request, signed by its existing operation key (plan §8.1.4).
+    public static let credentialReset = SigningDomain("lisa-r2-credential-reset-v1\n")
 }
