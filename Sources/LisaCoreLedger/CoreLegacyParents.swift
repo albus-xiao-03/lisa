@@ -83,8 +83,9 @@ public struct LegacyTransaction {
     public var signer: any MessageSigning { ledger.signer }
 
     /// Takes Core-signed children into the ledger in this transaction, one outcome each, in order. A child Core's key
-    /// didn't sign is `unverified`.
-    public func intake(_ children: [SignedOperation]) throws -> [CoreIntakeOutcome] {
+    /// didn't sign is `unverified`. Without `projecting`, applied children aren't projected into R1's records yet:
+    /// `project` then writes the entity once, so a correction of several fields is one R1 revision step.
+    public func intake(_ children: [SignedOperation], projecting: Bool = true) throws -> [CoreIntakeOutcome] {
         var outcomes: [CoreIntakeOutcome] = []
         for child in children {
             let envelope: OperationEnvelope
@@ -99,7 +100,8 @@ public struct LegacyTransaction {
             do {
                 outcomes.append(
                     try ledger.intakeOne(
-                        child, envelope: envelope, epoch: epoch, time: time, session: session, records: records))
+                        child, envelope: envelope, epoch: epoch, time: time, session: session, records: records,
+                        project: projecting))
                 try session.execute("RELEASE legacy_intake")
             } catch {
                 try? session.execute("ROLLBACK TO legacy_intake")
@@ -108,6 +110,18 @@ public struct LegacyTransaction {
             }
         }
         return outcomes
+    }
+
+    /// Projects a task's merged state into R1's record once, as one R1 service call: with `forceRevision`, the record
+    /// is written, and its revision raised, even when no field changed, as R1's `TaskService.correct` does.
+    public func project(_ entity: Identifier128, forceRevision: Bool) throws {
+        let view = try CoreTaskFold.view(entity, in: session)
+        let created = try CoreOperationRecords.creationTime(of: entity, in: session).map {
+            Date(timeIntervalSince1970: Double($0) / 1_000)
+        }
+        try TaskProjection.project(
+            view, entityID: entity, createdAt: created, commitTime: Date(timeIntervalSince1970: Double(time) / 1_000),
+            into: records, force: forceRevision)
     }
 }
 
