@@ -949,3 +949,17 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Anchors and sequences:** sequences are Core's. A device anchored by an owner text issued after a rotation learns its anchor's sequence from the transition that activated it, and skips what came before.
 - **The harness's earlier signer change:** M3 harness v10 (and the harnesses that carried its tests) reopened Core with a new key and no transition, and that is now refused by design. Harness v20 rotates first.
 - **Later:** appending the transition to the recovery ledger and backup sets, and anchoring from an independent key backup, come with M3-7, and re-anchoring with S-10.
+
+## D-66 — Device key rotation, and historical keys for committed operations (R2 M3, run 20261124-r2-5462; plan §8.1.3, §8.1.4)
+
+- **The update** (`DeviceKeyUpdate`): `{datasetID, deviceID, previousKey, nextKey, createdAt}`, signed by both keys under `lisa-r2-device-key-update-v1\n`, in the two-signature form of Core's key transitions. It is sent to `POST /v2/devices/current/key-update` under the device's own credential.
+- **Core,** in one write transaction:
+  - **It requires** both signatures, the authenticated device and the dataset, the registry's current key as `previousKey`, a `nextKey` no device holds or held, and no operation of the device waiting for dependencies. A waiting operation would commit after the change under the old key, which no replica could then verify by the roster's current key.
+  - **It then** keeps the previous key in `core_device_keys` (schema v8) with the position from which the next key took over, makes the next key current, and signs a new roster whose device entry lists `previousKeys`.
+  - **New operations** from the device verify only with the next key.
+- **The device:**
+  - It accepts the roster.
+  - It re-signs its own pending and submitted operations with the next key (`ReplicaStore.resignLocalOperations`). The digest leaves out the signature, so their IDs and digests don't change, and a copy a peer holds under the old key is a duplicate of the re-signed one.
+  - Its signing port switches to the next key.
+- **Committed history:** replicas verify the operations in Core's signed pages, repairs and snapshots with the device's current key or, through a defaulted `previousKeys` resolver, the keys it rotated away from. Core's page signature vouches that it committed them.
+- **A defect found while designing this:** the same resolver gives a revoked device's last key for its committed operations. Before, the roster's resolver gave a revoked device no key, so a replica pulling pages that carried that device's operations committed before its revocation would have refused them. "Committed data stays" (§8.1.3) now holds on replicas too. Peers' uncommitted operations still verify only with the current key.
