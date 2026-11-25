@@ -1,15 +1,21 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-25T07:21Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-25T07:35Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
   - M3-5b, S-04 and S-05 over R1's real TLS server with the test-only libcurl pinning transport (harness v14, 5/5);
   - M3-5c, credential reset and challenges (harness v15, 10/10);
-  - M3-5d's first items, an expired certificate and roster renewal (harness v16, 6/6).
+  - M3-5d's first items, an expired certificate and roster renewal (harness v16, 6/6);
+  - M3-4's leftovers: capabilities negotiation with `upgrade_required` (M3-4b, D-63, harness v17, 11/11) and the per-path body limit for `POST /v2/operations` (M3-4c, D-64, harness v18, 12/12);
+  - M3-5d's export-key rotation, with an old archive still opening (harness v19, 13/13).
 
   Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`.
+- **Paused (quota, fifth pause) at 07:35Z,** with 76% used (reading `0b0605d5b94c`, 07:31:58Z) and the reset at 2026-11-25T11:20:00Z.
+  - **Why now:** the next items, signing-key rotation with key history and device key rotation, each need more than the rest of the window.
+  - **Note:** `.tmp/r2/20261124-r2-5462/pause-20261125T0735Z-*.md`.
+  - **The guard:** v2 launches a forked resume after the reset (§9).
 - **The writer:** guard launch `L-64486886ba` (session `30b63dd0-89d3-45d0-b885-bb4305d22093`), resumed at 06:23Z after the fourth pause. The newest reading was 51% at 07:07:37Z (`468d1e92ca48`), with the reset at 11:20:00Z.
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
@@ -164,7 +170,16 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`26b9063`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5c's last code commit):
+**`6e55294`** (`Sources/LisaCoreLedger/CoreExportKeys.swift`, M3-5d's export-key rotation): a full debug build with tests has 0 warnings and the R1 suite passes 376/66 at this HEAD (`m3/suite-at-head-20261125T073144Z/`); M3 harness v19 passes 13/13. The documents follow up to the pause.
+
+Before it, **`1daf65f`** (`Package.swift`, formatting only, after M3-4b and M3-4c):
+- **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 at this HEAD (`m3/suite-at-head-20261125T072924Z/`). The whole-tree lint shows only R1's own finding (`Package.swift` AddLines, now line 196; `m3/lint-tree-20261125T072843Z.log` was taken before the wrap, and shows the three wrapped lines too).
+- **Harnesses:** M3 harness v18 passes 12/12 and v16 6/6.
+- **Release build and regressions:**
+  - A release build of the whole package has 0 warnings (`m3/release-build-20261125T072841Z/`).
+  - Regression package v11 (`m2/run-regressions-v12.sh`, run `m2/regressions-run-20261125T072713Z/`) passes all 24 targets, and v35 and v47 pass too.
+
+Before it, **`26b9063`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5c's last code commit):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 (`m3/suite-after-reset-challenges-20261125T071556Z/`). Lint is clean.
 - **Harnesses:** M3 harnesses v15 (10/10), v14 (5/5) and v16 (6/6) pass.
 - **Regressions:** regression package v9 (`m2/run-regressions-v10.sh`, run `m2/regressions-run-20261125T071659Z/`) passes all 24 targets, and v35 and v47 pass too.
@@ -204,6 +219,9 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
 - **The third resume (2026-11-24T20:33Z, manual, after the VM restart):** fresh reading 20:33:29Z, 2% used, next reset 2026-11-25T01:20:00Z; lease `interactive:321` (holder pid 2737) consumed `P-20261124T135657Z-39d87a`; the guard restarted as pid 2746 with no pending pause. A new alarm, `usage/watchdog_v1.py` (reads the status-line log only, no model call), ends a background task at 70% so the session sees it.
 - **The third pause (2026-11-24T23:44Z, quota):** at M2's boundary, with 72% used (reading `331e864540fb`, 23:42:53Z) and the reset at 2026-11-25T01:20:00Z. The watchdog was stopped, the pause recorded with `guardctl-v2 pause`, and the lease released. Guard v2 (pid 197451) takes a fresh reading after the reset plus 180 s, then launches one forked resume of session `d53fb9c3-…`.
 - **Guard v2 (since 22:52Z):** use `.tmp/r2/20261124-r2-5462/guard/guardctl-v2` (`status`, `stop`, `daemon --detach`, `acquire`, `release`, `pause`, `extend-lineage`). The launcher still calls v1's `guard.py ack` and `pause`, which write the same events. When a session runs under a new session ID (an interactive session moved to a background job), run `guardctl-v2 extend-lineage --owner-pid <its claude pid>` and then take the lease. The lineage is now `4e52d1e9-…`, `d0d5cdce-…` and `d53fb9c3-…`.
+- **The fourth resume and fifth pause (2026-11-25):** guard v2 launched `L-64486886ba` (session `30b63dd0-89d3-45d0-b885-bb4305d22093`, forked from `a360702d-…`) after the 06:20Z reset; it acknowledged at 06:23:39Z with 16% used.
+  - **Work:** M3-5a to M3-5c, M3-5d's expiry, renewal and export-key items, and M3-4's leftovers, from 16% to 76%.
+  - **The pause:** at 07:35Z (reading `0b0605d5b94c`, 76%, reset 11:20:00Z), recorded with `guardctl-v2 pause`. The launch wrapper releases writer.lock when this session exits.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
@@ -233,13 +251,13 @@ No live action or external submission has been requested or performed in this ru
       - **Done, M3-5b** (`docs/VERIFICATION-SCENARIOS.md` M3-5b): S-04 and S-05's TLS cases against R1's real TLS server, through the test-only libcurl pinning transport (`m3/harness-v14/`, a C shim plus `CurlPinAPITransport`, reusable by later harnesses), with certificates made at run time by the openssl CLI. Both modes, the three `ca` chain shapes, every pre-POST refusal with zero POSTs and no token bytes, TLS pin rotation with a peer's roster, and a lost answer replayed in both modes. Harness v14, 5/5.
       - **Done, M3-5c** (`docs/VERIFICATION-SCENARIOS.md` M3-5c; SYNC-PROTOCOL §8g): credential reset (the owner's one-time token, a new verifier signed by the existing key, the old credential refused) and challenges (the plan's message, monotonic expiry, run generation, single use, purpose, epoch and body binding, revocation mid-exchange, an unknown key). The harness found that revocation spent open challenges; fixed in `48a4e01`. Harness v15, 10/10.
       - **Done, M3-5d's first items** (`docs/VERIFICATION-SCENARIOS.md` "M3-5d, first items"): an expired certificate refused at first contact in both modes and by an enrolled device, and roster renewal. Harness v16, 6/6.
+      - **Done, M3-5d's export-key rotation** (`docs/VERIFICATION-SCENARIOS.md`; `CoreExportKeys`): the roster announces the new key, and an old archive still opens with the retired key. Harness v19, 13/13.
       - **Next, the rest of M3-5d** (§8.1.4 at M3):
         - signing-key rotation: a transition record signed by the old and new key with an activation position; devices keep the key history, so receipts, pages and rosters verify with the key valid at their position; a retired key verifies only records from before its retirement; the transition goes to the recovery ledger in M3-7;
         - K2's private half imported on a fresh host (`trust import-key`), with a mismatching key refused;
-        - export-key rotation, with an old archive still opening;
         - device key rotation: a key-update operation signed by the old and the new key, then a new roster;
         - re-anchoring after the signing key is lost, which comes with M3-7's restore (S-10).
-      - **Left open from M3-4:** the 512 KiB per-path limit (D-60) and capabilities negotiation (`upgrade_required`).
+      - **M3-4's leftovers are done:** capabilities negotiation (M3-4b, D-63) and the per-path body limit (M3-4c, D-64).
       - **Practice:** harnesses build in `m3/harness-scratch-m3-5` (the project volume has 28 GB free). Regressions run with `m2/run-regressions-v9.sh` (package v8; scratch on the root volume). Harness v11 and v8 were corrected before their first builds, and v9 and v13 failed to compile; all four are kept unchanged.
    6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
    7. **M3-7:** backups, the recovery ledger, restore, fencing and admission (§8.4.4, §8.4.5, §8.5); S-09, S-10, §19.1.
