@@ -285,6 +285,36 @@ extension ReplicaStore {
         return try? P256Verifier(canonicalSPKI: entry.operationKey)
     }
 
+    /// The keys that may verify a device's operations Core committed (in its signed pages, repairs and snapshots),
+    /// besides its current key: those it rotated away from and, once it is revoked, its last key (§8.1.3, §8.1.4).
+    /// None for a device the newest roster doesn't list.
+    public func rosterHistoricalKeys(of device: Identifier128) throws(ReplicaStoreError) -> [P256Verifier] {
+        guard let entry = try newestRoster()?.roster.device(device) else { return [] }
+        let keys = entry.previousKeys + (entry.status == .revoked ? [entry.operationKey] : [])
+        return keys.compactMap { try? P256Verifier(canonicalSPKI: $0) }
+    }
+
+    /// After this device rotated its operation key (§8.1.4), re-signs its own operations Core hasn't receipted yet,
+    /// pending or submitted, with `key`. The bodies are unchanged, so their IDs and digests stay the same. Returns the
+    /// operations re-signed.
+    @discardableResult
+    public func resignLocalOperations(with key: some MessageSigning) throws(ReplicaStoreError) -> [Identifier128] {
+        try write { session in
+            var resigned: [Identifier128] = []
+            for row in try session.query(
+                "SELECT operation_id, body FROM operations WHERE source = 'local' AND state IN ('pending', 'submitted')"
+            ) {
+                let signature = try DomainSignatures.sign(
+                    try ReplicaColumns.bytes(row[1]), domain: .operation, with: key)
+                try session.query(
+                    "UPDATE operations SET signature = ? WHERE operation_id = ?",
+                    [ReplicaColumns.bytes(signature), row[0]])
+                resigned.append(try ReplicaColumns.identifier(row[0]))
+            }
+            return resigned
+        }
+    }
+
     static func encodeIntermediates(_ intermediates: [[UInt8]]) throws(ReplicaStoreError) -> [UInt8] {
         do {
             return try CanonicalEncoder.encode(
