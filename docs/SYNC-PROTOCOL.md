@@ -57,6 +57,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-archive-v1\n` | A protected archive's header and ciphertext digests (§8.6.6) |
 | `lisa-r2-change-page-v1\n` | Core's change page over its canonical body (§8.4.2; §8a) |
 | `lisa-r2-custody-v1\n` | A peer's custody acknowledgement over its canonical body (§8.6.1, §8.7; §8c) |
+| `lisa-r2-receipt-v1\n` | Core's receipt for one operation over its canonical body (§8.2.1; §8d) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -271,6 +272,24 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 - **Kept apart:** a custody record never changes the entry's Core state, receipt, overlay or follow-ups. The origin never discards an operation because of it.
 - **The three kinds of safety** are reported separately: saved on this device, held by peers, and synced with Core. Only a final Core acceptance, from a receipt or a page, gives the last (R2-L15). A peer receipt never becomes a Core-committed status.
 - **Not yet on the replica:** the store records receipts the sync engine verified. Core's receipt format and its signature check are specified with Core at M3, and the relay of receipts and acknowledgements over the nearby link at M6.
+
+## 8d. Core receipts and the ledger's intake (plan §8.2.1, §8.4.1; R2-SYNC-03, R2-L14, R2-L15)
+
+- **Receipt** (`CoreReceipt`): Core signs it under `lisa-r2-receipt-v1\n` over the canonical body, at most 16 KiB.
+  - **Fields:** `{"datasetID", "digest", "epochID", "operationID", "outcome"}`, plus as the outcome requires: `position` on final receipts; `missing`, ascending and never empty, on the provisional `waiting_for_dependencies`; `reason` (lowercase letters and `_`, at most 64 bytes) and an optional `recoveryHint` (at most 1 KiB) on `rejected`.
+  - **Outcomes:** `accepted`, `accepted_with_conflict`, `rejected`, `waiting_for_dependencies`.
+  - **Rejection reasons so far:** `malformed`, `unknown_item`, `dependency_rejected`, `dependency_cycle`, `unsupported_operation`.
+  - **On a replica:** a receipt counts as Core commitment only when it verifies by Core's key from the verified key history (`ReceiptSigning.verify`).
+- **Intake at Core** (`CoreLedger.intake`):
+  - **Before the transaction:** each operation is verified (dataset, the origin's roster key, the signature). An unverified one gets no receipt.
+  - **Then one write transaction, with a savepoint per operation:**
+    1. The duplicate rules: a `duplicate` returns its current receipt; `identity_reuse` and `sequence_reuse` are refused with a security event.
+    2. Support and payload checks: a failure is rejected with a receipt.
+    3. Causal readiness: a waiting operation gets a provisional receipt naming what it misses. A ready one is merged, projected into R1's records, and logged with its final receipt.
+  - **Release:** waiting operations are released in bounded steps (`releaseStep`): at most 256 edges and 256 operations each, round-robin across origins.
+  - **Lookup:** `receipt(for:)` returns an operation's current receipt, provisional or final.
+  - **Positions:** every decision, a rejection included, takes the next commit position and is a change-log entry of its item's partition.
+- **Pages from Core** (`CoreLedger.changePage`): a signed page per partition (§8a) carries every decision in `(after, to]`. When entries remain, `to` is the last entry's position; otherwise it is the newest position. A page that would pass 512 KiB carries fewer entries.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
