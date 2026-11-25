@@ -18,7 +18,7 @@ public struct Migration: Hashable, Sendable {
 /// Lisa's migrations, oldest first.
 public enum Migrations {
     public static let all: [Migration] = [
-        version1, version2, version3, version4, version5, version6, version7, version8,
+        version1, version2, version3, version4, version5, version6, version7, version8, version9,
     ]
 
     /// The newest schema version this build understands.
@@ -390,5 +390,45 @@ public enum Migrations {
               PRIMARY KEY (device_id, sequence)
             ) STRICT
             """
+        ])
+
+    /// R2's legacy parents (plan §8.12.2): one per R1 request, keyed by caller scope and request ID, with the
+    /// fingerprint Core recomputed from the request's bytes, the route and origin path, the state, the child set's
+    /// size and digest, the recorded answer and when its body expires; and each child's disposition. The parent is
+    /// Core-only and never replicated; its compact form lives as long as the dataset.
+    static let version9 = Migration(
+        version: 9, summary: "R2 legacy parents and their children's dispositions",
+        statements: [
+            """
+            CREATE TABLE core_legacy_parents (
+              scope TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              fingerprint TEXT NOT NULL,
+              route TEXT NOT NULL,
+              origin_path TEXT NOT NULL CHECK (origin_path IN ('v1', 'import', 'migrated')),
+              state TEXT NOT NULL CHECK (state IN ('open', 'awaiting_administrative_review', 'complete')),
+              child_count INTEGER CHECK (child_count IS NULL OR child_count >= 0),
+              set_digest BLOB CHECK (set_digest IS NULL OR length(set_digest) = 32),
+              status INTEGER,
+              body BLOB,
+              body_expires_at INTEGER,
+              created_at INTEGER NOT NULL,
+              completed_at INTEGER,
+              PRIMARY KEY (scope, request_id),
+              CHECK ((state = 'complete') = (status IS NOT NULL))
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_legacy_children (
+              scope TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              child_index INTEGER NOT NULL CHECK (child_index >= 0),
+              child_id BLOB NOT NULL UNIQUE CHECK (length(child_id) = 16),
+              discriminator TEXT NOT NULL,
+              disposition TEXT CHECK (disposition IN ('applied', 'applied_with_conflict', 'already_present', 'refused',
+                'not_reached', 'held_for_administrative_review', 'pending_behind_review')),
+              PRIMARY KEY (scope, request_id, child_index)
+            ) STRICT
+            """,
         ])
 }
