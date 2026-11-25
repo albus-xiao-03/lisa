@@ -1,5 +1,6 @@
 // Assembles one request at a time from NIO's head, body and end parts. NIO enforces no body limit and does not answer
-// `Expect: 100-continue`, so both happen here (RFC 9110 §10.1.1, §15.5.14).
+// `Expect: 100-continue`, so both happen here (RFC 9110 §10.1.1, §15.5.14). The limit is the server's, or a larger one
+// configured for the request's exact path (R2's `POST /v2/operations`); exceeding either gets 413 and a close.
 
 import NIOCore
 import NIOHTTP1
@@ -21,12 +22,17 @@ struct RequestAssembler {
 
     let maxBodyBytes: Int
     let maxDiscardBytes: Int
+    let bodyLimitsByPath: [String: Int]
     private var head: HTTPRequestHead?
     private var body: ByteBuffer?
+    /// The current request's limit.
+    private var limit: Int
 
-    init(maxBodyBytes: Int, maxDiscardBytes: Int) {
+    init(maxBodyBytes: Int, maxDiscardBytes: Int, bodyLimitsByPath: [String: Int] = [:]) {
         self.maxBodyBytes = maxBodyBytes
         self.maxDiscardBytes = maxDiscardBytes
+        self.bodyLimitsByPath = bodyLimitsByPath
+        limit = maxBodyBytes
     }
 
     mutating func consume(_ part: HTTPServerRequestPart) -> Step {
@@ -36,8 +42,8 @@ struct RequestAssembler {
         case .body(var chunk):
             guard let head else { return .reject(.malformed, version: .http1_1, drain: false) }
             let received = (body?.readableBytes ?? 0) + chunk.readableBytes
-            guard received <= maxBodyBytes else {
-                return .reject(.payloadTooLarge(limit: maxBodyBytes), version: head.version, drain: true)
+            guard received <= limit else {
+                return .reject(.payloadTooLarge(limit: limit), version: head.version, drain: true)
             }
             if body == nil {
                 body = chunk
@@ -57,6 +63,8 @@ struct RequestAssembler {
     private mutating func begin(_ head: HTTPRequestHead) -> Step {
         self.head = head
         body = nil
+        let path = head.uri.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+        limit = path.flatMap { bodyLimitsByPath[$0] } ?? maxBodyBytes
         // The parser has already refused malformed or conflicting lengths.
         let declared = head.headers["content-length"].first.flatMap { Int($0) }
         let chunked = head.headers["transfer-encoding"].contains { $0.lowercased().contains("chunked") }
@@ -66,10 +74,10 @@ struct RequestAssembler {
         if expectsContinue && (expectations.count != 1 || expectations[0].lowercased() != "100-continue") {
             return .reject(.expectationFailed, version: head.version, drain: false)
         }
-        if let declared, declared > maxBodyBytes {
+        if let declared, declared > limit {
             // A client waiting for 100 (Continue) has sent nothing to discard.
-            let drain = !expectsContinue && declared - maxBodyBytes <= maxDiscardBytes
-            return .reject(.payloadTooLarge(limit: maxBodyBytes), version: head.version, drain: drain)
+            let drain = !expectsContinue && declared - limit <= maxDiscardBytes
+            return .reject(.payloadTooLarge(limit: limit), version: head.version, drain: drain)
         }
         if expectsContinue && (chunked || (declared ?? 0) > 0) { return .sendContinue }
         return .needMore
