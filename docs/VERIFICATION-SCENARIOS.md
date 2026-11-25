@@ -1115,3 +1115,57 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **A lost answer in both modes:** the pending item keeps the saved policy, and the replay repeats every TLS check with the identical request body. One device, one consumption, two POSTs.
 - **Not yet covered here:** an expired certificate, Design B certificates, and the X2 device runs (owner).
 - **Result: PASS** for this slice.
+
+### M3-5c Credential reset and challenges (R2-TRUST-03 and R2-CORE-06 in part; plan §8.1.4 credential reset, §8.1.5; S-10's challenge cases)
+
+- **Code:**
+  - `CredentialReset` and `Challenge` (LisaSyncProtocol); `CredentialResetSigning`, `ChallengeSigning` and the domain `lisa-r2-credential-reset-v1\n` (LisaTrust).
+  - `CoreTrustRequests` and `CoreTrust`'s monotonic clock and run generation (LisaCoreLedger).
+  - The credential-free routes `POST /v2/devices/current/credential-reset` and `POST /v2/challenges` (LisaCoreAPI), and `HTTPTrustRequests` (LisaSyncHTTP).
+  - Records: `docs/SYNC-PROTOCOL.md` §8g.
+- **Found by the harness:**
+  - `CoreTrust.revoke` spent the device's open challenges, so a response after a revocation came back as a reuse (`used`) instead of `revokedDevice`. The caller needs `revokedDevice` to quarantine the upload (§8.1.5).
+  - Revocation now leaves challenges to their verdict, as the plan's revoke (§8.1.3) lists nothing about challenges.
+  - The harness's first run (`harness-v15-test-20261125T071451Z.log`) shows the failure, and its second run passes on the fixed source.
+- **Full build and R1 suite:** `m3/suite-after-reset-challenges-20261125T071556Z/`, debug build 0 warnings, 376 tests in 66 suites passed. `swift format lint` is clean.
+- **Harness:**
+  - **`m3/harness-v15/`** (v10's 8 tests unchanged, plus 2): 10/10 (`harness-v15-test-20261125T071536Z.log`).
+  - **`m3/harness-v14/`** (TLS) passes 5/5 again on these sources (`harness-v14-test-20261125T071556Z.log`).
+- **Regressions:** regression package v9 (`m2/make-regressions-v9.py`, harness v10 replaced by v15, which holds its tests unchanged; runner `m2/run-regressions-v10.sh`; run `m2/regressions-run-20261125T071659Z/`) passes all 24 targets, and v35 and v47 pass in their own packages.
+- **Cases:**
+  - **Credential reset over loopback HTTP:**
+    - The owner's token with a new verifier signed by the device's existing key replaces the credential: the old one gets 401 and the new one 200.
+    - A request signed by another key is refused with 403 `credential_reset_invalid`, and the token stays usable.
+    - Refused afterwards: a reused token (410 `credential_reset_used`); a token past 10 minutes (410 `credential_reset_expired`); a wrong token (403); an unknown device (404).
+    - After revocation, no token is issued, and an open token is refused (403 `device_revoked`). One `credential_reset` trust event.
+  - **Challenges:**
+    - Issued over HTTP with the plan's fields (120 seconds, a 32-byte nonce), answered with the operation key, and verified once; a second use is refused (`used`).
+    - **Refused:** after 121 seconds on Core's monotonic clock (`expired`); a body changed after signing (`invalidSignature`); a response signed for another epoch (`invalidSignature`, the genuine response still verifying); another purpose (`purposeMismatch`); a Core restart between issue and response (`otherRun`); an unregistered device, or an enrolled device answering with a key the registry doesn't hold (`unknownKey`, the trust-bundle path); an unknown challenge ID (`unknown`).
+    - **Unchanged:** a one-hour backward wall-clock step.
+    - **A revocation between issue and response:** refused as `revokedDevice`, after which the challenge is spent.
+    - **A malformed issue body:** 400.
+- **Not yet covered here:**
+  - **Consumers:** the routes that consume a proof come with M3-7 and the migration spans, and so does quarantine storage for a revoked device's upload.
+  - **Epochs:** an epoch change between issue and response is checked by code (`otherEpoch`); M3-7 will exercise it, because no epoch changes before restore exists.
+- **Result: PASS** for this slice.
+
+### M3-5d, first items: an expired certificate and roster renewal (plan §8.1.4 "an expired certificate is never accepted", §8.1.3 renewal)
+
+- **Harness:** `m3/harness-v16/` (v14's 5 TLS tests unchanged, plus 1), 6/6 on its first run (`harness-v16-test-20261125T071909Z.log`). The expired leaves were made with OpenSSL 3.5.9's `-not_before`/`-not_after`, valid only on 2025-01-01.
+- **Cases:**
+  - **First contact with an expired leaf:**
+    - In `pin` mode, the pin-and-host probe passes, but the POST's own connection refuses the expired pinned leaf as its anchor, so no POST reaches Core.
+    - In `ca` mode, the anchors GET's own connection refuses it, so no GET reaches Core either.
+    - Either way, nothing of the request leaves the device.
+  - **An enrolled `ca` device:** it refuses Core once Core serves an expired leaf with the same key and pin.
+  - **Roster renewal,** with the interval configured to 60 seconds:
+    - `renewRosterIfDue()` returns the current roster until the interval passes, then signs the next version with a later `issuedAt`.
+    - The device fetches it over TLS, accepts it, and then refuses its older roster.
+- **Code:** none changed; this exercises M3-5a's `renewRosterIfDue()` and the transport's evaluation.
+- **Still open in M3-5d:**
+  - signing-key rotation with dual-signed transitions, key history and historical receipts;
+  - K2's private half imported on a fresh host, with a mismatching key refused;
+  - export-key rotation, with an old archive still opening;
+  - device key rotation;
+  - re-anchoring, with M3-7's restore and S-10.
+- **Result: PASS** for these items.
