@@ -958,3 +958,21 @@ Run directories exist only in this sandbox. Tracked records like this file reach
     - **After:** the pending capture stays in the view and in the journal, pending, and found by search. Core's tasks equal Core's views.
   - **A tampered chunk:** one byte changed is refused as not included under the signed root, and the installation doesn't complete.
 - **Result: PASS.** Snapshots of windowed bucket partitions, and repairs from Core, come with the change feed for calendar occurrences.
+
+### M3-3 Core receipts verified on a replica (R2-L15 with Core's receipts; plan §8.2.1)
+
+- **Code:** in LisaReplicaStore, `recordReceipt(_:coreKey:)` and the `unverifiedReceipt` error case; `docs/SYNC-PROTOCOL.md` §8d, with the receipt's vector.
+- **Harness:** `m3/harness-v4/`, 3/3 on its first run (helpers copied from v2).
+  - **Regression package v5** (`m2/make-regressions-v5.py`, run `m2/regressions-run-20261125T015607Z/`): v4's targets plus M3 v3 and v4, 22 in all. All pass with their usual counts, and so do v35 and v47. The volume then had 1.1 GB free.
+- **Full build and R1 suite:** `m3/suite-after-replica-receipts-20261125T015555Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Cases:**
+  - **Verified receipts recorded:**
+    - The iPad's capture, accepted by Core, is recorded from Core's final receipt: accepted at position 1 and synced with Core. It is still an overlay until canonical state installs, and its bytes are the receipt's body and signature. Recording it again changes nothing.
+    - A note waiting for an operation Core lacks is recorded from Core's provisional receipt as waiting, with no position.
+  - **Refused, changing nothing:**
+    - a receipt signed by another key (`invalidSignature`);
+    - Core's receipt for another dataset (`wrongDataset`);
+    - Core's receipt for another digest (`receiptMismatch`).
+    - The entry stays pending, with no receipt and not synced.
+  - **Wire form:** the vector of §8d decodes back to the same value. A provisional receipt lists its missing IDs, and a final receipt without a position is refused.
+- **Result: PASS.** With M2-19, a peer's acknowledgement never counts as commitment, and a receipt counts only when it verifies by Core's key.
