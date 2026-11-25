@@ -293,6 +293,26 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 - **Full snapshots from Core** (`CoreLedger.snapshot`): one consistent cut, at the newest position, of the named partitions (§8b). Every accepted operation at or below the cut goes into chunks in position order, with rejections left out. A chunk that would pass 512 KiB carries fewer entries, and the header Core signs has the cut as its version.
 - **Pages from Core** (`CoreLedger.changePage`): a signed page per partition (§8a) carries every decision in `(after, to]`. When entries remain, `to` is the last entry's position; otherwise it is the newest position. A page that would pass 512 KiB carries fewer entries.
 
+## 8e. The v2 sync routes (plan §8.12.1, §8.6.5)
+
+- **Common rules:**
+  - Every request carries the device's bearer credential and `Lisa-API-Version: 2.0`.
+  - Bodies are canonical JSON (`SyncWire`); exact signed bytes travel as strict base64url in `{"body", "signature"}` objects.
+  - Any answer but 200 carries `{"code", "message"}`: 401 `unauthenticated`, 400 `invalid_request`, 404 `not_found`, 503 `unavailable`.
+- **`GET /v2/capabilities`:** answers `{"apiVersion": "2.0", "datasetID", "epochID", "head"}`, where `head` is the newest commit position.
+- **`POST /v2/operations`:** takes `{"operations": [signed, …]}` (1–100). It answers `{"outcomes": [...]}`, one per operation in order:
+  - `{"outcome": "receipted" | "duplicate", "receipt": signed}`;
+  - `{"outcome": "identity_reuse" | "sequence_reuse"}`;
+  - `{"outcome": "unverified", "reason"}`.
+- **`POST /v2/receipts/lookup`:** takes `{"operationIDs": [hex, …]}` (1–100). It answers `{"receipts": [{"operationID", "receipt"?}]}`, each with the current receipt, provisional or final, or none.
+- **`GET /v2/changes?partition=&after=&limit=`:** answers `{"page": signed}` with Core's signed page from `after` (§8a, §8d), or `{}` when nothing was committed after it. `limit` is 1–512, 256 by default.
+- **The client** (`LisaSyncEngine.CoreSession` over `LisaSyncHTTP.HTTPCoreTransport`):
+  1. Checks the dataset.
+  2. Pulls pages per partition from each cursor until Core has nothing newer.
+  3. Signs held drafts.
+  4. Submits pending local operations in saved order, in batches of 100, and records each receipt only after verifying it by Core's key. What Core refuses without a receipt stays in the journal.
+  5. Pulls again.
+
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
 Rosters with key history, causal summaries, snapshot manifests and reviewed-set artifacts can span several pages:
