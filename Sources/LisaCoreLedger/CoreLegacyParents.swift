@@ -119,9 +119,14 @@ public struct LegacyTransaction {
         let created = try CoreOperationRecords.creationTime(of: entity, in: session).map {
             Date(timeIntervalSince1970: Double($0) / 1_000)
         }
-        try TaskProjection.project(
+        let revision = try TaskProjection.project(
             view, entityID: entity, createdAt: created, commitTime: Date(timeIntervalSince1970: Double(time) / 1_000),
             into: records, force: forceRevision)
+        guard
+            let position = try session.query("SELECT last_position FROM core_dataset WHERE singleton = 1").first?.first?
+                .integer
+        else { throw CoreLedgerError.corrupt("the dataset row") }
+        try TaskProjection.recordRevision(revision, of: entity, at: position, in: session)
     }
 }
 
@@ -201,6 +206,16 @@ extension CoreLedger {
             }
         } catch {
             throw CoreLedgerError.classify(error)
+        }
+    }
+
+    /// The commit position up to which R1's revision `revision` of a task reflects Core's commits, as projected.
+    public func projectionPosition(of entity: Identifier128, revision: Int64) throws(CoreLedgerError) -> Int64? {
+        try read { session, _ in
+            try session.query(
+                "SELECT position FROM core_projection_revisions WHERE entity_id = ? AND revision = ?",
+                [CoreColumns.id(entity), .integer(revision)]
+            ).first?.first?.integer
         }
     }
 
