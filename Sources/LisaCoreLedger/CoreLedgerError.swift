@@ -14,6 +14,8 @@ public enum CoreLedgerError: Error, Hashable, Sendable {
     case datasetMismatch
     /// Signing a receipt or a page failed.
     case signingFailed(String)
+    /// Encoding a page, a chunk or a header failed.
+    case encodingFailed(String)
 
     static func classify(_ error: any Error) -> CoreLedgerError {
         if let error = error as? CoreLedgerError { return error }
