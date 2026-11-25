@@ -95,8 +95,9 @@ enum TaskProjection {
         return try records.update(task).revision.value
     }
 
-    /// Records that R1's revision `revision` of `entityID` reflects every commit up to `position`, so a v1 edit
-    /// "observed at projection revision N" can be mapped to the pieces it saw (plan §8.3.2, §8.12.2).
+    /// Records that R1's revision `revision` of `entityID` reflects every commit up to `position` in the dataset's
+    /// current epoch, so a v1 edit "observed at projection revision N" can be mapped to the pieces it saw (plan §8.3.2,
+    /// §8.12.2).
     static func recordRevision(
         _ revision: Int64?, of entityID: Identifier128, at position: Int64, in session: SQLiteSession
     )
@@ -104,8 +105,14 @@ enum TaskProjection {
     {
         guard let revision else { return }
         try session.query(
-            "INSERT OR REPLACE INTO core_projection_revisions (entity_id, revision, position) VALUES (?, ?, ?)",
-            [CoreColumns.id(entityID), .integer(revision), .integer(position)])
+            """
+            INSERT OR REPLACE INTO core_projection_revisions (entity_id, revision, epoch_id, position)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                CoreColumns.id(entityID), .integer(revision), CoreColumns.id(try CoreLedger.epoch(in: session)),
+                .integer(position),
+            ])
     }
 
     /// R1's status for a merge status: an open task keeps R1's own in-progress or blocked state.
