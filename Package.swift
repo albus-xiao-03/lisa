@@ -69,6 +69,7 @@ let package = Package(
         .library(name: "LisaCoreAPI", targets: ["LisaCoreAPI"]),
         .library(name: "LisaSyncEngine", targets: ["LisaSyncEngine"]),
         .library(name: "LisaSyncHTTP", targets: ["LisaSyncHTTP"]),
+        .library(name: "LisaLegacyRequests", targets: ["LisaLegacyRequests"]),
         .executable(name: "lisa", targets: ["LisaCLI"]),
     ],
     dependencies: [
@@ -136,6 +137,10 @@ let package = Package(
         // R2 sync engine (plan §7.2.1, §8.6.5): the replica's Core session over the CoreTransport port.
         .target(
             name: "LisaSyncEngine", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaReplicaStore", "LisaCrypto"]),
+        // R2 legacy requests (plan §7.2.1, §8.12.2): the one conversion of an R1 request into its parent and its complete
+        // set of Core-signed children. It starts with the children's derivation; Core's parent records, R1's route
+        // semantics and the router's hook follow in M3-6.
+        .target(name: "LisaLegacyRequests", dependencies: ["LisaSyncProtocol", "LisaTrust"]),
         // R2 production CoreTransport (plan §7.2.1, §8.6.5): the v2 messages over LisaClient's transport.
         .target(
             name: "LisaSyncHTTP", dependencies: ["LisaSyncEngine", "LisaClient", "LisaAPIContract", "LisaSyncProtocol"]),
