@@ -18,6 +18,9 @@ public final class CoreAPIRouter: Sendable {
     public static let versionHeader = "Lisa-API-Version"
     /// The capabilities a client requires, comma-separated; any Core lacks gets `upgrade_required` (§8.12.1).
     public static let requiredFeaturesHeader = "Lisa-Required-Features"
+    /// The server's larger body limits for v2 paths (plan §8.12.1): `POST /v2/operations` takes up to 512 KiB of signed
+    /// bytes. The composition root passes them as `APIServerLimits.bodyLimitsByPath`; every other path keeps R1's limit.
+    public static let bodyLimits = ["/v2/operations": SyncWire.maximumBodyBytes]
     /// What this Core offers, strictly ascending.
     public static let features = [
         "challenges", "changes", "credential-reset", "enrollment", "operations", "receipts", "trust",
