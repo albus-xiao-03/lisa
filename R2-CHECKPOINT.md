@@ -173,7 +173,7 @@ No live action or external submission has been requested or performed in this ru
       - Receipt lookup (L14).
       - The projection follows §8.3.4: deadline earliest, estimate longest, priority highest, splittable false, title by display order. It needs R1's `LisaTask` fields (`changeSequence`, `revision`, `ownerCorrected`, `TaskID`) read from R1's code before writing it.
    2. **M3-2, the change feed (§8.4.2):** Core builds signed change pages per partition from the change log. The test is end to end, Core to a replica, in process.
-   3. **M3-3:** full snapshots and bucket snapshots from Core (§8.4.3).
+   3. **M3-3:** full snapshots and bucket snapshots from Core (§8.4.3). Full snapshots of unwindowed partitions are done (`docs/VERIFICATION-SCENARIOS.md` M3-2). Bucket snapshots and repairs from Core come with the calendar change feed (span 2).
    4. **M3-4:** `LisaSyncHTTP`, `LisaCoreAPI` v2 (§8.12.1), and `LisaSyncEngine`'s Core session (§8.6.5), end to end against the real TLS server.
    5. **M3-5:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05.
    6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
