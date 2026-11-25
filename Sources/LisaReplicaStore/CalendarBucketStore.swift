@@ -154,7 +154,8 @@ extension ReplicaStore {
     /// meanwhile, each in its own transaction. Returns their outcomes for this partition.
     @discardableResult
     public func publishBucketRepair(
-        _ partition: String, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+        _ partition: String, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?,
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }
     ) throws(ReplicaStoreError) -> [PartitionPageOutcome] {
         guard let dataset = try identity().datasetID else { throw .notEnrolled }
         try write { session in
@@ -203,7 +204,8 @@ extension ReplicaStore {
             for entry in page.entries {
                 envelopes.append(
                     try entry.operation.map {
-                        try OperationSigning.verify($0, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey)
+                        try OperationSigning.verify(
+                            $0, dataset: dataset, deviceKey: deviceKey, previousKeys: previousKeys, coreKey: coreKey)
                     })
             }
             return try self.apply(page, signed: signed, envelopes: envelopes, only: partition, in: session)[partition]
@@ -244,13 +246,15 @@ extension ReplicaStore {
     @discardableResult
     public func finishRepair(
         _ partition: String, snapshotHeaderBody: [UInt8], snapshotHeaderSignature: [UInt8], pages: [PagedArtifactPage],
-        coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+        coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?,
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }
     ) throws(ReplicaStoreError) -> [PartitionPageOutcome] {
         try beginBucketRepair(
             partition, snapshotHeaderBody: snapshotHeaderBody, snapshotHeaderSignature: snapshotHeaderSignature,
             coreKey: coreKey)
         for page in pages { try stageBucketRepairChunk(partition, page) }
-        let outcomes = try publishBucketRepair(partition, coreKey: coreKey, deviceKey: deviceKey)
+        let outcomes = try publishBucketRepair(
+            partition, coreKey: coreKey, deviceKey: deviceKey, previousKeys: previousKeys)
         while try cleanUpRepairs() > 0 {}
         return outcomes
     }
