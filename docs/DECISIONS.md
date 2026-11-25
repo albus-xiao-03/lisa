@@ -911,3 +911,12 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Revoked origins:** operations from a revoked device are refused before anything is stored (`unverified`, because the registry gives no key), whoever submits them and whatever time they claim. Committed data stays.
 - **Device-side trust lives in the replica:** `trust_state` and `trust_rosters`, added to the unreleased replica schema v1 in place. The pending item, which holds the secret-bearing request, is a port (`PendingEnrollmentStore`): the Keychain on Apple platforms, a file-backed stand-in in the harnesses.
 - **The owner's intended name and class** from issuance go into the roster. The request's class must match the intended one; the device's own name is informational.
+
+## D-63 — Capabilities negotiation: Core's features and `upgrade_required` (R2 M3, run 20261124-r2-5462; plan §8.12.1)
+
+- **Capabilities** gain `features`, strictly ascending tokens for what this Core offers: `challenges`, `changes`, `credential-reset`, `enrollment`, `operations`, `receipts`, `trust`. Later spans add theirs.
+- **Version:** a request whose `Lisa-API-Version` names another major version gets 426 `upgrade_required`, before any route runs (an enrollment included, so no attempt is counted). Another minor version is answered.
+- **A request without the header** is taken as 2.x, so the clients and harnesses written before this decision keep working. Every Lisa v2 client sends the header.
+- **Required capabilities:** a client names them in `Lisa-Required-Features`, comma-separated; any Core lacks gets 426 `upgrade_required`.
+- **The client side:** `CoreSession` refuses a Core whose capabilities name another major version, before it touches the replica.
+- **Still to come:** the other capabilities fields the plan lists (schema version, the head's confirmation, trust and policy versions, the backup catalogue, the recovery stage, the ready-queue length and redacted health) arrive with the spans that own them.
