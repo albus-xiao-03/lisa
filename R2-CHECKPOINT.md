@@ -12,7 +12,8 @@
   - M3-5d's export-key rotation, with an old archive still opening (harness v19, 13/13);
   - M3-5d's signing-key rotation with key history and K2 on a fresh host (D-65, harness v20, 15/15), and device key rotation with historical keys for committed operations (D-66, harness v22, 16/16).
 
-  Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`. M3-5 is done except re-anchoring (with M3-7) and the conditional Design B certificates; M3-6 is next.
+  Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`. M3-5 is done except re-anchoring (with M3-7) and the conditional Design B certificates.
+- **M3-6 begun:** M3-6a's legacy children and Core's conversion frame (harness v26), and one R1 revision step per R1 call with the projection-revision map (D-68; harnesses v28 and v30). Legacy edits' "observed at projection revision N" is next (§11).
 - **The writer:** guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause (`P-20261125T073323Z-109199`), with 10% used (reading `8cc41676af12`, 11:24:02Z) and the reset at 2026-11-25T16:20:00Z.
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
@@ -167,7 +168,15 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`1bcd470`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5d's device key rotation):
+**`47f32cf`** (`Sources/LisaSyncProtocol/OperationEnvelope.swift`, M3-6a's observed projection revision): a full debug build with tests has 0 warnings and the R1 suite passes 376/66 (`m3/suite-after-observed-revision-20261125T120825Z/`); M3 harness v31 passes 9/9. Regression package v17 (`m2/run-regressions-v18.sh`, run `m2/regressions-run-20261125T120847Z/`, with harness v31 in place of v30) passes all 25 targets, and v35 and v47 pass too; 23.5 GB were free at its end.
+
+Before it, **`bac4ab8`** (`Sources/LisaCoreLedger/CoreLegacyParents.swift`, M3-6a's projection-revision map):
+- **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 with schema v10 (`m3/suite-after-projection-revisions-20261125T120421Z/`). Lint is clean.
+- **Harnesses:** M3 harness v30 passes 8/8; v28 fails its two value checks, as D-68 records.
+- **Regressions:** regression package v16 (`m2/run-regressions-v17.sh`, run `m2/regressions-run-20261125T120453Z/`) passes all 25 targets, and v35 and v47 pass too.
+- **Commits that don't build alone:** `42fe54f` (`OperationOrigin.swift`) needs `abf192f`. `2b4449e`'s message says "add:" for a function added to an existing file; there are no amends.
+
+Before it, **`1bcd470`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5d's device key rotation):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 with schema v8 (`m3/suite-after-device-keys-20261125T114317Z/`). Lint is clean.
 - **Harnesses:** M3 harnesses v22 (16/16) and v16 (6/6) pass.
 - **Regressions:** regression package v14 (`m2/run-regressions-v15.sh`, run `m2/regressions-run-20261125T114435Z/`) passes all 24 targets, and v35 and v47 pass too.
@@ -261,8 +270,31 @@ No live action or external submission has been requested or performed in this ru
       - **M3-4's leftovers are done:** capabilities negotiation (M3-4b, D-63) and the per-path body limit (M3-4c, D-64).
       - **Practice:** the newest harnesses are v22 (loopback, every M3-5 suite) and v16 (TLS). Regression package v14 (`m2/make-regressions-v14.py`, runner `m2/run-regressions-v15.sh`) adds LisaArchive to the products and runs no target when its build fails. v12's run was invalid: its build failed and its runner ran the targets against the previous build. Don't edit Swift sources while a regression runs, because v35 and v47 rebuild from the working tree at its end. Harnesses build in `m3/harness-scratch-m3-5` (the project volume has 28 GB free). Regressions run with `m2/run-regressions-v9.sh` (package v8; scratch on the root volume). Harness v11 and v8 were corrected before their first builds, and v9 and v13 failed to compile; all four are kept unchanged.
    6. **M3-6, next:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03. §8.12.2 has been read in full (2026-11-25T11:50Z). The slices:
-      - **M3-6a:** the module; Core's parent records (scope, request ID, Core-recomputed fingerprint, child set, dispositions, recorded answer, expiry) in a new schema version; the incarnation derivation (`lisa-v1-incarnation-v1`) beside M1's `LegacyChildIdentity`; Core-signed children through intake; `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics (revision 409, all fields validated together, field children then the status child); replay with `Lisa-Replayed`, and 422 `requestIDReused`.
-        - **Seams to settle first:** R1's `APIRouter.idempotent` (`Sources/LisaAPI/APIRouter.swift:108-150`, scoped key `caller.scope:requestID`, fingerprint over method, path, sorted query and body) and its handlers (`WorkHandlers.createTask`, `updateTask`). The plan's module table (§7.2.1) has LisaLegacyRequests linked by Core's LisaAPI and LisaCoreAPI, so R1's router calls the converter for mutating routes, inside its idempotency path. R1's `DTOMapping` (internal to LisaAPI) then builds the replies as before. LisaApplication's `createTask`, `correctTask` and `setTaskStatus` hold the semantics to reproduce.
+      - **M3-6a, in progress:**
+        - **Done:** the legacy origin with its derived incarnation and sequence (D-67), `LegacyChildSet` (children as a pure function of the request; `docs/SYNC-PROTOCOL.md` §8j) and Core's conversion frame (schema v9, `CoreLedger.legacyConvert`, `LegacyTransaction.intake`). Harness v26, 7/7.
+        - **Step 3 begun (D-68):** the deferred projection, one R1 revision step per R1 call (harness v28's revision checks), and the projection-revision map (schema v10; harness v30, 8/8).
+        - **Next, the exact action:** legacy edits' "observed at projection revision N" (§8.3.2 line 887, "Core maps N to the pieces observed at that revision when it decides the child").
+          - **The finding:** without it, edits are `accepted_with_conflict` (harness v29's diagnostic).
+          - **The design** (§8.3.2 read at 12:10Z; line 887 names v1 notes edits; §8.12.2's revision check covers fields):
+            - A child is decided only when R1's `expectedRevision` equals the current projection revision N, so the edit saw exactly the state up to P(N), the position revision N reflects.
+            - **The body** carries N in its `ObservedSet` (`projectionRevision`, **done**: `b6abecb`, `47f32cf`; harness v31, 9/9), so it stays a pure function of the request.
+            - **At decision,** Core resolves N through `core_projection_revisions` (add the epoch) to a horizon `(epoch, "tasks", P(N))`, stores it with the operation (a new `core_operations` column), and applies it in `CoreTaskFold.view` (`Sources/LisaCoreLedger/CoreTaskFold.swift:28-50`, which replays with `ObservedCoverage(horizon, pieces)`).
+            - **For replicas,** Core serves the resolved horizon in the Core-signed change-page entry (`ChangeEntry`, a new optional field). Replicas keep it with the canonical operation and fold with it, since they don't hold the map. "Decisions are made per epoch" (§8.12.2): another epoch may resolve the same bytes differently.
+          - **Then:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`.
+        - **Surveyed facts for step 3 (2026-11-25T12:00Z):**
+          - **R1's idempotency:** `APIRouter.idempotent` (`Sources/LisaAPI/APIRouter.swift:108-150`) keys `caller.scope:requestID`, with the fingerprint SHA-256 over `METHOD path\n`, the sorted `key=value\n` query lines and the body.
+          - **The seam:** the plan links LisaLegacyRequests from LisaAPI (§7.2.1), so the router calls the converter there for converted routes. `DTOMapping` is internal to LisaAPI, so the router passes renderers (a `LisaTask` to its JSON, an error to R1's body) into the conversion, which runs them inside the transaction.
+          - **The semantics to reproduce** are R1's `TaskService` (`Sources/LisaOwnerData/TaskService.swift`):
+            - the principal is the owner or a paired device;
+            - titles are trimmed and 1–200 characters; minutes are 1–1440;
+            - the revision check answers 409 (`StoreError.conflict`), and the handler builds the 409 "the task changed since it was read" with `currentRevision` first;
+            - a correction marks each changed field owner-corrected and keeps notes plain; a deadline set or cleared resets `unresolvedDeadlineText`; a material change (priority, deadline, confirmation) raises `changeSequence`;
+            - audits are `task.created`, `task.corrected` and `task.<status>`; the transition is `LisaTask.transition(to:at:)`, marking status owner-corrected for extracted tasks;
+            - creation sets confirmation `confirmed` and origin `manual`.
+          - **Revisions:** R1 raises the revision once per service call, one for a correction and one for a status change. So the projection of a PATCH's field children must count as one step, and the status child as another (§8.12.2 "Projection revisions").
+            - **The cause:** `TaskProjection.project` runs once per child (`CoreLedger.swift:279`), and R1's `records.update` raises the revision each time. R1 also raises it for a correction that changes no value, because `correct` always updates when any field is given, while the projection skips an update that changes nothing.
+            - **The plan for it:** let `LegacyTransaction.intake` defer the projection, then add an explicit `project(entity:forceRevision:)` step. The converter takes the field children in, projects once (forcing the step when R1 would), then takes the status child in, which projects itself.
+          - **Mapping:** R2's `TaskFieldValue` has title, priority, deadline, estimate, splittable and confirmation; notes are their own operation family.
       - **M3-6b:** preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review`/`resolve` (S-03).
       - **M3-6c:** captures with R1's permanent deduplication, notification receipts with R1's durable prefix, reminder, notification, proposal and plan-block actions.
       - **M3-6d:** terminal replies (the four cases), the reply dependency index, error templates without caller text, outcome-only migrated parents, and `upgrade_required` on v1.
