@@ -153,7 +153,7 @@ public final class CoreLedger: Sendable {
         return outcomes.map { $0 ?? .unverified(.malformed(.invalidField("intake"))) }
     }
 
-    private func intakeOne(
+    func intakeOne(
         _ operation: SignedOperation, envelope: OperationEnvelope, epoch: Identifier128, time: Int64,
         session: SQLiteSession, records: any RecordWriting
     ) throws -> CoreIntakeOutcome {
