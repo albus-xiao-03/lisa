@@ -1012,3 +1012,23 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Body limit:** the plan's 512 KiB request limit for `POST /v2/operations` (D-60).
   - **Other routes:** enrollment, trust and the other v2 routes (M3-5 onward).
 - **Result: PASS** for this slice.
+
+### M3-D61 Opening the replica at 0 bytes free by releasing its ballast (the owner's decision of 2026-11-25; `docs/DECISIONS.md` D-61; S-17; plan §8.15.2 amended)
+
+- **Override:** plan §8.15.2 releases the ballast only on the capture path. The owner allowed releasing it to open the replica at launch, with the override, the affected file and the recovery recorded in each report.
+  - **The file:** the replica's `reserve.bin`, truncated to 0 bytes; the file itself stays.
+  - **Recovery:** `restoreBallastIfSpaceReturned()`, or a later launch once space has returned.
+- **Code:** `ReplicaStore`'s initializer counts an open as failed for lack of space on `SQLITE_FULL`, or on SQLite's I/O error while less than a reserve is free. Then it empties the ballast and opens once more, reporting `releasedBallastAtOpen` and `storageIsAlmostFull`. With nothing left to release, the error is `storageFull`.
+- **Found by the container run:** a full tmpfs fails the reopen with SQLite's I/O error ("disk I/O error"), not `SQLITE_FULL`. The first version, keyed to `storageFull` alone, therefore didn't release anything. The space check fixed it, and the same harness then passed.
+- **Harness:** `m3/harness-v7/` (v6 didn't compile: a `try` inside an expectation's right-hand operand, kept unchanged). It is built in `m3/harness-v7-scratch`.
+  - On the host, 2 tests: a normal open releases nothing (the tmpfs case skips there).
+  - In the pinned container, 1 test: `swift@sha256:9733821c…430097`, a 24 MiB tmpfs, no network, the rootful engine; script `m3/container-20261125T0604Z/run-d61-v1.sh`, run `run-20261125T060502Z`.
+- **Cases (container):**
+  - A replica with a 4 MiB ballast saved one capture and closed, and a filler then took the tmpfs to 0 bytes free.
+  - **The reopen:** it released the ballast and succeeded, reporting both flags, with the ballast at 0 bytes, two incarnations, and the earlier capture present and found by search.
+  - **A capture right after:** saved, with the journal one longer. Had it failed, the expectation was "not saved" with the journal unchanged.
+  - **Filled to 0 again, with the ballast already empty:** opening failed as `storageFull`.
+  - **The filler emptied:** the replica opened without releasing anything, the ballast was restored whole, every saved capture was present, and `integrity_check` was ok. A last open released nothing.
+- **Full build and R1 suite:** `m3/suite-after-ballast-at-open-io-20261125T060530Z/`, debug build 0 warnings, 376 tests in 66 suites passed.
+- **Regressions:** regression package v6 (`m2/run-regressions-v7.sh`, run `m2/regressions-run-20261125T060539Z/`) passes all 23 targets with their usual counts, and v35 and v47 pass in their own packages.
+- **Result: PASS.**
