@@ -55,6 +55,8 @@ public struct CoreSession: Sendable {
     /// One fixed Core key, or nil to use the replica's key history (§8.1.4).
     let coreKey: P256Verifier?
     let roster: @Sendable (Identifier128) -> P256Verifier?
+    /// For operations Core committed: a device's earlier keys, and its key once revoked (§8.1.3, §8.1.4).
+    let historicalKeys: @Sendable (Identifier128) -> [P256Verifier]
 
     /// A session that verifies everything with one Core key.
     public init(
@@ -65,6 +67,7 @@ public struct CoreSession: Sendable {
         self.transport = transport
         self.coreKey = coreKey
         self.roster = roster
+        historicalKeys = { _ in [] }
     }
 
     /// A session of an enrolled replica that uses its key history and roster. Each reconciliation first takes Core's
@@ -75,6 +78,7 @@ public struct CoreSession: Sendable {
         self.transport = transport
         coreKey = nil
         self.roster = { id in (try? replica.rosterKey(of: id)) ?? nil }
+        historicalKeys = { id in (try? replica.rosterHistoricalKeys(of: id)) ?? [] }
     }
 
     /// Reconciles `partitions` with Core: baseline pages, pending submissions with their verified receipts, then the
@@ -144,7 +148,8 @@ public struct CoreSession: Sendable {
                 guard let page = try await transport.changes(partition: partition, after: cursor, limit: limit) else {
                     break
                 }
-                let outcome = try replica.applyChangePage(page, coreKey: coreKey, deviceKey: roster)[partition]
+                let outcome = try replica.applyChangePage(
+                    page, coreKey: coreKey, deviceKey: roster, previousKeys: historicalKeys)[partition]
                 guard case .applied(let moved, _)? = outcome, moved > cursor else {
                     throw CoreSessionError.noProgress(partition)
                 }
