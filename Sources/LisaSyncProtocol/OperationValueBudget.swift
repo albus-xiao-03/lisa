@@ -36,7 +36,7 @@ public enum OperationValueBudget {
         let longToken = String(repeating: "x", count: 128)
         let origin: OperationOrigin =
             legacy
-            ? .coreLegacyTranslation
+            ? .coreLegacyTranslation(incarnationID: id, sequence: .max)
             : .device(
                 deviceID: id, incarnationID: id, sequence: 1,
                 previous: try IncarnationLink(incarnationID: id, lastSequence: .max))
