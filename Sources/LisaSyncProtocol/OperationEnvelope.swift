@@ -41,7 +41,9 @@ public struct OperationEnvelope: Hashable, Sendable {
         else { throw .dependencies }
         switch origin {
         case .device:
-            guard legacyParent == nil, createdAt != nil else { throw .legacyMismatch }
+            guard legacyParent == nil, createdAt != nil, observed?.projectionRevision == nil else {
+                throw .legacyMismatch
+            }
         case .coreLegacyTranslation:
             guard legacyParent != nil, createdAt == nil else { throw .legacyMismatch }
         }
