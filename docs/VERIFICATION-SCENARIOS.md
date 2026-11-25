@@ -941,3 +941,20 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Restart:** positions, epoch and receipts survive (a retry is a duplicate). A ledger of another dataset is refused (`datasetMismatch`).
 - **Lint:** the new files are clean. R1's one `Package.swift` finding (AddLines) moved from line 172 to 182 with the inserted lines.
 - **Result: PASS.**
+
+### M3-2 Full snapshots from Core (plan §8.4.3, §8.6.3; R2-L12 with Core's snapshots)
+
+- **Code:** `CoreSnapshots.swift` (`CoreLedger.snapshot`), a new `encodingFailed` error case, and `docs/SYNC-PROTOCOL.md` §8d.
+- **Harness:** `m3/harness-v3/`, 4/4 on its first run (helpers copied from v2). One test builds an operation it never submits; it was left in by mistake and changes nothing.
+- **Full build and R1 suite:** `m3/suite-after-core-snapshots-20261125T015339Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Cases:**
+  - **A new replica:** Core held 12 tasks (created, renamed, some notes, one deleted) and a rejected edit. The snapshot at the newest position, in chunks of four, has 8 pages for 29 accepted entries; the rejection is left out.
+    - It installs on a new replica, and the cursor is the cut.
+    - Every task's view equals Core's. Search finds the 11 renamed tasks still alive, and the deleted one is deleted.
+  - **Pages from the cut:** after the installation, Core's page from the cut applies (cursor cut + 1, one entry), and the views stay equal.
+  - **A replica behind, with pending work:**
+    - **Before:** the replica had applied a first page of two entries, then saved a capture offline.
+    - **The installation:** a newer snapshot installs.
+    - **After:** the pending capture stays in the view and in the journal, pending, and found by search. Core's tasks equal Core's views.
+  - **A tampered chunk:** one byte changed is refused as not included under the signed root, and the installation doesn't complete.
+- **Result: PASS.** Snapshots of windowed bucket partitions, and repairs from Core, come with the change feed for calendar occurrences.
