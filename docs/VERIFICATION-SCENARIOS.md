@@ -900,3 +900,44 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **29 `prune-completed-before`:** a link capture applied at +61 s (201, R1's CaptureDTO kept as the response). At +3,660 s, one second before `completedRetention` (3,600 s) ends, an idea capture is queued and the applied entry stays. `f603e3916635d35f…`.
   - **30 `prune-completed-after`:** case 29's file copied. At +3,661 s the next enqueue prunes the applied entry (`OfflineQueue.swift:188-193`), and only the two pending entries remain. `944b5c5bcfdc38ec…`.
 - **Result: PASS.** The M0 frozen artifacts S-01 needs are complete. The remaining frozen datasets (`acceptedByProvider`, `confirmedDelivered` and the others listed in M0-6) are due before S-02 and S-13 at M9.
+
+### M3-1 Schema v5 and the Core ledger's intake (R2-SYNC-02, -03; R2-L14 lookup, R2-L06 and R2-L11 at Core; plan §8.4.1, §8.2.1, §8.2.2, §8.3.4)
+
+- **Code:**
+  - `CoreReceipt` and `SignedCoreReceipt` (LisaSyncProtocol).
+  - The `lisa-r2-receipt-v1\n` domain and `ReceiptSigning` (LisaTrust).
+  - In LisaStore: migration 5 (the ledger tables), and `ledgerWrite`/`ledgerRead` on R1's record store.
+  - The new LisaCoreLedger: `CoreLedger`, `CoreCausalTables`, `CoreOperationRecords`, `CoreTaskFold`, `TaskProjection`, `R1Identity` and two support files.
+  - `docs/DECISIONS.md` D-58 and D-59; `docs/SYNC-PROTOCOL.md` §8d.
+- **First failure and fix:** the first R1 suite run with migration 5 failed 3 issues (`L23FailedMigrationTests`). R1's test snapshots every table in rowid order, and two new tables were `WITHOUT ROWID`. They became ordinary tables before any commit, and no R1 test changed.
+- **Full build and R1 suite:**
+  - `m3/suite-after-core-ledger-20261125T014155Z/`: debug build 0 warnings; the suite failed 3 issues, as above.
+  - `m3/suite-after-core-ledger-rowid-20261125T014236Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Harness:** `m3/harness-v2/`, 8/8 on its first run. v1 didn't compile (a `try` on the right of `&&` inside an expectation) and is kept unchanged.
+  - **Regression package v4** (`m2/make-regressions-v4.py`, run `m2/regressions-run-20261125T014819Z/`): v2's 19 targets plus this one. All 20 pass with their usual counts, and so do v35 and v47 in their own packages. `make-regressions-v3.py` was never run: its M3 label held a slash the runner can't use in paths.
+- **Cases:**
+  - **Intake and the projection:** a creation (high priority, a date deadline, 90 minutes), a rename, a note and a completion.
+    - Each is decided in order with a Core-signed final receipt at positions 1–4. Each receipt is retrievable by lookup, verifies by Core's key, and names its operation's digest.
+    - R1's `tasks` record shows the rename, the note, priority high, the deadline, 90 minutes, completed with `completedAt`, origin manual, owner-corrected title.
+    - `changeSequence` is 1: only the completion was material. The record's ID spells the entity ID as a UUID.
+  - **The duplicate rules at Core:**
+    - A duplicate returns the original receipt.
+    - The same ID with another body is `identity_reuse`, and the same triple under another ID is `sequence_reuse`. Both are recorded as security events naming the stored operation and its digest.
+    - A device outside the roster and another dataset are refused before anything is stored. The position stays 1.
+  - **Waiting and release:**
+    - An edit waiting for its creation gets a provisional receipt naming the creation, with no position. A retry gets the same receipt.
+    - 600 more waiting notes; then the creation arrives (position 1).
+    - Release steps read at most 256 edges and release at most 256 operations each. All 601 were released exactly once, with final receipts, and no waiting, ready or marker rows were left. The rename wins and the 600 notes are kept; the last position is 602.
+  - **Rejections:** an edit of an item Core never held (`unknown_item`, position 2), a note on an idea (`unsupported_operation`), and both members of a forged cycle (`dependency_cycle`).
+    - The tasks page lists the decisions at 1, 2, 4 and 5 as accepted, rejected, rejected, rejected. The idea's rejection is in its own partition.
+  - **Conflicts, as the planner treats them:** concurrent pairs of deadline, priority, estimate and splittable edits.
+    - Each second edit is `accepted_with_conflict`, and both candidates stay.
+    - R1's record shows the earliest deadline, urgent priority, 120 minutes and not splittable. `changeSequence` is 4, one per material change.
+  - **Deletion:** R1's record is removed. A concurrent rename arriving after it is accepted and stays superseded.
+  - **Core's pages on replicas:**
+    - The iPad's own saved operation is accepted at position 6.
+    - One page `(0, 6]` installs on the iPad's replica with six entries. The replica's views equal Core's views, the iPad's entry is accepted at 6 and no longer an overlay, and nothing further is offered after 6.
+    - A Mac replica fed pages of two entries reached cursor 6 in three pages, with the same views and search.
+  - **Restart:** positions, epoch and receipts survive (a retry is a duplicate). A ledger of another dataset is refused (`datasetMismatch`).
+- **Lint:** the new files are clean. R1's one `Package.swift` finding (AddLines) moved from line 172 to 182 with the inserted lines.
+- **Result: PASS.**
