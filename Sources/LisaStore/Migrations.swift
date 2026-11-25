@@ -17,7 +17,9 @@ public struct Migration: Hashable, Sendable {
 
 /// Lisa's migrations, oldest first.
 public enum Migrations {
-    public static let all: [Migration] = [version1, version2, version3, version4, version5, version6, version7]
+    public static let all: [Migration] = [
+        version1, version2, version3, version4, version5, version6, version7, version8,
+    ]
 
     /// The newest schema version this build understands.
     public static var latestVersion: Int { all.map(\.version).max() ?? 0 }
@@ -365,6 +367,27 @@ public enum Migrations {
               CHECK ((sequence = 0) = (transition_body IS NULL)),
               CHECK ((transition_body IS NULL) = (previous_signature IS NULL)),
               CHECK ((transition_body IS NULL) = (next_signature IS NULL))
+            ) STRICT
+            """
+        ])
+
+    /// R2's device key history (plan §8.1.4): each operation key a device rotated away from, with the commit position
+    /// from which its next key took over and the exact update signed by both keys. The roster lists these keys so
+    /// that the device's committed operations still verify.
+    static let version8 = Migration(
+        version: 8, summary: "R2 device key history",
+        statements: [
+            """
+            CREATE TABLE core_device_keys (
+              device_id BLOB NOT NULL CHECK (length(device_id) = 16),
+              sequence INTEGER NOT NULL CHECK (sequence >= 1),
+              operation_key BLOB NOT NULL UNIQUE,
+              retired_at_position INTEGER NOT NULL CHECK (retired_at_position >= 1),
+              update_body BLOB NOT NULL,
+              previous_signature BLOB NOT NULL CHECK (length(previous_signature) = 64),
+              next_signature BLOB NOT NULL CHECK (length(next_signature) = 64),
+              recorded_at INTEGER NOT NULL,
+              PRIMARY KEY (device_id, sequence)
             ) STRICT
             """
         ])
