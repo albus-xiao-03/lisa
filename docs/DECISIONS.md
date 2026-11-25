@@ -848,3 +848,27 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - It reads an item's searchable text through `ReplicaStore.searchableText(of:in:)`, inside the change's transaction, so it needs no LisaMerge.
   - Its postings table belongs to the replica schema, so the store can swap a staged index with the rest of an installation (plan §8.6.3).
   - LisaDomain joins when other item types are indexed.
+
+## D-58 — R2 entity IDs are R1 record IDs spelled as UUIDs (R2 M3, run 20261124-r2-5462; plan §8.4.1, R2-MIG-01)
+
+- **The question:** the plan leaves the mapping unstated. An R2 operation names its entity by a 128-bit `Identifier128`, while R1 names a record by a string. R1's own IDs are lowercase UUIDs (`EntityID.random()`), and Core projects every entity into R1's records.
+- **The decision:** the record of entity `e` has the ID that spells `e`'s 128 bits as a lowercase UUID, `8-4-4-4-12` (`R1Identity.uuidString`). Reading an R1 UUID back gives the same 128 bits (`R1Identity.entityID(fromUUID:)`).
+- **Why:**
+  - The mapping is exact in both directions for every ID R1 generated, so R1's IDs survive migration unchanged (R2-MIG-01).
+  - R1's API, planner and reminders keep reading the records they know.
+  - No mapping table is needed for items created under R2.
+- **Not covered:** an R1 record whose ID isn't a UUID. If migration (M9) finds one, it gets a stored mapping then.
+
+## D-59 — LisaCoreLedger's dependencies, and R1's store opening one transaction for the ledger (R2 M3, run 20261124-r2-5462; plan §7.2.1, §8.4.1)
+
+- **The plan's table** lists LisaCoreLedger's direct dependencies as LisaStore, LisaPorts, LisaMerge, LisaTrust, LisaSyncProtocol, LisaFiringIdentity and LisaLogging.
+- **What it also uses directly:**
+  - LisaSQLite, for its own tables and the savepoint per operation;
+  - LisaCrypto, for the resolution-group digest;
+  - LisaDomain and LisaTime, for R1's `LisaTask` and `Deadline` in the projection.
+  - LisaFiringIdentity and LisaLogging join when holds and logging arrive (M3-8).
+- **One transaction for ledger and records:** intake must commit an operation's ledger rows and its projection into R1's records together (plan §8.4.1). R1's `RecordSession` is internal, so `SQLiteRecordStore` gains `ledgerWrite` and `ledgerRead`, which hand the body both the transaction's `SQLiteSession` and R1's record writer. This is a change to R1's non-test code. R1's tests are untouched and pass.
+- **Schema v5:** R1's migration list gains version 5, the ledger tables. Every table keeps its rowid, because R1's migration tests snapshot every table in rowid order. Two `WITHOUT ROWID` tables broke them at first and were changed before any commit.
+- **Shared rules, two copies for now:**
+  - Core's persisted causal release and its task fold, with paged resolution groups, follow the replica's rules in Core's own tables and code.
+  - The plan keeps Core and client modules apart: Core never links LisaReplicaStore. Moving the shared parts into LisaMerge is a later refactor, which would carry the replica's regressions with it.
