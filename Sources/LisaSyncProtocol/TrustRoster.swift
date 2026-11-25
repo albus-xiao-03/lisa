@@ -35,10 +35,13 @@ public struct RosterDevice: Hashable, Sendable {
     public let enrolledAt: Int64
     /// Strictly ascending capability tokens.
     public let capabilities: [String]
+    /// The operation keys the device rotated away from, oldest first (§8.1.4): they still verify its operations that
+    /// Core committed, never new ones.
+    public let previousKeys: [[UInt8]]
 
     public init(
         deviceID: Identifier128, name: String, deviceClass: DeviceClass, status: Status, operationKey: [UInt8],
-        exportKey: [UInt8], enrolledAt: Int64, capabilities: [String] = []
+        exportKey: [UInt8], enrolledAt: Int64, capabilities: [String] = [], previousKeys: [[UInt8]] = []
     ) throws(OperationEnvelopeError) {
         guard Self.isValidName(name) else { throw .invalidField("roster.device.name") }
         guard (1...256).contains(operationKey.count), (1...256).contains(exportKey.count) else {
@@ -48,6 +51,9 @@ public struct RosterDevice: Hashable, Sendable {
             capabilities.allSatisfy({ WireText.isToken($0, length: 1...64) }),
             zip(capabilities, capabilities.dropFirst()).allSatisfy({ $0 < $1 })
         else { throw .invalidField("roster.device.capabilities") }
+        guard previousKeys.count <= 64, previousKeys.allSatisfy({ (1...256).contains($0.count) }),
+            !previousKeys.contains(operationKey)
+        else { throw .invalidField("roster.device.previousKeys") }
         self.deviceID = deviceID
         self.name = name
         self.deviceClass = deviceClass
@@ -56,6 +62,7 @@ public struct RosterDevice: Hashable, Sendable {
         self.exportKey = exportKey
         self.enrolledAt = enrolledAt
         self.capabilities = capabilities
+        self.previousKeys = previousKeys
     }
 
     /// 1 to 64 UTF-8 bytes without control characters.
@@ -72,6 +79,7 @@ public struct RosterDevice: Hashable, Sendable {
                 ("operationKey", .string(StrictBase64URL.encode(operationKey))),
                 ("exportKey", .string(StrictBase64URL.encode(exportKey))), ("enrolledAt", .integer(enrolledAt)),
                 ("capabilities", .array(capabilities.map { .string($0) })),
+                ("previousKeys", .array(previousKeys.map { .string(StrictBase64URL.encode($0)) })),
             ]))
     }
 
@@ -84,11 +92,17 @@ public struct RosterDevice: Hashable, Sendable {
             guard case .string(let text) = value else { throw OperationEnvelopeError.invalidField("roster.device") }
             return text
         }
+        let previousKeys = try reader.array("previousKeys").map { value in
+            guard case .string(let text) = value, let der = try? StrictBase64URL.decode(text) else {
+                throw OperationEnvelopeError.invalidField("roster.device.previousKeys")
+            }
+            return der
+        }
         let device = try RosterDevice(
             deviceID: EnvelopeFields.identifier(reader.string("deviceID"), "roster.device.deviceID"),
             name: reader.string("name"), deviceClass: deviceClass, status: status,
             operationKey: reader.bytes("operationKey"), exportKey: reader.bytes("exportKey"),
-            enrolledAt: reader.integer("enrolledAt"), capabilities: capabilities)
+            enrolledAt: reader.integer("enrolledAt"), capabilities: capabilities, previousKeys: previousKeys)
         try reader.finish()
         return device
     }
