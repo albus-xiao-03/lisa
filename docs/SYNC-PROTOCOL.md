@@ -61,6 +61,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-device-authorization-v1\n` | Core's authorization record for one device, returned at enrollment (§8.1.2 step 5.7; §8f) |
 | `lisa-r2-credential-reset-v1\n` | A device's credential-reset request, signed by its existing operation key (§8.1.4; §8g) |
 | `lisa-r2-key-transition-v1\n` | A transition in Core's signing-key history, signed by both its keys (§8.1.4; §8h) |
+| `lisa-r2-device-key-update-v1\n` | A device's operation-key update, signed by both its keys (§8.1.4; §8i) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -419,6 +420,20 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **Rotation:** activation is the last position plus one; a rotation with nothing committed since the last one is refused; the rotating ledger stops signing.
   - **Opening:** only with the history's current key (`signerRetired`, `signerMismatch`).
   - **Import:** a transition that continues the store's history, once the store has reached its activation.
+
+## 8i. Device key rotation (plan §8.1.4; `docs/DECISIONS.md` D-66)
+
+- **Update** (`DeviceKeyUpdate`): `{"datasetID", "deviceID", "previousKey", "nextKey", "createdAt"}`, signed by both keys under `lisa-r2-device-key-update-v1\n`. It travels as `{"update": {"body", "previousSignature", "nextSignature"}}`.
+- **`POST /v2/devices/current/key-update`,** under the device's bearer credential, answers `{"roster": …}`, the new roster. Its refusals:
+  - `key_update_invalid` 403: a bad signature, another device or dataset, or a previous key that isn't the registry's;
+  - `device_revoked` 403;
+  - `key_update_key_in_use` 409;
+  - `key_update_operations_waiting` 409.
+- **Roster:** each device entry carries `"previousKeys": [base64url SPKI, …]`, oldest first.
+- **Verification on replicas:**
+  - Core's pages, repairs and snapshots verify a device's committed operations with its current key, its `previousKeys`, or its last key once it is revoked (`ReplicaStore.rosterHistoricalKeys`).
+  - Operations received from peers verify only with the current key.
+- **The device after an update:** it re-signs its pending and submitted operations with the next key; IDs and digests are unchanged.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
