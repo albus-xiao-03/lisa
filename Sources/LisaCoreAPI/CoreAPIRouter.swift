@@ -23,7 +23,7 @@ public final class CoreAPIRouter: Sendable {
     public static let bodyLimits = ["/v2/operations": SyncWire.maximumBodyBytes]
     /// What this Core offers, strictly ascending.
     public static let features = [
-        "challenges", "changes", "credential-reset", "enrollment", "operations", "receipts", "trust",
+        "challenges", "changes", "credential-reset", "enrollment", "key-update", "operations", "receipts", "trust",
     ]
 
     let ledger: CoreLedger
@@ -87,6 +87,16 @@ public final class CoreAPIRouter: Sendable {
                 let limit = request.query["limit"].flatMap { Int($0) }.map { min(max($0, 1), 512) } ?? 256
                 return Self.success(
                     try SyncWire.pageBody(try ledger.changePage(partition: partition, after: after, maxEntries: limit)))
+            case (.post, "/v2/devices/current/key-update"):
+                guard let trust, let device = trust.authenticate(credential: credential) else {
+                    return Self.failure(404, "not_found", "no such v2 route")
+                }
+                switch try trust.updateDeviceKey(device, wireBody: [UInt8](request.body ?? Data())) {
+                case .updated(let roster):
+                    return Self.success(try EnrollmentWire.rosterBody(roster))
+                case .refused(let refusal):
+                    return Self.failure(refusal.status, refusal.code, "Core refused the key update")
+                }
             case (.get, "/v2/trust"):
                 guard let trust else { return Self.failure(404, "not_found", "no such v2 route") }
                 return Self.success(
