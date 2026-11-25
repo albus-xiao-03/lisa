@@ -18,8 +18,10 @@ public enum OperationOrigin: Hashable, Sendable {
     /// A device incarnation: `(device, incarnation, sequence)` is unique, sequences start at 1, and only the
     /// first operation may name the previous incarnation.
     case device(deviceID: Identifier128, incarnationID: Identifier128, sequence: Int64, previous: IncarnationLink?)
-    /// Core's translation of an R1 request into its children (plan §8.12.2).
-    case coreLegacyTranslation
+    /// Core's translation of an R1 request into its children (plan §8.12.2): the incarnation derived from the request
+    /// (`lisa-v1-incarnation-v1`) and the child's index plus one as its sequence, so every field is fixed by the
+    /// request.
+    case coreLegacyTranslation(incarnationID: Identifier128, sequence: Int64)
 
     /// The `(device, incarnation, sequence)` triple of a device origin.
     public var deviceTriple: (device: Identifier128, incarnation: Identifier128, sequence: Int64)? {
@@ -30,8 +32,12 @@ public enum OperationOrigin: Hashable, Sendable {
     var canonical: CanonicalValue {
         get throws(CanonicalError) {
             switch self {
-            case .coreLegacyTranslation:
-                return .object(try CanonicalObject([("kind", .string("coreLegacyTranslation"))]))
+            case .coreLegacyTranslation(let incarnation, let sequence):
+                return .object(
+                    try CanonicalObject([
+                        ("kind", .string("coreLegacyTranslation")), ("incarnationID", .string(incarnation.hex)),
+                        ("sequence", .integer(sequence)),
+                    ]))
             case .device(let device, let incarnation, let sequence, let previous):
                 var pairs: [(String, CanonicalValue)] = [
                     ("kind", .string("device")), ("deviceID", .string(device.hex)),
@@ -58,8 +64,11 @@ public enum OperationOrigin: Hashable, Sendable {
         do {
             switch try reader.string("kind") {
             case "coreLegacyTranslation":
+                let incarnation = try EnvelopeFields.identifier(reader.string("incarnationID"), "origin.incarnationID")
+                let sequence = try reader.integer("sequence")
+                guard sequence >= 1 else { throw OperationEnvelopeError.invalidField("origin.sequence") }
                 try reader.finish()
-                self = .coreLegacyTranslation
+                self = .coreLegacyTranslation(incarnationID: incarnation, sequence: sequence)
             case "device":
                 let device = try EnvelopeFields.identifier(reader.string("deviceID"), "origin.deviceID")
                 let incarnation = try EnvelopeFields.identifier(reader.string("incarnationID"), "origin.incarnationID")
