@@ -348,6 +348,17 @@ enum ReplicaSchema {
           CHECK ((tls_mode = 'ca') = (ca_certificate IS NOT NULL))
         ) STRICT
         """,
+        // Core's signing-key transitions (§8.1.4), each verified as the next link from the trust state's key, with the
+        // exact body and both signatures, so the key history can be rebuilt and re-verified at any time.
+        """
+        CREATE TABLE trust_key_transitions (
+          sequence INTEGER PRIMARY KEY CHECK (sequence >= 1),
+          body BLOB NOT NULL,
+          previous_signature BLOB NOT NULL CHECK (length(previous_signature) = 64),
+          next_signature BLOB NOT NULL CHECK (length(next_signature) = 64),
+          verified_at INTEGER NOT NULL
+        ) STRICT
+        """,
         // Every verified roster (§8.1.3), as its exact wire bytes; the newest version is the one in use.
         """
         CREATE TABLE trust_rosters (
