@@ -1265,3 +1265,57 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **After the device is revoked,** a device enrolled later installs both of its committed operations, by its previous key and its last key.
 - **Regressions:** regression package v14 (above) passes on these sources.
 - **Result: PASS.**
+
+### M3-6a, first two steps: legacy children and Core's parents (plan §8.12.2; `docs/DECISIONS.md` D-67)
+
+- **Code:**
+  - `OperationOrigin.coreLegacyTranslation(incarnationID:sequence:)` (LisaSyncProtocol) and `LegacyChildIdentity.incarnationID` (LisaTrust).
+  - The new module LisaLegacyRequests (`LegacyChildSet`, `LegacyChange`, `LegacyDerivation`).
+  - Schema v9, and `CoreLegacyParents` (LisaCoreLedger: `legacyLookup`, `legacyConvert`, `LegacyTransaction.intake`, `legacyChildren`).
+  - Records: `docs/SYNC-PROTOCOL.md` §8j.
+- **Full build and R1 suite:** `m3/suite-after-legacy-children-20261125T115207Z/` and `m3/suite-after-legacy-parents-20261125T115548Z/`, debug builds 0 warnings, 376/66 passed with schema v9. Lint is clean.
+- **Harnesses:**
+  - **`m3/harness-v24/`,** 4/4 on its first run. v23 didn't compile: the payload type is `TaskFieldValue`, which has no notes case. v23 is kept.
+  - **`m3/harness-v26/`,** v24's 4 tests plus 3, 7/7. v25 didn't compile: an `#expect(a && (try b))`. v25 is kept.
+- **Cases:**
+  - **The derivations** match an independent Python computation (the vectors in §8j).
+  - **The same request** gives byte-identical envelopes twice. Every field is fixed (origin and sequences 1…3, versions, no creation time, `legacyParent`, one same-chain dependency). Two Core keys give the same digests and different signatures, each verifying only under its own key.
+  - **Refused:** an empty request and a repeated discriminator.
+  - **Chains:** 50 changes of one key form a chain of single dependencies; children of other chains don't depend on each other.
+  - **Core takes a created task's child once:** the same child signed again is a duplicate with the same receipt, and a child signed by another key is `unverified`.
+  - **The frame:**
+    - One transaction takes the child, projects it so R1's record is readable in the same transaction, and records the parent with its answer.
+    - A retry with the same key and fingerprint replays without converting again; another fingerprint is a mismatch; another scope is unknown.
+    - A conversion that throws after its intake keeps nothing, and neither does one answering 503. A later conversion of the same request is kept.
+    - A body past its retention reports `bodyExpired` with R1's status.
+- **Result: PASS** for these steps. Next: R1's router hook and the two task routes under R1's semantics (M3-6a's third step).
+
+### M3-6a, step 3 begun: one R1 revision step per R1 call (plan §8.12.2 "Projection revisions"; `docs/DECISIONS.md` D-68)
+
+- **Code:**
+  - `LegacyTransaction.intake(_:projecting:)` and `project(_:forceRevision:)`.
+  - `TaskProjection.project(force:)`, which now returns the revision written, plus `recordRevision`.
+  - Schema v10 (`core_projection_revisions`), and `CoreLedger.projectionPosition(of:revision:)`.
+- **Full build and R1 suite:** `m3/suite-after-deferred-projection-20261125T120215Z/` and `m3/suite-after-projection-revisions-20261125T120421Z/`, debug builds 0 warnings, 376/66 passed with schema v10. Lint is clean.
+- **Harnesses:**
+  - **`m3/harness-v28/`** (v27 didn't compile: `TaskDraft` and `TaskCorrection` are LisaOwnerData's; kept):
+    - **Passing:** against R1's own `TaskService` on an identical task, a correction of title and priority is one revision step, and so is a correction that changes no value; R2's projection of the same requests' field children, deferred and projected once, gives the same steps; without the forced step, a no-change correction takes none.
+    - **Failing, as recorded:** two value expectations. The diagnostic copy, `m3/harness-v29/`, shows why: both legacy edits are `accepted_with_conflict`, so the merged title is `["Book the hall", "Book the big hall"]`, and the display-order first wins.
+    - **The cause:** "observed at projection revision N" (D-68), which comes next.
+  - **`m3/harness-v30/`** (v26's 7 tests plus 1), 8/8: the creation is revision 1 at position 1, and a two-field correction projected once is revision 2 at the position of its last child.
+- **Result: PASS** for the revision steps and the map. Legacy edits' supersession is open (next).
+
+### M3-6a, the observed set's projection revision (plan §8.3.2 "observed at projection revision N", §8.12.2)
+
+- **Code:**
+  - `ObservedSet.projectionRevision`: R1's `expectedRevision` from the request. It stands alone, without horizon, pieces, digest or group; it is at least 1 and encoded only when present, so every other observed set's bytes are unchanged.
+  - `OperationEnvelope` refuses it on a device's operation (`legacyMismatch`).
+  - The patch was applied by `m3/patch-projection-revision-v2.py`. v1, which lacked the decoder and the envelope rule, was never run and is kept.
+- **Full build and R1 suite:** `m3/suite-after-observed-revision-20261125T120825Z/`, debug build 0 warnings, 376/66 passed. Lint is clean.
+- **Harness:** `m3/harness-v31/` (v30's 8 tests plus 1), 9/9 on its first run (`harness-v31-test-20261125T120804Z.log`).
+- **Cases:**
+  - The encoding is `{"pieces":[],"projectionRevision":4}` and round-trips. An observed set without it still encodes as `{"pieces":[]}`.
+  - **Refused:** revision 0, and a projection revision beside pieces.
+  - A Core-signed legacy child carries it through signing and decoding; a device's operation with it is refused.
+- **Regressions:** regression package v16 (`m2/make-regressions-v16.py`, v26 replaced by v30; run `m2/regressions-run-20261125T120453Z/`) passed all 25 targets, and v35 and v47 passed too, before this change. Package v17 (v30 replaced by v31) runs on it.
+- **Result: PASS.** Next, Core mapping N to the horizon of the state it reflected, at decision time, and serving it to replicas (§11).
