@@ -1,9 +1,15 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-25T07:12Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-25T07:21Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
-- **Also done:** M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8), and M3-5b, S-04 and S-05 over R1's real TLS server with the test-only libcurl pinning transport (harness v14, 5/5). Both are in §11 and `docs/VERIFICATION-SCENARIOS.md`.
+- **Also done:**
+  - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
+  - M3-5b, S-04 and S-05 over R1's real TLS server with the test-only libcurl pinning transport (harness v14, 5/5);
+  - M3-5c, credential reset and challenges (harness v15, 10/10);
+  - M3-5d's first items, an expired certificate and roster renewal (harness v16, 6/6).
+
+  Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`.
 - **The writer:** guard launch `L-64486886ba` (session `30b63dd0-89d3-45d0-b885-bb4305d22093`), resumed at 06:23Z after the fourth pause. The newest reading was 51% at 07:07:37Z (`468d1e92ca48`), with the reset at 11:20:00Z.
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
@@ -158,7 +164,12 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`fbfd1ec`** (`Sources/LisaSyncHTTP/HTTPEnrollmentTransport.swift`, M3-5's last code commit; the documents follow up to `a4f4109`):
+**`26b9063`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5c's last code commit):
+- **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 (`m3/suite-after-reset-challenges-20261125T071556Z/`). Lint is clean.
+- **Harnesses:** M3 harnesses v15 (10/10), v14 (5/5) and v16 (6/6) pass.
+- **Regressions:** regression package v9 (`m2/run-regressions-v10.sh`, run `m2/regressions-run-20261125T071659Z/`) passes all 24 targets, and v35 and v47 pass too.
+
+Before it, **`fbfd1ec`** (`Sources/LisaSyncHTTP/HTTPEnrollmentTransport.swift`, M3-5a and M3-5b; the documents follow up to `a4f4109`):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376/66 with schema v6 (`m3/suite-after-enrollment-formatted-20261125T065446Z/`). `swift format lint` is clean on every new and changed file.
 - **Harnesses:** M3 harness v10 passes 8/8 (enrollment over loopback HTTP), and harness v14 passes 5/5 (S-04 and S-05 over real TLS with libcurl).
 - **Regressions:** regression package v8 (`m2/run-regressions-v9.sh`, run `m2/regressions-run-20261125T070034Z/`) passes all 24 targets, and v35 and v47 pass too.
@@ -220,8 +231,14 @@ No live action or external submission has been requested or performed in this ru
    5. **M3-5, in progress:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05. (Done outside the span order: D-61, as M3-D61.)
       - **Done, M3-5a** (`docs/VERIFICATION-SCENARIOS.md` M3-5a; D-62; SYNC-PROTOCOL §8f): Core's enrollment records, device registry, signed roster and revocation (schema v6, `CoreTrust`); `POST /v2/enrollments`, `GET /v2/trust/tls-anchors` and `GET /v2/trust`; the device's enrollment with its pending item, verified completion in the replica, `resume()`, and roster acceptance. Harness v10, 8/8.
       - **Done, M3-5b** (`docs/VERIFICATION-SCENARIOS.md` M3-5b): S-04 and S-05's TLS cases against R1's real TLS server, through the test-only libcurl pinning transport (`m3/harness-v14/`, a C shim plus `CurlPinAPITransport`, reusable by later harnesses), with certificates made at run time by the openssl CLI. Both modes, the three `ca` chain shapes, every pre-POST refusal with zero POSTs and no token bytes, TLS pin rotation with a peer's roster, and a lost answer replayed in both modes. Harness v14, 5/5.
-      - **Next, M3-5c:** credential reset (§8.1.4: `lisa-reset-token-v1`, 10 minutes, a new verifier signed by the existing key, the old credential refused; `POST /v2/devices/current/credential-reset`), and challenges (§8.1.5: `POST /v2/challenges`, the response format `lisa-challenge-v1 ‖ 0x00 ‖ …`, monotonic expiry, run generation, single use, epoch and body binding, revocation mid-exchange, an unknown key). The tables `core_credential_resets` and `core_challenges` exist already (schema v6).
-      - **Then M3-5d:** the rest of §8.1.4 at M3: signing-key rotation with dual-signed transitions and key history (receipts verifying at their positions), K2's private half imported on a fresh host (with a mismatching key refused), export-key rotation with an old archive still opening, device key rotation, roster renewal, an expired certificate refused, and re-anchoring after the signing key is lost (with M3-7's restore, S-10).
+      - **Done, M3-5c** (`docs/VERIFICATION-SCENARIOS.md` M3-5c; SYNC-PROTOCOL §8g): credential reset (the owner's one-time token, a new verifier signed by the existing key, the old credential refused) and challenges (the plan's message, monotonic expiry, run generation, single use, purpose, epoch and body binding, revocation mid-exchange, an unknown key). The harness found that revocation spent open challenges; fixed in `48a4e01`. Harness v15, 10/10.
+      - **Done, M3-5d's first items** (`docs/VERIFICATION-SCENARIOS.md` "M3-5d, first items"): an expired certificate refused at first contact in both modes and by an enrolled device, and roster renewal. Harness v16, 6/6.
+      - **Next, the rest of M3-5d** (§8.1.4 at M3):
+        - signing-key rotation: a transition record signed by the old and new key with an activation position; devices keep the key history, so receipts, pages and rosters verify with the key valid at their position; a retired key verifies only records from before its retirement; the transition goes to the recovery ledger in M3-7;
+        - K2's private half imported on a fresh host (`trust import-key`), with a mismatching key refused;
+        - export-key rotation, with an old archive still opening;
+        - device key rotation: a key-update operation signed by the old and the new key, then a new roster;
+        - re-anchoring after the signing key is lost, which comes with M3-7's restore (S-10).
       - **Left open from M3-4:** the 512 KiB per-path limit (D-60) and capabilities negotiation (`upgrade_required`).
       - **Practice:** harnesses build in `m3/harness-scratch-m3-5` (the project volume has 28 GB free). Regressions run with `m2/run-regressions-v9.sh` (package v8; scratch on the root volume). Harness v11 and v8 were corrected before their first builds, and v9 and v13 failed to compile; all four are kept unchanged.
    6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
