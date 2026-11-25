@@ -20,10 +20,13 @@ public struct LegacyChange: Hashable, Sendable {
     public let chain: String
     public let operationType: String
     public let payload: CanonicalValue
+    /// R1's `expectedRevision` from the request, for a change made against a revision: the child is "observed at
+    /// projection revision N" (plan §8.3.2, §8.12.2).
+    public let observedRevision: Int64?
 
     public init(
         discriminator: String, entityType: String, entityID: Identifier128, chain: String, operationType: String,
-        payload: CanonicalValue
+        payload: CanonicalValue, observedRevision: Int64? = nil
     ) {
         self.discriminator = discriminator
         self.entityType = entityType
@@ -31,6 +34,7 @@ public struct LegacyChange: Hashable, Sendable {
         self.chain = chain
         self.operationType = operationType
         self.payload = payload
+        self.observedRevision = observedRevision
     }
 }
 
@@ -86,7 +90,11 @@ public struct LegacyChildSet: Hashable, Sendable {
                     origin: .coreLegacyTranslation(incarnationID: incarnation, sequence: Int64(index) + 1),
                     operationID: ids[index], entityType: change.entityType, entityID: change.entityID,
                     operationType: change.operationType, payload: change.payload,
-                    dependencies: dependency.map { [$0] } ?? [], observed: nil,
+                    dependencies: dependency.map { [$0] } ?? [],
+                    observed: try change.observedRevision.map { revision throws(OperationEnvelopeError) in
+                        try ObservedSet(
+                            horizon: nil, pieces: [], reviewedSetDigest: nil, group: nil, projectionRevision: revision)
+                    },
                     policyVersion: LegacyDerivation.policyVersion,
                     legacyParent: try LegacyParentReference(
                         scope: scope, requestID: requestID, discriminator: change.discriminator, index: Int64(index),
