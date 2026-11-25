@@ -426,6 +426,32 @@ public final class ReplicaStore: Sendable {
         }
     }
 
+    /// Records a Core receipt after verifying it by Core's key from the verified key history (§8.2.1, R2-L15): only
+    /// Core's valid signature over a receipt of this dataset counts as Core's decision; anything else is refused and
+    /// changes nothing. The receipt's body and signature are kept as its bytes.
+    @discardableResult
+    public func recordReceipt(_ signed: SignedCoreReceipt, coreKey: P256Verifier) throws(ReplicaStoreError) -> Bool {
+        guard let datasetID = try identity().datasetID else { throw .notEnrolled }
+        let receipt: CoreReceipt
+        do {
+            receipt = try ReceiptSigning.verify(signed, dataset: datasetID, coreKey: coreKey)
+        } catch {
+            throw .unverifiedReceipt(error)
+        }
+        let status: ReplicaReceipt.Status =
+            switch receipt.outcome {
+            case .waitingForDependencies: .waitingForDependencies
+            case .accepted: .accepted
+            case .acceptedWithConflict: .acceptedWithConflict
+            case .rejected: .rejected
+            }
+        return try recordReceipt(
+            ReplicaReceipt(
+                operationID: receipt.operationID, digest: receipt.digest, status: status,
+                epochID: receipt.position == nil ? nil : receipt.epochID, position: receipt.position,
+                signedBytes: signed.storedBytes))
+    }
+
     /// Installs a canonical row if its version is greater than the row's (§8.4.2); the overlays of the operations it
     /// contains leave the effective view in the same transaction. Returns whether it was installed.
     @discardableResult
