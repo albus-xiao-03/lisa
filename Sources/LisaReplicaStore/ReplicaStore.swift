@@ -26,7 +26,7 @@ public final class ReplicaStore: Sendable {
     let database: SQLiteWALDatabase
     private let signing: any ReplicaSigning
     let indexing: (any ReplicaIndexing)?
-    private let now: @Sendable () -> Int64
+    let now: @Sendable () -> Int64
     private let freeSpace: @Sendable () -> Int64?
 
     /// Opens (or creates) the replica in `directoryPath` as its only writer, and starts a new incarnation. When storage
