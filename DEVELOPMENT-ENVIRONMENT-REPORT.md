@@ -282,3 +282,19 @@ The owner authorized reading the plan-usage metadata available to this signed-in
 The original file is kept as `.tmp/r2/20261124-r2-5462/usage/settings.json.orig-20261124T0750Z`. Both entries are restored when the guard is disarmed.
 
 **Unchanged by the amendment:** `plans/R2.md`, the toolchains, the Debian packages, `Package.swift`, `Package.resolved` and the Git configuration.
+
+## 14. Amendment of 2026-11-25: storage (run `20261124-r2-5462`)
+
+**The owner's decisions (2026-11-25):**
+1. **Regenerable build output** (SwiftPM `.build` folders, scratch paths and clean-run `build-*` folders) may be removed to free storage, now and later, including inside the run directory `.tmp/r2/20261124-r2-5462/`. This overrides plan §10.2's no-removal rule for build output only.
+2. **The replica's storage ballast** may also be released so that the replica can open at launch when storage is full. This overrides plan §8.15.2's capture-path-only release (`docs/DECISIONS.md` D-61).
+
+**Condition:** every report that uses either decision states three things: the override, the deleted files with their sizes, and the steps to recover them.
+
+**First use (2026-11-25T05:59Z):**
+- **Removed:** 43 build-output directories (30.72 GB) inside the run directory: superseded and current harness `.build` folders, the shared harness scratch path, and the build folders of the M1 and both M2 clean-checkout runs.
+- **Free space:** the project volume went from 514 MB to 31,108 MB free.
+- **Record:** each path with its size, newest-file time and recovery command is in `.tmp/r2/20261124-r2-5462/reclaim-20261125T055921Z-planned.tsv`, with the summary in `…-done.md`.
+- **Kept:** the frozen R1 builds under `m0/`, because M3 and M9 still run them and their hashes are recorded evidence.
+
+**Unchanged by the amendment:** `plans/R2.md`, `CONSTRICTION.md`, the toolchains, packages and dependencies, and every source, log, hash, fixture and report.
