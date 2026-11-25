@@ -25,6 +25,8 @@ public enum CoreSessionError: Error, Hashable, Sendable {
     case datasetMismatch
     /// A page didn't move a partition forward; the session stops rather than loop.
     case noProgress(String)
+    /// Core speaks another major API version, named here: the app or Core needs an upgrade.
+    case incompatibleCore(String)
 }
 
 /// What one reconciliation did.
@@ -60,6 +62,9 @@ public struct CoreSession: Sendable {
     public func reconcile(partitions: [String], pageLimit: Int = 256) async throws -> CoreSessionReport {
         var report = CoreSessionReport()
         let capabilities = try await transport.capabilities()
+        guard capabilities.majorVersion == SyncWire.majorVersion(of: SyncWire.apiVersion) else {
+            throw CoreSessionError.incompatibleCore(capabilities.apiVersion)
+        }
         guard capabilities.datasetID == (try replica.identity().datasetID) else {
             throw CoreSessionError.datasetMismatch
         }
