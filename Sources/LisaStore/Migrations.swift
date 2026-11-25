@@ -18,7 +18,7 @@ public struct Migration: Hashable, Sendable {
 /// Lisa's migrations, oldest first.
 public enum Migrations {
     public static let all: [Migration] = [
-        version1, version2, version3, version4, version5, version6, version7, version8, version9,
+        version1, version2, version3, version4, version5, version6, version7, version8, version9, version10,
     ]
 
     /// The newest schema version this build understands.
@@ -430,5 +430,21 @@ public enum Migrations {
               PRIMARY KEY (scope, request_id, child_index)
             ) STRICT
             """,
+        ])
+
+    /// R2's projection revisions (plan §8.3.2, §8.12.2): for each R1 revision of a task the projection wrote, the commit
+    /// position up to which it reflects Core's commits, so a v1 edit "observed at projection revision N" maps to the
+    /// pieces it saw.
+    static let version10 = Migration(
+        version: 10, summary: "R2 projection revisions of R1 tasks",
+        statements: [
+            """
+            CREATE TABLE core_projection_revisions (
+              entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+              revision INTEGER NOT NULL CHECK (revision >= 1),
+              position INTEGER NOT NULL CHECK (position >= 0),
+              PRIMARY KEY (entity_id, revision)
+            ) STRICT
+            """
         ])
 }
