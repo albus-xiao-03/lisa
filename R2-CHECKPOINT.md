@@ -133,7 +133,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`13736ee`** (`Package.swift`, the LisaCoreLedger target). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376/66 with schema v5. M3 harness v2 passes 8/8, and regression package v4 passes with all 20 targets plus v35 and v47 (`m2/regressions-run-20261125T014819Z/`). Before it:
+**`aade818`** (`ReplicaStore.swift`, Core receipts verified on a replica). The full debug build with tests has 0 warnings, the R1 suite passes 376/66, M3 harnesses v3 and v4 pass, and regression package v5 passes with its 22 targets plus v35 and v47 (`m2/regressions-run-20261125T015607Z/`). Before it: `1286627` (Core snapshots), then **`13736ee`** (`Package.swift`, the LisaCoreLedger target). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376/66 with schema v5. M3 harness v2 passes 8/8, and regression package v4 passes with all 20 targets plus v35 and v47 (`m2/regressions-run-20261125T014819Z/`). Before it:
 
 **M2's clean-checkout checkpoint:** `815bbbc`, reconstructed byte-exact into `m2/clean-20261124T233606Z/tree`. Debug and release have 0 warnings, the R1 suite passes 376/66, fixtures 9/9, lint shows only R1's finding, and the 21 current harnesses pass (108 tests). Its last code commit is the following one:
 
@@ -166,7 +166,7 @@ No live action or external submission has been requested or performed in this ru
 ## 11. Next steps
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
-   1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; still to add: a receipt test vector in `docs/SYNC-PROTOCOL.md`, and the replica's verifying receipt path, which comes with the sync engine in M3-4). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
+   1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; the receipt's vector and the replica's verifying receipt path followed in M3-3). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
       - `LisaStore` migration 5 adds the ledger tables, plus a public way to write records and ledger rows in one transaction (R1's `RecordSession` is internal).
       - The new `LisaCoreLedger`: intake in one write transaction with a savepoint per operation, covering bounds, dataset and epoch; signature, digest and the duplicate rules; authorization by the roster resolver; dependencies with release markers (as the replica's persisted release, Core tables); merge; the projection into R1's `tasks` records; the change-log entry; and the final receipt.
       - Core-signed receipts: a LisaSyncProtocol type and a new LisaTrust domain. The replica gains a verifying receipt path, which strengthens L15.
@@ -174,7 +174,13 @@ No live action or external submission has been requested or performed in this ru
       - The projection follows §8.3.4: deadline earliest, estimate longest, priority highest, splittable false, title by display order. It needs R1's `LisaTask` fields (`changeSequence`, `revision`, `ownerCorrected`, `TaskID`) read from R1's code before writing it.
    2. **M3-2, the change feed (§8.4.2):** Core builds signed change pages per partition from the change log. The test is end to end, Core to a replica, in process.
    3. **M3-3:** full snapshots and bucket snapshots from Core (§8.4.3). Full snapshots of unwindowed partitions are done (`docs/VERIFICATION-SCENARIOS.md` M3-2). Bucket snapshots and repairs from Core come with the calendar change feed (span 2).
-   4. **M3-4:** `LisaSyncHTTP`, `LisaCoreAPI` v2 (§8.12.1), and `LisaSyncEngine`'s Core session (§8.6.5), end to end against the real TLS server.
+   4. **M3-4 (next):** `LisaSyncHTTP`, `LisaCoreAPI` v2 (§8.12.1), and `LisaSyncEngine`'s Core session (§8.6.5), end to end against the real TLS server. A read-only survey of R1's HTTP stack (2026-11-25T02:00Z) found:
+      - **Server:** SwiftNIO `APIServer` (`Sources/LisaAPIServer`). Its handler is `(APIRequest, APIPeer) async -> APIResponse`. `HostAPIServer.start(for:limits:)` (`Sources/LisaHost/HostAPIServer.swift:28-46`) wires one closure for the device listener (`host.settings.api`: plain loopback, reverse proxy, or TLS) and the owner listener (`127.0.0.1:0`, plain).
+      - **Seam:** a defaulted `v2` handler parameter there, tried first for `/v2/` paths and returning nil to fall back to R1's router. That keeps R1's typed 404 for `/v2/` through the in-process router, which `L20APIValidationTests.swift:162-184` pins.
+      - **Device authentication:** `Authorization: Bearer <credential>`, through the public `LisaApplication.authenticateDevice(credential:)`, which returns a `DeviceRegistration`. A 401 answers with `{"code":"unauthenticated",…}`.
+      - **Body limit:** `APIServerLimits.maxBodyBytes` = 256 KiB, server-wide, checked before routing (`RequestAssembler.swift:39-41,69-73`). A larger v2 limit (512 KiB for `POST /v2/operations`) needs a per-path hook. Raising the global limit would break `L20APINetworkTests.swift:157,203-207`, which expects 413 and a closed connection.
+      - **Client:** `URLSessionTransport` refuses paths outside `/v1/` (`HostEndpoint.url(for:)`, `HostEndpoint.swift:86-89`). The plan extends it to `/v2/`, and no R1 test checks that refusal. `LisaAPIClient.send` is internal and checks the 1.x `Lisa-API-Version`, so the v2 client builds its own requests and credentials.
+      - **Harness pattern:** R1's loopback helpers (`LoopbackAPIServer`, `TestHost`, `SyntheticCompanion`) are test-only. A harness opens `LisaHost.open(settings:platform:)`, starts the server, pairs in process (`createPairingCode`, `pairDevice`), and calls the device listener over loopback HTTP.
    5. **M3-5:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05.
    6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
    7. **M3-7:** backups, the recovery ledger, restore, fencing and admission (§8.4.4, §8.4.5, §8.5); S-09, S-10, §19.1.
