@@ -25,13 +25,17 @@ public final class HostAPIServer: Sendable {
 
     /// Starts serving `host`. Returns the server and the owner credential, which is issued for this run only and
     /// returned only here.
-    public static func start(for host: LisaHost, limits: APIServerLimits = APIServerLimits()) async throws(HostError)
-        -> (server: HostAPIServer, ownerCredential: String)
-    {
+    /// - Parameter v2: the R2 v2 router (plan §8.12.1), tried first for requests on the devices listener; it answers
+    ///   `nil` for paths it doesn't own, which R1's router then answers as before. Without it nothing changes.
+    public static func start(
+        for host: LisaHost, limits: APIServerLimits = APIServerLimits(),
+        v2: (@Sendable (APIRequest) async -> APIResponse?)? = nil
+    ) async throws(HostError) -> (server: HostAPIServer, ownerCredential: String) {
         let devices = try deviceListener(host.settings.api, secrets: host.secrets)
         let owner = APIListenerConfiguration(role: .owner, address: "127.0.0.1", port: 0, transport: .plain)
         let router = host.router
         let server = APIServer(listeners: [devices, owner], limits: limits, logger: host.logger) { request, peer in
+            if let v2, peer.listener == .devices, let answer = await v2(request) { return answer }
             guard let origin = origin(for: peer) else { return forbidden }
             return await router.handle(request, origin: origin)
         }
