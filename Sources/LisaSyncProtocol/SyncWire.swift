@@ -2,7 +2,7 @@
 // bytes carried as strict base64url. `POST /v2/operations` takes at most 100 signed operations and answers one outcome
 // each, in order; `POST /v2/receipts/lookup` takes at most 100 operation IDs and answers each one's current receipt or
 // none; `GET /v2/changes` answers one signed page or none; `GET /v2/capabilities` names the API version, the dataset,
-// the epoch and the newest commit position.
+// the epoch, the newest commit position and Core's features.
 
 /// Encoders and strict decoders of the v2 sync messages.
 public enum SyncWire {
@@ -28,13 +28,26 @@ public enum SyncWire {
         public let datasetID: Identifier128
         public let epochID: Identifier128
         public let head: Int64
+        /// Core's features, strictly ascending tokens; a client may require any of them (§8.12.1).
+        public let features: [String]
 
-        public init(apiVersion: String, datasetID: Identifier128, epochID: Identifier128, head: Int64) {
+        public init(
+            apiVersion: String, datasetID: Identifier128, epochID: Identifier128, head: Int64, features: [String] = []
+        ) {
             self.apiVersion = apiVersion
             self.datasetID = datasetID
             self.epochID = epochID
             self.head = head
+            self.features = features
         }
+
+        /// The API's major version, the part before the first dot.
+        public var majorVersion: String { SyncWire.majorVersion(of: apiVersion) }
+    }
+
+    /// The major version of an API version text, the part before the first dot.
+    public static func majorVersion(of version: String) -> String {
+        String(version.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
     }
 
     // MARK: - Operations
@@ -167,16 +180,26 @@ public enum SyncWire {
         try encode([
             ("apiVersion", .string(capabilities.apiVersion)), ("datasetID", .string(capabilities.datasetID.hex)),
             ("epochID", .string(capabilities.epochID.hex)), ("head", .integer(capabilities.head)),
+            ("features", .array(capabilities.features.map { .string($0) })),
         ])
     }
 
     public static func capabilities(fromBody body: [UInt8]) throws(OperationEnvelopeError) -> Capabilities {
         try decode(body) { reader throws in
-            Capabilities(
+            let features = try reader.array("features").map { value in
+                guard case .string(let name) = value, WireText.isToken(name, length: 1...64) else {
+                    throw OperationEnvelopeError.invalidField("wire.features")
+                }
+                return name
+            }
+            guard zip(features, features.dropFirst()).allSatisfy({ $0 < $1 }) else {
+                throw OperationEnvelopeError.invalidField("wire.features")
+            }
+            return Capabilities(
                 apiVersion: try reader.string("apiVersion"),
                 datasetID: try EnvelopeFields.identifier(try reader.string("datasetID"), "wire.datasetID"),
                 epochID: try EnvelopeFields.identifier(try reader.string("epochID"), "wire.epochID"),
-                head: try reader.integer("head"))
+                head: try reader.integer("head"), features: features)
         }
     }
 
