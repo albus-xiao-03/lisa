@@ -38,4 +38,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let custodyAcknowledgement = SigningDomain("lisa-r2-custody-v1\n")
     /// Core's receipt for one operation, over its canonical body (plan §8.2.1).
     public static let receipt = SigningDomain("lisa-r2-receipt-v1\n")
+    /// Core's authorization record for one device, returned at enrollment with the roster (plan §8.1.2 step 5.7).
+    public static let deviceAuthorization = SigningDomain("lisa-r2-device-authorization-v1\n")
 }
