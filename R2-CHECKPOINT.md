@@ -163,13 +163,23 @@ No live action or external submission has been requested or performed in this ru
 
 ## 11. Next steps
 
-1. **M3 — Core, v1 and the direct HTTPS path (next),** from plan §9's M3 row and the sections it names:
-   - first the deferred frozen fixtures due before S-01, in a new `m0/frozen-client/harness4/` (harness3 stays unchanged), with R1's own `OfflineQueue` and `FileQueueStorage`:
-     - **a raw `sending` file:** flush through a transport that never answers, and SIGKILL the harness once the file shows `"status":"sending"` (`OfflineQueue+Flush.swift:88`). Keep that file, and R1's recovery of it from a separate copy (`OfflineQueue.swift:30-50`, which turns it pending and uncertain);
-     - **the pruning pair:** a `done` entry kept at its completion plus 3,599 s and pruned at plus 3,600 s (`OfflineQueue.swift:188-193`);
-     - recorded in a new `MANIFEST-2.tsv` and `SHA256SUMS-2`;
-   - then schema v5 and LisaCoreLedger;
-   - X2 is handed to the owner when M3 delivers its runner.
+1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
+   1. **M3-1, schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
+      - `LisaStore` migration 5 adds the ledger tables, plus a public way to write records and ledger rows in one transaction (R1's `RecordSession` is internal).
+      - The new `LisaCoreLedger`: intake in one write transaction with a savepoint per operation, covering bounds, dataset and epoch; signature, digest and the duplicate rules; authorization by the roster resolver; dependencies with release markers (as the replica's persisted release, Core tables); merge; the projection into R1's `tasks` records; the change-log entry; and the final receipt.
+      - Core-signed receipts: a LisaSyncProtocol type and a new LisaTrust domain. The replica gains a verifying receipt path, which strengthens L15.
+      - Receipt lookup (L14).
+      - The projection follows §8.3.4: deadline earliest, estimate longest, priority highest, splittable false, title by display order. It needs R1's `LisaTask` fields (`changeSequence`, `revision`, `ownerCorrected`, `TaskID`) read from R1's code before writing it.
+   2. **M3-2, the change feed (§8.4.2):** Core builds signed change pages per partition from the change log. The test is end to end, Core to a replica, in process.
+   3. **M3-3:** full snapshots and bucket snapshots from Core (§8.4.3).
+   4. **M3-4:** `LisaSyncHTTP`, `LisaCoreAPI` v2 (§8.12.1), and `LisaSyncEngine`'s Core session (§8.6.5), end to end against the real TLS server.
+   5. **M3-5:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05.
+   6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
+   7. **M3-7:** backups, the recovery ledger, restore, fencing and admission (§8.4.4, §8.4.5, §8.5); S-09, S-10, §19.1.
+   8. **M3-8:** `LisaFiringIdentity`, holds, the deterministic `Message-ID`, the Core side of ownership (§8.10); S-11 a–k.
+   9. **M3-9:** `volume.json`, `identity --files` and `--offline`, host wrappers, the verification image and Compose inputs, `lisa core` (§8.11, §8.12.3); S-20.
+   10. **M3-10:** zone generations and re-expansion (S-08 Core), the resolution finalizer (S-07 Core), the authority path (§8.3.5); S-16 HTTP.
+   11. **M3-11:** `Apps/Probe` (syntax-checked), the X2 runner, then the M3 boundary with the R1 suite in debug and release. X2 is handed to the owner.
 2. **Owner decisions open** (§5):
    - the run directory's build output, or a larger volume: 2.2 GB were free after the M2 boundary, and M3 needs room;
    - reopening the replica at 0 bytes free.
