@@ -29,10 +29,13 @@ public enum OperationSigning {
     ///   - dataset: the receiving dataset; any other is refused.
     ///   - deviceKey: resolves a device's operation key from the holder's roster (`nil` for an unknown or revoked
     ///     device, which refuses the operation).
+    ///   - previousKeys: for operations Core committed (in its signed pages and snapshots), the device's other keys
+    ///     from the roster: those it rotated away from, and its key if it was revoked since (§8.1.3, §8.1.4). Empty
+    ///     for anything else, so only the current key verifies new work.
     ///   - coreKey: Core's signing key valid for legacy children (from the verified key history).
     public static func verify(
         _ operation: SignedOperation, dataset: Identifier128, deviceKey: (Identifier128) -> P256Verifier?,
-        coreKey: P256Verifier?
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }, coreKey: P256Verifier?
     ) throws(OperationVerificationError) -> OperationEnvelope {
         let envelope: OperationEnvelope
         do {
@@ -41,17 +44,19 @@ public enum OperationSigning {
             throw .malformed(error)
         }
         guard envelope.datasetID == dataset else { throw .wrongDataset }
-        let key: P256Verifier?
+        let keys: [P256Verifier]
         switch envelope.origin {
         case .device(let device, _, _, _):
-            key = deviceKey(device)
+            keys = (deviceKey(device).map { [$0] } ?? []) + previousKeys(device)
         case .coreLegacyTranslation:
-            key = coreKey
+            keys = coreKey.map { [$0] } ?? []
         }
-        guard let key else { throw .originKeyMismatch }
-        guard DomainSignatures.isValid(operation.signature, over: operation.body, domain: .operation, by: key) else {
-            throw .invalidSignature
-        }
+        guard !keys.isEmpty else { throw .originKeyMismatch }
+        guard
+            keys.contains(where: {
+                DomainSignatures.isValid(operation.signature, over: operation.body, domain: .operation, by: $0)
+            })
+        else { throw .invalidSignature }
         return envelope
     }
 }
