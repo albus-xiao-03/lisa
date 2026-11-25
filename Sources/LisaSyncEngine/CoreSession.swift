@@ -17,6 +17,12 @@ public protocol CoreTransport: Sendable {
         operationID: Identifier128, receipt: SignedCoreReceipt?
     )]
     func changes(partition: String, after position: Int64, limit: Int) async throws -> SignedChangePage?
+    /// `GET /v2/trust`: the newest roster and Core's signing-key transitions; nil when the transport has none.
+    func trust() async throws -> (roster: SignedRoster, transitions: [SignedKeyTransition])?
+}
+
+extension CoreTransport {
+    public func trust() async throws -> (roster: SignedRoster, transitions: [SignedKeyTransition])? { nil }
 }
 
 /// Why a session stopped.
@@ -27,6 +33,8 @@ public enum CoreSessionError: Error, Hashable, Sendable {
     case noProgress(String)
     /// Core speaks another major API version, named here: the app or Core needs an upgrade.
     case incompatibleCore(String)
+    /// The replica holds no trust state to verify Core with.
+    case notEnrolled
 }
 
 /// What one reconciliation did.
@@ -44,9 +52,11 @@ public struct CoreSessionReport: Hashable, Sendable {
 public struct CoreSession: Sendable {
     let replica: ReplicaStore
     let transport: any CoreTransport
-    let coreKey: P256Verifier
+    /// One fixed Core key, or nil to use the replica's key history (§8.1.4).
+    let coreKey: P256Verifier?
     let roster: @Sendable (Identifier128) -> P256Verifier?
 
+    /// A session that verifies everything with one Core key.
     public init(
         replica: ReplicaStore, transport: any CoreTransport, coreKey: P256Verifier,
         roster: @escaping @Sendable (Identifier128) -> P256Verifier?
@@ -55,6 +65,16 @@ public struct CoreSession: Sendable {
         self.transport = transport
         self.coreKey = coreKey
         self.roster = roster
+    }
+
+    /// A session of an enrolled replica that uses its key history and roster. Each reconciliation first takes Core's
+    /// signing-key transitions, verified as a chain, and the newest roster (§8.6.5 step 2); final receipts then
+    /// verify by the key valid at their position, and pages by the current key.
+    public init(replica: ReplicaStore, transport: any CoreTransport) {
+        self.replica = replica
+        self.transport = transport
+        coreKey = nil
+        self.roster = { id in (try? replica.rosterKey(of: id)) ?? nil }
     }
 
     /// Reconciles `partitions` with Core: baseline pages, pending submissions with their verified receipts, then the
@@ -68,7 +88,22 @@ public struct CoreSession: Sendable {
         guard capabilities.datasetID == (try replica.identity().datasetID) else {
             throw CoreSessionError.datasetMismatch
         }
-        report.pagesApplied += try await pull(partitions, limit: pageLimit)
+        var keys: CoreKeyHistory?
+        if coreKey == nil {
+            if let trust = try await transport.trust() {
+                keys = try replica.acceptKeyTransitions(trust.transitions)
+                do {
+                    try replica.acceptRoster(trust.roster)
+                } catch .unverifiedRoster(.notNewer) {
+                    // The roster held is already this one.
+                }
+            } else {
+                keys = try replica.keyHistory()
+            }
+            guard keys != nil else { throw CoreSessionError.notEnrolled }
+        }
+        let pageKey = coreKey ?? keys!.current
+        report.pagesApplied += try await pull(partitions, limit: pageLimit, coreKey: pageKey)
         _ = try replica.signHeldDrafts()
         let pending = try replica.journal().filter {
             $0.source == .local && ($0.state == .pending || $0.state == .submitted)
@@ -82,7 +117,13 @@ public struct CoreSession: Sendable {
             for (entry, outcome) in zip(batch, outcomes) {
                 switch outcome {
                 case .receipted(let receipt), .duplicate(let receipt):
-                    if try replica.recordReceipt(receipt, coreKey: coreKey) { report.receiptsRecorded += 1 }
+                    let recorded =
+                        if let keys {
+                            try replica.recordReceipt(receipt, keys: keys)
+                        } else {
+                            try replica.recordReceipt(receipt, coreKey: pageKey)
+                        }
+                    if recorded { report.receiptsRecorded += 1 }
                 case .identityReuse: report.refused[entry.operationID] = "identity_reuse"
                 case .sequenceReuse: report.refused[entry.operationID] = "sequence_reuse"
                 case .unverified(let reason): report.refused[entry.operationID] = reason
@@ -90,12 +131,12 @@ public struct CoreSession: Sendable {
             }
             start += batch.count
         }
-        report.pagesApplied += try await pull(partitions, limit: pageLimit)
+        report.pagesApplied += try await pull(partitions, limit: pageLimit, coreKey: pageKey)
         return report
     }
 
     /// Applies Core's pages for each partition from its cursor until Core has nothing newer.
-    func pull(_ partitions: [String], limit: Int) async throws -> Int {
+    func pull(_ partitions: [String], limit: Int, coreKey: P256Verifier) async throws -> Int {
         var applied = 0
         for partition in partitions {
             while true {
