@@ -67,7 +67,7 @@ public struct ReplicaDirectory: Hashable, Sendable {
         }
     }
 
-    /// Empties the ballast so one capture can use its space (§8.15.2). Only the capture path calls this.
+    /// Empties the ballast so one capture, or an open that storage stopped, can use its space (§8.15.2; D-61).
     public func releaseBallast() throws(ReplicaStoreError) {
         guard let handle = FileHandle(forWritingAtPath: ballastPath) else { return }
         defer { try? handle.close() }
