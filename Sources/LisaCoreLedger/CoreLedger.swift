@@ -47,8 +47,9 @@ public struct CoreLedgerStatus: Hashable, Sendable {
 public final class CoreLedger: Sendable {
     public let storage: LisaStorage
     public let datasetID: Identifier128
-    let signer: any MessageSigning
-    private let now: @Sendable () -> Int64
+    /// Core's signing key, which stops signing once a rotation retires it.
+    let signer: RetirableSigner
+    let now: @Sendable () -> Int64
 
     /// The origin key of Core's own operations in round-robin release.
     // Sixteen bytes always make an identifier.
@@ -59,15 +60,19 @@ public final class CoreLedger: Sendable {
 
     /// Opens the ledger of `datasetID` in `storage`, starting it in `newEpochID` when the store holds none yet.
     /// - Parameter now: Unix milliseconds, for receive and commit times; never used to order operations.
+    /// A fresh store records `signer` as the anchor of its key history; an existing one must name `signer` as its
+    /// current key (§8.1.4): a retired key is refused with `signerRetired` and a key the history doesn't hold with
+    /// `signerMismatch`, so Core never signs with a retired key and never forks the history.
     public init(
         storage: LisaStorage, signer: any MessageSigning, datasetID: Identifier128, newEpochID: Identifier128,
         now: @escaping @Sendable () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
     ) throws(CoreLedgerError) {
         self.storage = storage
-        self.signer = signer
+        self.signer = RetirableSigner(signer)
         self.datasetID = datasetID
         self.now = now
         let time = now()
+        let key = signer.verifier.spkiDER
         try write { session, _ in
             if let row = try session.query("SELECT dataset_id FROM core_dataset WHERE singleton = 1").first {
                 guard try CoreColumns.identifier(row[0]) == datasetID else { throw CoreLedgerError.datasetMismatch }
@@ -77,6 +82,22 @@ public final class CoreLedger: Sendable {
                     INSERT INTO core_dataset (singleton, dataset_id, epoch_id, recovery_state, last_position, created_at)
                     VALUES (1, ?, ?, 'normal', 0, ?)
                     """, [CoreColumns.id(datasetID), CoreColumns.id(newEpochID), .integer(time)])
+            }
+            guard
+                let current = try session.query(
+                    "SELECT signing_key, retired_at FROM core_signing_keys ORDER BY sequence DESC LIMIT 1"
+                ).first
+            else {
+                try session.query(
+                    """
+                    INSERT INTO core_signing_keys (sequence, signing_key, valid_from, recorded_at) VALUES (0, ?, 0, ?)
+                    """, [CoreColumns.bytes(key), .integer(time)])
+                return
+            }
+            guard try CoreColumns.bytes(current[0]) == key else {
+                let known = try session.query(
+                    "SELECT 1 FROM core_signing_keys WHERE signing_key = ?", [CoreColumns.bytes(key)])
+                throw known.isEmpty ? CoreLedgerError.signerMismatch : CoreLedgerError.signerRetired
             }
         }
     }
