@@ -36,12 +36,25 @@ public struct HTTPTrustRequests: Sendable {
         }
     }
 
-    func send(_ method: HTTPMethod, _ path: String, _ body: [UInt8]) async throws -> APIResponse {
+    /// `POST /v2/devices/current/key-update` with the update signed by both keys, under the device's credential;
+    /// Core's new roster.
+    public func updateKey(_ signed: SignedKeyTransition, credential: String) async throws -> SignedRoster {
+        let response = try await send(
+            .post, "/v2/devices/current/key-update", try DeviceKeyUpdate.requestBody(signed), credential: credential)
+        do {
+            return try EnrollmentWire.roster(fromBody: [UInt8](response.body))
+        } catch {
+            throw HTTPCoreTransportError.malformed(error)
+        }
+    }
+
+    func send(_ method: HTTPMethod, _ path: String, _ body: [UInt8], credential: String? = nil) async throws
+        -> APIResponse
+    {
+        var headers = ["Lisa-API-Version": SyncWire.apiVersion, "Content-Type": "application/json"]
+        if let credential { headers["Authorization"] = "Bearer " + credential }
         let response = try await transport.send(
-            APIRequest(
-                method: method, path: path, query: [:],
-                headers: ["Lisa-API-Version": SyncWire.apiVersion, "Content-Type": "application/json"],
-                body: Data(body)))
+            APIRequest(method: method, path: path, query: [:], headers: headers, body: Data(body)))
         guard response.status == 200 else {
             let (code, message) = HTTPEnrollmentTransport.error(response)
             throw HTTPCoreTransportError.refused(status: response.status, code: code, message: message)
