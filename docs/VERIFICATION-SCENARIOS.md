@@ -976,3 +976,39 @@ Run directories exist only in this sandbox. Tracked records like this file reach
     - The entry stays pending, with no receipt and not synced.
   - **Wire form:** the vector of §8d decodes back to the same value. A provisional receipt lists its missing IDs, and a final receipt without a position is refused.
 - **Result: PASS.** With M2-19, a peer's acknowledgement never counts as commitment, and a receipt counts only when it verifies by Core's key.
+
+### M3-4 The direct path end to end over loopback HTTP, first slice (R2-L04 direct and R2-L14 lookup over HTTP; plan §8.6.5, §8.12.1)
+
+- **Code:**
+  - `SyncWire` (LisaSyncProtocol).
+  - The new modules LisaCoreAPI (`CoreAPIRouter`), LisaSyncEngine (`CoreTransport`, `CoreSession`) and LisaSyncHTTP (`HTTPCoreTransport`).
+  - R1's `HostAPIServer.start` with a defaulted v2 hook, and `HostEndpoint.url(for:)` accepting `/v2/`.
+  - `docs/DECISIONS.md` D-60; `docs/SYNC-PROTOCOL.md` §8e.
+- **Full build and R1 suite:**
+  - The first build failed: two decode closures in `HTTPCoreTransport` inferred untyped throws. That was fixed before any commit.
+  - `m3/suite-after-v2-path-20261125T020303Z/`: debug build 0 warnings, 376 tests in 66 suites passed.
+- **Harness:** `m3/harness-v5/`, 2/2 on its first run.
+  - **Regression package v6** (v5's targets plus this one, 23 in all; `m2/make-regressions-v6.py`):
+    - **First run** (`m2/regressions-run-20261125T020558Z/`): its build failed when the project volume filled (63 MB free), so every target failed. No test ran.
+    - **Space:** superseded build output from M1 was removed from `.build/` (`m3/disk-reclaim-20261125T020802Z.txt`, 611 MB).
+    - **Second run:** the same sources, built in a scratch path on the root volume by `m2/run-regressions-v7.sh` (`/tmp/lisa-r2-20261124-r2-5462/regressions-scratch`, 3.2 GB; logs and evidence in `m2/regressions-run-20261125T020817Z/`). All 23 targets pass with their usual counts, and so do v35 and v47.
+  - R1's host was opened as `lisa serve` opens it, offline, with its devices listener on a free loopback port and Core's ledger on its store.
+  - The v2 router was passed to the server, and an iPad was paired in process for a bearer credential.
+- **Cases:**
+  - **Reconciliation over HTTP:**
+    - **Before:** Core held the phone's task (created, then renamed), and the iPad's replica had two captures saved.
+    - **The session:** one reconciliation through LisaSyncHTTP over LisaClient's `URLSessionTransport` applied the baseline page and submitted both captures, recording Core's two receipts after verifying them. It then applied the page carrying them.
+    - **After:** both captures are accepted at positions 3 and 4 and no longer overlays, the cursor is at 4, and every view equals Core's.
+    - **v1 on the same server:** `GET /v1/tasks` with the same credential lists the captures and the rename. Work submitted through v2 is visible to R1's API through the projection.
+    - **Again:** a second reconciliation submits, applies and records nothing.
+  - **The routes:**
+    - **Authentication:** a request without a valid credential gets 401 `unauthenticated`.
+    - **Capabilities:** they name the dataset, the epoch and head 0.
+    - **Idempotency:** a submission sent twice gets the same receipt, `receipted` then `duplicate`, and it verifies by Core's key.
+    - **Lookup:** a receipt lookup answers the known operation's receipt and none for an unknown one.
+    - **Unknown route:** an unknown v2 route is a 404.
+- **Not yet in this slice:**
+  - **Network:** TLS on the devices listener with the Linux pin evaluation through the test-only libcurl transport (§8.6.5).
+  - **Body limit:** the plan's 512 KiB request limit for `POST /v2/operations` (D-60).
+  - **Other routes:** enrollment, trust and the other v2 routes (M3-5 onward).
+- **Result: PASS** for this slice.
