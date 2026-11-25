@@ -301,7 +301,12 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - Every request carries the device's bearer credential and `Lisa-API-Version: 2.0`.
   - Bodies are canonical JSON (`SyncWire`); exact signed bytes travel as strict base64url in `{"body", "signature"}` objects.
   - Any answer but 200 carries `{"code", "message"}`: 401 `unauthenticated`, 400 `invalid_request`, 404 `not_found`, 503 `unavailable`.
-- **`GET /v2/capabilities`:** answers `{"apiVersion": "2.0", "datasetID", "epochID", "head"}`, where `head` is the newest commit position.
+- **`GET /v2/capabilities`:** answers `{"apiVersion": "2.0", "datasetID", "epochID", "head", "features"}`. `head` is the newest commit position, and `features` lists Core's capabilities as strictly ascending tokens: `challenges`, `changes`, `credential-reset`, `enrollment`, `operations`, `receipts`, `trust`.
+- **Negotiation,** before any route, an enrollment included:
+  - a `Lisa-API-Version` with another major version gets 426 `upgrade_required`, while another minor version is answered;
+  - a `Lisa-Required-Features` list (comma-separated) naming a feature Core lacks gets 426 `upgrade_required`;
+  - a request without a version header is taken as 2.x.
+  - The client's `CoreSession` refuses a Core whose capabilities name another major version (`incompatibleCore`).
 - **`POST /v2/operations`:** takes `{"operations": [signed, …]}` (1–100). It answers `{"outcomes": [...]}`, one per operation in order:
   - `{"outcome": "receipted" | "duplicate", "receipt": signed}`;
   - `{"outcome": "identity_reuse" | "sequence_reuse"}`;
