@@ -58,6 +58,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-change-page-v1\n` | Core's change page over its canonical body (§8.4.2; §8a) |
 | `lisa-r2-custody-v1\n` | A peer's custody acknowledgement over its canonical body (§8.6.1, §8.7; §8c) |
 | `lisa-r2-receipt-v1\n` | Core's receipt for one operation over its canonical body (§8.2.1; §8d) |
+| `lisa-r2-device-authorization-v1\n` | Core's authorization record for one device, returned at enrollment (§8.1.2 step 5.7; §8f) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -312,6 +313,50 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   3. Signs held drafts.
   4. Submits pending local operations in saved order, in batches of 100, and records each receipt only after verifying it by Core's key. What Core refuses without a receipt stays in the journal.
   5. Pulls again.
+
+## 8f. Enrollment, the roster and device authentication (plan §8.1.2, §8.1.3, §8.12.1)
+
+- **Roster** (`TrustRoster`, artifact type `roster`, §9), identified by (epoch, version):
+  - **Page 0, the summary:** `{"kind": "summary", "datasetID", "epochID", "version", "issuedAt", "policyVersion", "maximumNearbyTrustAgeDays", "tlsPins": [{"pin", "validFrom", "validUntil"?}], "anchorsDigest"? (ca mode), "exportKey", "deviceCount", "revocationCount"}`. One or two distinct pins, current first.
+  - **Then the device pages,** 64 entries each: `{"kind": "devices", "devices": [{"deviceID", "name", "deviceClass", "status", "operationKey", "exportKey", "enrolledAt", "capabilities"}]}`.
+  - **Then the revocation pages,** 256 each: `{"kind": "revocations", "revocations": [{"deviceID", "epochID", "position", "revokedAt"}]}`.
+  - **Order and status:** both lists are strictly ascending by device ID. A listed device is `revoked` exactly when a revocation names it; a revocation can outlive its device's entry.
+  - **Decoding** requires this page order and the counts, and the summary must agree with the signed header.
+  - **On a device:** accepted only as a whole by the trusted Core key, and only if newer than the held version within its epoch (`RosterSigning.verifyNewer`). Its revocations are recorded before the roster (union rule).
+- **Request** (`EnrollmentRequest`), signed by the new operation key under `lisa-r2-enroll-request-v1\n`. It carries `{"enrollmentID", "token", "datasetID", "trustMode", "leafPin", "caDigest"? (ca mode), "issuerFingerprint", "deviceName", "deviceClass", "operationKey", "exportKey", "credentialVerifier", "incarnationID", "createdAt"}`, at most 16 KiB.
+  - Its body contains the token, so it is secret-bearing: kept only in the device's pending item, never stored by Core.
+  - **Request digest:** SHA-256 of the exact signed body.
+- **Result** (`EnrollmentResult`), signed by Core under `lisa-r2-enroll-result-v1\n`: `{"datasetID", "enrollmentID", "issuerFingerprint", "requestDigest", "deviceID", "operationKey", "exportKey", "rosterDigest", "authorizationDigest", "issuedAt"}`.
+  - `rosterDigest` is SHA-256 of the roster's signed header body, which binds every page.
+  - `authorizationDigest` is SHA-256 of the authorization record's body.
+- **Authorization record** (`DeviceAuthorization`), signed by Core under `lisa-r2-device-authorization-v1\n`: `{"datasetID", "epochID", "deviceID", "rosterVersion", "operationKey", "capabilities", "issuedAt"}`.
+- **Response** (`EnrollmentResponse`): `{"result": signed, "roster": {"header": signed, "pages": [{"index", "bytes", "proof"}]}, "authorization": signed}`. It holds nothing of the request. Core stores these exact bytes for 7 days and returns them to an exact retry.
+- **Anchors bundle** (`TLSAnchorsBundle`), signed by Core under `lisa-r2-tls-anchors-v1\n`: `{"datasetID", "caCertificate", "intermediates"}` (DER, base64url). It depends only on the dataset and the configured certificates, so its digest, which the roster carries as `anchorsDigest`, is stable across restarts.
+- **Credential** (`CoreCredential`): 32 random bytes from the device. It travels as unpadded base64url in `Authorization: Bearer`, and Core keeps only its SHA-256 (`credentialVerifier`).
+- **Routes:**
+  - `POST /v2/enrollments` takes `{"request": signed}` and answers the response body, or `{"code", "message"}`. Codes:
+    - `invalid_request` 400, uncounted;
+    - `enrollment_unknown` 404;
+    - `enrollment_consumed` 409, with a security event;
+    - `enrollment_response_purged` 409, naming the device;
+    - `enrollment_device_limit` 409, counted;
+    - `enrollment_expired` 410;
+    - `enrollment_invalidated` 410;
+    - `enrollment_rejected` 403, counted: a wrong token, signature, key or field.
+  - `GET /v2/trust/tls-anchors` answers `{"bundle": signed}` in `ca` mode and 404 in `pin` mode.
+  - These two need no credential.
+  - `GET /v2/trust` answers `{"roster": …}` to an active device's credential.
+- **Core's order in one write transaction** (`CoreTrust.enroll`):
+  1. A consumed enrollment answers first, whatever the expiry: the stored bytes for the same digest, 409 for another, `enrollment_response_purged` after 7 days.
+  2. Then: invalidated or cancelled; expired; a changed signer, which invalidates the open record.
+  3. The token's hash, in constant time.
+  4. The request's signature by its own operation key, its keys, dataset, issuer, trust mode, pin, CA digest and class.
+  5. The device limit, 10 by default.
+  6. Consume: the device; the terminal record (state, digest, device, time); a new roster; the authorization; the result; the stored response.
+  - A failed attempt is committed with the refusal, and the fifth invalidates.
+- **Device completion** (`CoreEnrollment`, `ReplicaStore.completeEnrollment`): in one transaction, the dataset and device ID, the trust state (Core URL and signing key from the owner text, TLS mode, host, CA and intermediates, enrollment ID, request digest) and the roster. Repeating it with the same digest changes nothing. The pending item is removed only afterwards.
+  - The item goes on `enrollment_consumed`, `_expired` and `_invalidated`, and at the owner text's expiry plus 24 hours. Other refusals and unverifiable results keep it for an exact replay.
+- **Revocation** (`CoreTrust.revoke`): the device's status, a permanent revocation at the current epoch and commit position, its open resets and challenges cancelled, and a new roster version. Its credential is then refused (401), and its operations, from any submitter, are `unverified`.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
