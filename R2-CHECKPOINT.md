@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T23:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary.** M2-0 to M2-20 are done, and the clean reconstruction of the M2 head `815bbbc` passed: debug and release, the R1 suite, fixtures, lint and every current M2 harness (`docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **Next: M3** (§11). **Paused (quota) at 23:44Z**, with 72% of the window used and the reset at 2026-11-25T01:20:00Z. The note is `.tmp/r2/20261124-r2-5462/pause-20261124T2343Z-ee42fe.md`, and guard v2 resumes after the reset (§9). **Working:** session `d53fb9c3-8475-433d-91c1-c05c3a4743fa`, a background job that Claude Code forked from the interactive session at 20:34:58Z. It holds lease `interactive:4804`, and guard v2 runs as pid 197451 (§5, §9). Fresh reading at 23:28:27Z: 64% used, reset 2026-11-25T01:20:00Z.
+**Updated:** 2026-11-24T23:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary.** M2-0 to M2-20 are done, and the clean reconstruction of the M2 head `815bbbc` passed: debug and release, the R1 suite, fixtures, lint and every current M2 harness (`docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:** M3-0 (the frozen fixtures due before S-01) and M3-1 (schema v5 and the Core ledger's intake) are done (§11). **Working:** guard launch `L-0df4d1307f` (session `a360702d-4fbc-4872-82f8-ee97a82cf107`) resumed after the third pause at 01:23Z; the guard's launch wrapper holds the writer lock. **Working:** session `d53fb9c3-8475-433d-91c1-c05c3a4743fa`, a background job that Claude Code forked from the interactive session at 20:34:58Z. It holds lease `interactive:4804`, and guard v2 runs as pid 197451 (§5, §9). Fresh reading at 23:28:27Z: 64% used, reset 2026-11-25T01:20:00Z.
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -133,6 +133,8 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
+**`13736ee`** (`Package.swift`, the LisaCoreLedger target). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376/66 with schema v5. M3 harness v2 passes 8/8, and regression package v4 passes with all 20 targets plus v35 and v47 (`m2/regressions-run-20261125T014819Z/`). Before it:
+
 **M2's clean-checkout checkpoint:** `815bbbc`, reconstructed byte-exact into `m2/clean-20261124T233606Z/tree`. Debug and release have 0 warnings, the R1 suite passes 376/66, fixtures 9/9, lint shows only R1's finding, and the 21 current harnesses pass (108 tests). Its last code commit is the following one:
 
 `cdced83` (`ReplicaStore.swift`, the duplicate rules against canonical state). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376 tests in 66 suites (Swift 6.4.2). Harness v51 (4) passes, and so does regression package v2 with its 19 targets (v6, v9, v10, v13, v15, v19, v20, v25, v26, v28, v30, v36, v39, v43, v46, v48, v49, v50, v51), with v35 and v47 in their own packages (run `m2/regressions-run-20261124T233307Z/`). Before it:
@@ -164,7 +166,7 @@ No live action or external submission has been requested or performed in this ru
 ## 11. Next steps
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
-   1. **M3-1, schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
+   1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; still to add: a receipt test vector in `docs/SYNC-PROTOCOL.md`, and the replica's verifying receipt path, which comes with the sync engine in M3-4). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
       - `LisaStore` migration 5 adds the ledger tables, plus a public way to write records and ledger rows in one transaction (R1's `RecordSession` is internal).
       - The new `LisaCoreLedger`: intake in one write transaction with a savepoint per operation, covering bounds, dataset and epoch; signature, digest and the duplicate rules; authorization by the roster resolver; dependencies with release markers (as the replica's persisted release, Core tables); merge; the projection into R1's `tasks` records; the change-log entry; and the final receipt.
       - Core-signed receipts: a LisaSyncProtocol type and a new LisaTrust domain. The replica gains a verifying receipt path, which strengthens L15.
