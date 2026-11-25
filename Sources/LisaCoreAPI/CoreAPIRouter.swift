@@ -89,7 +89,8 @@ public final class CoreAPIRouter: Sendable {
                     try SyncWire.pageBody(try ledger.changePage(partition: partition, after: after, maxEntries: limit)))
             case (.get, "/v2/trust"):
                 guard let trust else { return Self.failure(404, "not_found", "no such v2 route") }
-                return Self.success(try EnrollmentWire.rosterBody(try trust.currentRoster()))
+                return Self.success(
+                    try EnrollmentWire.trustBody(try trust.currentRoster(), transitions: try ledger.keyTransitions()))
             default:
                 return Self.failure(404, "not_found", "no such v2 route")
             }
