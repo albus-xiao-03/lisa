@@ -1,0 +1,23 @@
+// Why a Core ledger call failed (plan §8.4.1). A failure rolls back the whole call; nothing failed is ever reported as
+// decided.
+
+import LisaSQLite
+import LisaSyncProtocol
+
+/// A Core ledger failure.
+public enum CoreLedgerError: Error, Hashable, Sendable {
+    /// The database refused or failed the work.
+    case database(String)
+    /// A stored row doesn't decode: the ledger is damaged.
+    case corrupt(String)
+    /// The ledger belongs to another dataset than the one asked for.
+    case datasetMismatch
+    /// Signing a receipt or a page failed.
+    case signingFailed(String)
+
+    static func classify(_ error: any Error) -> CoreLedgerError {
+        if let error = error as? CoreLedgerError { return error }
+        if let error = error as? SQLiteError { return .database(error.message) }
+        return .database(String(describing: error))
+    }
+}
