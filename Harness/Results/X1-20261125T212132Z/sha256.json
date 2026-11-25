@@ -1,0 +1,19 @@
+{
+  "X1-macOS.xcresult/Data/data.0~EM3wNBp8cRM-0eiWxPU6bi9eRRJ-6ynK69xW1VEZ0fXHpcqDg0xYH-V3F6gm-EhpB14j-3PFZIy2yIsBPw7iYQ==": "98bd5f9b2a2586b6771652f5f1cfd1c65ce9bf2d8ff03c23a320a74ee904c4b3",
+  "X1-macOS.xcresult/Data/data.0~JreTdiShwSvzaxAvINa4bY-tMr8zGpwbQOuG-GVf9hSqMdEtVobtlI8Qg7-el4IN1PQSi2hxLpup28cdxqVGVQ==": "cfee3a5ca04722dcd6a6eebee8c66d4ecf539000a0e9f84314f0fa8020ae4836",
+  "X1-macOS.xcresult/Data/data.0~xDjPrViFJO8HgND74Oojj-d6QScRvUmvEAtW4IBmAMpomBOctE2IHl4Gq4Pka79EWVwaRzE8UdKHbG3meCx89Q==": "7b9726b3c0bd05b0d82fbfc3eecb743ce850a4616302c55dec1f40ea910af1a3",
+  "X1-macOS.xcresult/Data/refs.0~EM3wNBp8cRM-0eiWxPU6bi9eRRJ-6ynK69xW1VEZ0fXHpcqDg0xYH-V3F6gm-EhpB14j-3PFZIy2yIsBPw7iYQ==": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+  "X1-macOS.xcresult/Data/refs.0~JreTdiShwSvzaxAvINa4bY-tMr8zGpwbQOuG-GVf9hSqMdEtVobtlI8Qg7-el4IN1PQSi2hxLpup28cdxqVGVQ==": "a4c946b8a8e836496812adcdaaf1a67872a8b93af042db481759ad27afe31da3",
+  "X1-macOS.xcresult/Data/refs.0~xDjPrViFJO8HgND74Oojj-d6QScRvUmvEAtW4IBmAMpomBOctE2IHl4Gq4Pka79EWVwaRzE8UdKHbG3meCx89Q==": "6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d",
+  "X1-macOS.xcresult/Info.plist": "6f5f7ff8ef95c48fca8a3c058a20609b7e69684bb18d3d0dfdd1de03b8f9388a",
+  "commands.json": "75ee203782feb9d37ef9e6ff7dde9cf940cd2114f9dc0bfab80c76a538339edc",
+  "default.profraw": "4b3c07607a336a413903748e375152ba4296cd878c121eb5c51c3dbd8a49bdcf",
+  "environment.log": "c738440ea81e804d772e9c4b7c6cc76612243aeb8dd6f0df9ddb8946091c7731",
+  "harness-build.log": "f2f9492ca39fd311002a7800a23be623fd06cd0f12a16d2113e3b5f1f0eeaf80",
+  "preflight.log": "8664647f32a5e48d344b92e05a1ad1ba4a8f1d1e725fdf154bddc983ab84fec1",
+  "report.log": "3fc2853cc2a1f4eb08df03e335d088e68a33a3ec869032dc6d94572cc0845d9d",
+  "session-start.log": "714c5641e77396a285dee19462791304fd7196075ca4650f830e6afe2cf1208f",
+  "store/runs/run-20261125T212150Z-x6u225/run.json": "5a8ff22228bec05de1011391da645d67222053b6d6768b377f238e4ed0b3c837",
+  "store/runs/run-20261125T212150Z-x6u225/summary.md": "7a0cc6ced1d89011a548c01086f1e35df77c60028467952db82d50e96de38cc0",
+  "x1-test.log": "9110be3ebb379a152e89ffaa7db410b988d4feebbfcb871fa2188b9574b852b7"
+}
