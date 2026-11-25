@@ -920,3 +920,10 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Required capabilities:** a client names them in `Lisa-Required-Features`, comma-separated; any Core lacks gets 426 `upgrade_required`.
 - **The client side:** `CoreSession` refuses a Core whose capabilities name another major version, before it touches the replica.
 - **Still to come:** the other capabilities fields the plan lists (schema version, the head's confirmation, trust and policy versions, the backup catalogue, the recovery stage, the ready-queue length and redacted health) arrive with the spans that own them.
+
+## D-64 — The per-path body limit: `APIServerLimits.bodyLimitsByPath` (R2 M3, run 20261124-r2-5462; plan §8.12.1; closes D-60's open point)
+
+- **Server:** R1's `APIServerLimits` gains `bodyLimitsByPath`, exact request paths mapped to their own body limit, and empty by default. The request assembler takes the path's limit when one is configured, and otherwise `maxBodyBytes`.
+- **Behaviour:** exceeding either limit gets the same 413, drain and close R1 tests for. Without the map, R1's behaviour is byte-for-byte what it was.
+- **Core:** `CoreAPIRouter.bodyLimits` maps `/v2/operations` to 512 KiB, the plan's budget for one submission, and the composition root passes it. Every other path, v1 or v2, keeps 256 KiB.
+- **Matching:** paths match exactly, before the query, so a prefix can't widen a limit by accident.
