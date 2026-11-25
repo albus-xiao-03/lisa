@@ -963,3 +963,29 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - Its signing port switches to the next key.
 - **Committed history:** replicas verify the operations in Core's signed pages, repairs and snapshots with the device's current key or, through a defaulted `previousKeys` resolver, the keys it rotated away from. Core's page signature vouches that it committed them.
 - **A defect found while designing this:** the same resolver gives a revoked device's last key for its committed operations. Before, the roster's resolver gave a revoked device no key, so a replica pulling pages that carried that device's operations committed before its revocation would have refused them. "Committed data stays" (§8.1.3) now holds on replicas too. Peers' uncommitted operations still verify only with the current key.
+
+## D-67 — Legacy children's origin and derivations, and the conversion frame (R2 M3, run 20261124-r2-5462; plan §8.12.2)
+
+- **The origin:** `OperationOrigin.coreLegacyTranslation` now carries the incarnation derived from the request (`lisa-v1-incarnation-v1`) and the child's index plus one as its sequence, as §8.12.2 fixes them. M1 had left the case without values.
+  - **Unreleased:** the envelope format is unreleased.
+  - **M1's harness v2,** which built the old case, is kept as it was and no longer builds against the working tree. It is M1's evidence and isn't in the regression packages.
+- **The scheme's constants:** schema and policy versions 1 for every child; no creation time; no observed set.
+- **Created entities:** an entity a request creates gets the child-ID derivation of `entity:<discriminator>`, so its ID, and through R1Identity its R1 UUID, is fixed by the request.
+- **Chains:** the caller names each change's chain (an entity, or a preference key), and a child depends only on its immediate predecessor in that chain.
+- **The frame:** `CoreLedger.legacyConvert` runs one write transaction.
+  - **Inside it:** the parent's lookup again, the route's conversion (which takes Core-signed children through the ledger's own intake, `LegacyTransaction.intake`, inside the same transaction, and reads R1's records there), and the parent's record.
+  - **Kept or not:** an answer R1 wouldn't record, or a failure, commits nothing.
+  - **Route semantics** stay in LisaLegacyRequests (M3-6a's next step), so the ledger knows no R1 route.
+
+## D-68 — One R1 revision step per R1 call: the deferred projection and the projection-revision map (R2 M3, run 20261124-r2-5462; plan §8.12.2 "Projection revisions", §8.3.2)
+
+- **Why:** R1 raises a task's revision once per service call: one for a correction, however many fields it names (even none changed), and one for a status change. R2 projected each applied child into R1's record, so a correction of two fields would have raised the revision twice.
+- **The deferred projection:**
+  - `LegacyTransaction.intake(_:projecting: false)` takes a request's field children in without projecting.
+  - `project(_:forceRevision:)` then writes the entity once, as R1's `TaskService.correct` does, forcing the write when nothing changed.
+  - A status child projects itself.
+  - `TaskProjection.project(force:)` is the same projection with that one exception.
+- **The projection-revision map** (schema v10, `core_projection_revisions`): every write into R1's record records which commit position its R1 revision reflects, so a v1 edit "observed at projection revision N" (§8.3.2) can be mapped to the pieces it saw. `CoreLedger.projectionPosition(of:revision:)` reads it.
+- **Found while building this** (M3 harnesses v28 and v29):
+  - **The gap:** legacy edits without an observed set are `accepted_with_conflict`, concurrent with the values they replace. The merged title then shows both candidates, and the display-order first, the old title, wins.
+  - **The fix:** the "observed at projection revision N" rule. The child's body carries N, Core maps it to a horizon at that revision's position, and the result must reach replicas in Core-signed data (they don't hold the map). It is M3-6a's next step, to settle after reading §8.3.2's rule in full.
