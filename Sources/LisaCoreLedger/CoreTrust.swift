@@ -381,11 +381,12 @@ public final class CoreTrust: Sendable {
             guard let deviceClass = RosterDevice.DeviceClass(rawValue: try CoreColumns.text(row[2])),
                 let status = RosterDevice.Status(rawValue: try CoreColumns.text(row[3]))
             else { throw CoreLedgerError.corrupt("a device") }
+            let deviceID = try CoreColumns.identifier(row[0])
             return try RosterDevice(
-                deviceID: try CoreColumns.identifier(row[0]), name: try CoreColumns.text(row[1]),
-                deviceClass: deviceClass, status: status, operationKey: try CoreColumns.bytes(row[4]),
-                exportKey: try CoreColumns.bytes(row[5]), enrolledAt: try CoreColumns.integer(row[6]),
-                capabilities: status == .active ? capabilities : [])
+                deviceID: deviceID, name: try CoreColumns.text(row[1]), deviceClass: deviceClass, status: status,
+                operationKey: try CoreColumns.bytes(row[4]), exportKey: try CoreColumns.bytes(row[5]),
+                enrolledAt: try CoreColumns.integer(row[6]), capabilities: status == .active ? capabilities : [],
+                previousKeys: try Self.previousKeys(of: deviceID, in: session))
         }
         let revocations = try session.query(
             "SELECT device_id, epoch_id, position, revoked_at FROM core_revocations ORDER BY device_id"
