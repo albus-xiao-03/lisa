@@ -17,7 +17,7 @@ enum CoreTaskFold {
     static func view(_ entityID: Identifier128, in session: SQLiteSession) throws -> TaskView? {
         let rows = try session.query(
             """
-            SELECT body, epoch_id, position FROM core_operations
+            SELECT body, epoch_id, position, observed_epoch, observed_position FROM core_operations
             WHERE entity_type = 'task' AND entity_id = ? AND state IN ('accepted', 'accepted_with_conflict')
             ORDER BY position
             """, [CoreColumns.id(entityID)])
@@ -37,9 +37,16 @@ enum CoreTaskFold {
                 groups[group.groupID, default: []].append((envelope, payload, commit))
                 continue
             }
-            state.apply(
-                payload, id: envelope.operationID, observed: envelope.observed.map(ObservedCoverage.init) ?? .nothing,
-                commit: commit)
+            // A legacy child "observed at projection revision N" observes the horizon Core resolved N to when it
+            // decided the child (`CoreOperationRecords.resolveObservedRevision`).
+            var observed = envelope.observed.map(ObservedCoverage.init) ?? .nothing
+            if let position = row[4].integer {
+                observed = ObservedCoverage(
+                    horizon: try ObservedHorizon(
+                        epochID: try CoreColumns.identifier(row[3]), partition: partition, position: position),
+                    pieces: [])
+            }
+            state.apply(payload, id: envelope.operationID, observed: observed, commit: commit)
         }
         for pages in groups.values {
             guard let resolution = completeGroup(pages.map { ($0.envelope, $0.payload) }),
