@@ -56,7 +56,7 @@ Compiler paths: `/opt/swift/swift-<version>-RELEASE-debian13/usr/bin/swift-drive
 - **Harness:** a temporary SwiftPM package, `m0/frozen-client/harness3/`, depending only on `../../r1-src` by path and linking R1's `LisaClient` and `LisaAPIContract`. Built with Swift 6.4.2 and `--force-resolved-versions`: debug and release exit 0, 0 warnings; `frozen-client-harness` debug `51a0b06f960d86f09224d5cde6524bc3b9f4b11ac30e3bf3e882081faaf707ae`, release `990e6e06b6ff4100581d11d5dd5988d6ebdf7aec3d95a4aef3a72b5f05efdb15`. Its lockfile stayed `9608e8e0…a37494`. Three earlier attempts that failed to build are kept beside it, unchanged (`COMMANDS.md` explains each).
 - **Queue files:** 25 files in `m0/frozen-client/queues/`, each written by R1's own `OfflineQueue` and `FileQueueStorage` (release binary), driven by a scripted `APITransport` or, where marked live, R1's real `URLSessionTransport` against a loopback socket, with an injected clock. `MANIFEST.tsv` (SHA-256 `8e1b03e17095bf97f8c0a32e9174ad3aea399a5d0034f3984fbb71dc20829bdb`) lists each file's statuses, attempts, request identity, uncertainty, last error and SHA-256; `SHA256SUMS` (`e1f2c2e62f5711cad57c05d4568f01d264448b71a64ab547eb39983483eb1d56`) covers the 273 files outside `.build`. Every entry was checked field by field.
 - **Coverage (plan §8.14.3 histories):** `unsent` (all nine mutation kinds, captures with and without titles, an idea with a title); `single` done (201), conflict (R1's 409s: "the task changed since it was read", "the task cannot move from …", "the item changed since it was read; reload it and try again"), failed (400 "send between 1 and 50 changes", 400 "unknown action" as a scripted answer, 404, 422 request ID reused, 500), and pending after 401, 429, 502, 503 (two messages), 504, connection refused and host unreachable; `unresolved`: timeout, cancellation and interruption after delivery (R1's only uncertain cases), a 504 then a 401, requeued after a conflict and after a failure, expiry after 30 days.
-- **Not produced yet:** a raw `sending` file left by a killed process, with R1's recovery of it in a separate copy, and the before/after pair of completed-entry pruning. Both are due before S-01 (M3) and S-02 (M9) need them.
+- **Produced later, at M3's start (M3-0):** a raw `sending` file left by a killed process, R1's recovery of it in a separate copy, and the before/after pair of completed-entry pruning.
 - **R1 behavior recorded for M9 (S-02):** R1 marks only a timeout, a reset after delivery and a cancellation as uncertain (`LisaClient/QueueSendOutcome.swift:38-58`), never a 504 or a "still being processed" 503; after a 504 then a 401 the 504's `nextAttemptAt` remains (`OfflineQueue+Flush.swift:124-128`); on Linux a refused connection and an unreachable host map to the same text; "unknown action" cannot occur between an R1 client and an R1 host.
 - **Outside the run directory:** swift-corelibs-foundation created `~/.cache/org.swift.foundation.URLCache/frozen-client-harness/` when R1's transport first ran, as R1's own suite does for its runner; left in place.
 
@@ -874,3 +874,29 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Disk** (free on the project volume): 7.6 GB at the start; 5.1 GB after the debug build; 4.3 GB after the harness build; 4.1 GB after the harness runs; 2.2 GB (96% used) after the release build. The clean run's build output stays in the run directory (plan §10.2).
 - **Interim boundary:** an earlier clean run on `642e955` (`m2/clean-20261124T225253Z/`, before M2-17 to M2-20) passed the same steps with 17 harnesses.
 - **Result: PASS.** The M2 milestone's builds, suite, fixtures, lint and harnesses pass on the clean M2 head.
+
+## 2c. M3 (run `20261124-r2-5462`)
+
+### M3-0 The deferred frozen R1 queue fixtures (plan §8.18 step 3; M0-5's remainder, due before S-01)
+
+- **Harness:** `m0/frozen-client/harness4/`, built as new files by `make-harness4.py`. It is harness3, kept unchanged, plus `Cases+M3.swift`.
+  - `generate-m3` runs only the new cases.
+  - The internal `sending-child` mode is the process case 26 kills.
+  - The scripted host's block-until-killed announcement is written unbuffered.
+  - It links R1's `LisaClient` and `LisaAPIContract` from the byte-exact R1 tree `m0/r1-src` (491c90a).
+  - Sources: `harness4-SOURCES.sha256`.
+- **Build:** `build5.sh`, offline as M0's: file:// mirrors, a dead proxy, its own SwiftPM cache directories. Debug and release exit 0, 0 warnings. R1's lockfile stayed `9608e8e0…37494`. `frozen-client-harness` release `301582bbfdc9608a…`, debug `e94521096d662435…`.
+- **Run:** the release binary, `generate-m3 --queues … --transcripts …` with no proxy variables set, into `m0/frozen-client/m3-fixtures-20261125T012812Z/`. Four cases PASS. `queues/MANIFEST.tsv` and `CASES-SCRIPTS.md` come from `tools/manifest.py`, and `SHA256SUMS` covers the outputs.
+  - A second run into `m3-fixtures-20261125T012831Z/` produced the four queue files byte-identical (fixed request IDs, injected clock).
+- **Cases.** Every file is written by R1's own `OfflineQueue` and `FileQueueStorage`, mode 0600:
+  - **26 `sending-killed-raw`:** the child enqueued an idea capture at +0 s and flushed at +60 s against a host that never answers.
+    - R1 saved the entry as `sending` before it called the transport (`OfflineQueue+Flush.swift:88-91`). The child announced the request ID from inside the transport and was killed there with SIGKILL.
+    - The file holds one entry: `sending`, attempts 1, lastAttemptAt +60 s, with no uncertainty, completion, response or error, and no staging directory beside it.
+    - SHA-256 `ac020818bef133f1…`.
+  - **27 `sending-killed-recovered`:** case 26's file copied byte for byte and opened with R1's `OfflineQueue` (`OfflineQueue.swift:30-50`).
+    - The entry is `pending` with its request ID, uncertain since its last attempt (+60 s), and R1 saved the queue.
+    - Case 26's file is unchanged.
+    - `feb9d1f0b8bf9bea…`.
+  - **29 `prune-completed-before`:** a link capture applied at +61 s (201, R1's CaptureDTO kept as the response). At +3,660 s, one second before `completedRetention` (3,600 s) ends, an idea capture is queued and the applied entry stays. `f603e3916635d35f…`.
+  - **30 `prune-completed-after`:** case 29's file copied. At +3,661 s the next enqueue prunes the applied entry (`OfflineQueue.swift:188-193`), and only the two pending entries remain. `944b5c5bcfdc38ec…`.
+- **Result: PASS.** The M0 frozen artifacts S-01 needs are complete. The remaining frozen datasets (`acceptedByProvider`, `confirmedDelivered` and the others listed in M0-6) are due before S-02 and S-13 at M9.
