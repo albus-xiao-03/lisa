@@ -42,4 +42,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let deviceAuthorization = SigningDomain("lisa-r2-device-authorization-v1\n")
     /// A device's credential-reset request, signed by its existing operation key (plan §8.1.4).
     public static let credentialReset = SigningDomain("lisa-r2-credential-reset-v1\n")
+    /// A transition in Core's signing-key history, signed by both the previous and the next key (plan §8.1.4).
+    public static let keyTransition = SigningDomain("lisa-r2-key-transition-v1\n")
 }
