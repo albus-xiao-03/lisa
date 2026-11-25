@@ -886,3 +886,14 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - LisaSyncEngine uses LisaSyncProtocol, LisaTrust, LisaReplicaStore and LisaCrypto.
   - LisaSyncHTTP uses LisaSyncEngine, LisaClient, LisaAPIContract and LisaSyncProtocol.
 - **Credentials and keys:** device authentication is R1's bearer credential, through `LisaApplication.authenticateDevice`. The roster that gives each device's operation key is a resolver the composition root provides, until enrollment and the roster arrive (M3-5).
+
+## D-61 — A replica may release its ballast to open when storage is full (R2 M3, run 20261124-r2-5462; the owner's decision of 2026-11-25; plan §8.15.2 amended)
+
+- **Override:** plan §8.15.2 releases the storage ballast only on the capture path. On 2026-11-25 the owner allowed releasing it to open the replica at launch, provided every report states the override, the file affected and the recovery.
+- **Why:** M2-4 found that at 0 bytes free the replica couldn't be opened. Opening records the launch's incarnation, and WAL mode needs room for its `-wal` and `-shm` files. Every saved capture stayed intact, but the app couldn't reach its own data until space returned.
+- **Mechanism:** `ReplicaStore`'s initializer counts an open as failed for lack of space in two cases: SQLite reports `SQLITE_FULL`, or it reports an I/O error (on a full tmpfs it can't create its sidecars) while the file system has less than one capture reserve left. Then:
+  - it empties the ballast file (`reserve.bin` in the replica directory, truncated to 0 bytes; the file stays) and opens once more;
+  - `releasedBallastAtOpen` and `storageIsAlmostFull` say so, and the app shows "Storage is almost full";
+  - with the ballast already empty, or if the second open also lacks space, the error is `storageFull`, never a misleading I/O error.
+- **Recovery:** the ballast is restored whole by `restoreBallastIfSpaceReturned()` once a full reserve would still be free after it, or at a later launch when space has returned. Nothing else is deleted, and the database, WAL and saved work are untouched.
+- **Evidence:** `docs/VERIFICATION-SCENARIOS.md` M3-D61, a real full tmpfs in the pinned container.
