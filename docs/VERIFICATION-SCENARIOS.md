@@ -1169,3 +1169,46 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - device key rotation;
   - re-anchoring, with M3-7's restore and S-10.
 - **Result: PASS** for these items.
+
+### M3-4b Capabilities negotiation (plan §8.12.1; `docs/DECISIONS.md` D-63)
+
+- **Code:** `SyncWire.Capabilities.features` and `SyncWire.majorVersion(of:)`; `CoreAPIRouter`'s negotiation; `CoreSession`'s `incompatibleCore`. Records: `docs/SYNC-PROTOCOL.md` §8e.
+- **Full build and R1 suite:** `m3/suite-after-negotiation-20261125T072315Z/`, debug build 0 warnings, 376 tests in 66 suites passed. Lint is clean.
+- **Harness:** `m3/harness-v17/` (v15's 10 tests unchanged, plus 1), 11/11 on its first run (`harness-v17-test-20261125T072245Z.log`). `m3/harness-v16/` (TLS, 6/6) passes on these sources too (`harness-v16-test-20261125T072315Z.log`).
+- **Cases:**
+  - **Capabilities** list Core's features.
+  - **Refused with 426 `upgrade_required`:** `Lisa-API-Version: 3.0`; a required `teleportation`; an enrollment POST sent as 3.1, refused before routing, so no attempt is counted.
+  - **Answered:** 2.7; the required features `trust,enrollment`; and a request without a version header.
+  - **The client's session** refuses a Core that answers 3.0 (`incompatibleCore("3.0")`).
+- **Regressions:** regression package v10 (`m2/make-regressions-v10.py`, harness v15 replaced by v17; run `m2/regressions-run-20261125T072348Z/`) passes all 24 targets, and v35 and v47 pass too.
+  - The targets ran from its build at 07:24:03Z, of the committed negotiation sources.
+  - v35 and v47 build in their own packages, and did so after 07:25Z, so they include the then-uncommitted per-path limit (M3-4c), which regression package v11 covers.
+- **Result: PASS.**
+
+### M3-4c The per-path body limit for `POST /v2/operations` (plan §8.12.1; `docs/DECISIONS.md` D-60, D-64)
+
+- **Code:**
+  - R1's LisaAPIServer gains `APIServerLimits.bodyLimitsByPath`, empty by default, and the request assembler takes the request path's own limit when one is configured. Exceeding either limit is the same 413 and close.
+  - `CoreAPIRouter.bodyLimits` names `/v2/operations` at 512 KiB, for the composition root to pass.
+  - No R1 test changed.
+- **Full build and R1 suite:** `m3/suite-after-body-limits-20261125T072632Z/`, debug build 0 warnings, 376 tests in 66 suites passed, including R1's 413 tests. Lint is clean.
+- **Harness:** `m3/harness-v18/`: v17's 11 tests unchanged, with its server started under `CoreAPIRouter.bodyLimits`, plus 1. It passed 12/12 on its first run (`harness-v18-test-20261125T072608Z.log`).
+- **Cases:**
+  - A 300 KiB body to `POST /v2/operations` reaches the router: a 400 `invalid_request`, since it isn't a valid submission. 600 KiB gets 413.
+  - The same 300 KiB to `POST /v1/captures` and to `POST /v2/receipts/lookup` gets 413, R1's 256 KiB limit.
+  - Ordinary requests are answered as before.
+- **Regressions:** regression package v11 (`m2/make-regressions-v11.py`, harness v17 replaced by v18; runner `m2/run-regressions-v12.sh`; run `m2/regressions-run-20261125T072713Z/`) passes all 24 targets, and v35 and v47 pass too.
+- **Release:** a release build of the whole package (`m3/release-build-20261125T072841Z/`, scratch `.build/r2-release`) completes with 0 warnings. It started from the manifest before `1daf65f`'s formatting-only wrap.
+- **Lint:** the whole-tree lint (`m3/lint-tree-20261125T072843Z.log`) found three over-long R2 target lines in `Package.swift`, from `9cc02f4`. They were wrapped in `1daf65f`, and R1's own finding is the only one left.
+- **Result: PASS.** M3-4 has nothing left open beyond the M3 boundary's full runs.
+
+### M3-5d, export-key rotation (plan §8.1.4 "an export-key rotation with an old archive still opening")
+
+- **Code:** `CoreExportKeys` (LisaCoreLedger): the current export key, whose public half the roster announces, and every retired key, picked by the key ID an archive names (SHA-256 of the SubjectPublicKeyInfo DER, the archive format's own). `CoreTrust` already signs a new roster version when its export key changes.
+- **Harness:** `m3/harness-v19/` (v18's 12 tests unchanged, plus 1), 13/13 on its first run (`harness-v19-test-20261125T073122Z.log`).
+- **Full build and R1 suite:** `m3/suite-at-head-20261125T073144Z/` at `6e55294`, debug build 0 warnings, 376/66 passed.
+- **Cases:**
+  - An archive sealed by the device to Core's export key K1 (a `core-roster` recipient, signed by the device).
+  - **The rotation:** Core takes K2, and its next roster announces K2. The device fetches it over HTTP and accepts it.
+  - **Opening:** the old archive opens with the retained K1, and an archive sealed to the announced K2 opens with K2. An archive sealed to a key Core never held finds none. The old archive is still authentic by the device's key.
+- **Result: PASS.** Still open in M3-5d: signing-key rotation with key history, K2's private half imported on a fresh host, device key rotation, and re-anchoring (with M3-7).
