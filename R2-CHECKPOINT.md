@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-25T07:35Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-25T11:55Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -9,14 +9,11 @@
   - M3-5c, credential reset and challenges (harness v15, 10/10);
   - M3-5d's first items, an expired certificate and roster renewal (harness v16, 6/6);
   - M3-4's leftovers: capabilities negotiation with `upgrade_required` (M3-4b, D-63, harness v17, 11/11) and the per-path body limit for `POST /v2/operations` (M3-4c, D-64, harness v18, 12/12);
-  - M3-5d's export-key rotation, with an old archive still opening (harness v19, 13/13).
+  - M3-5d's export-key rotation, with an old archive still opening (harness v19, 13/13);
+  - M3-5d's signing-key rotation with key history and K2 on a fresh host (D-65, harness v20, 15/15), and device key rotation with historical keys for committed operations (D-66, harness v22, 16/16).
 
-  Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`.
-- **Paused (quota, fifth pause) at 07:35Z,** with 76% used (reading `0b0605d5b94c`, 07:31:58Z) and the reset at 2026-11-25T11:20:00Z.
-  - **Why now:** the next items, signing-key rotation with key history and device key rotation, each need more than the rest of the window.
-  - **Note:** `.tmp/r2/20261124-r2-5462/pause-20261125T0735Z-*.md`.
-  - **The guard:** v2 launches a forked resume after the reset (§9).
-- **The writer:** guard launch `L-64486886ba` (session `30b63dd0-89d3-45d0-b885-bb4305d22093`), resumed at 06:23Z after the fourth pause. The newest reading was 51% at 07:07:37Z (`468d1e92ca48`), with the reset at 11:20:00Z.
+  Each is in §11 and `docs/VERIFICATION-SCENARIOS.md`. M3-5 is done except re-anchoring (with M3-7) and the conditional Design B certificates; M3-6 is next.
+- **The writer:** guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause (`P-20261125T073323Z-109199`), with 10% used (reading `8cc41676af12`, 11:24:02Z) and the reset at 2026-11-25T16:20:00Z.
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
@@ -170,7 +167,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`6e55294`** (`Sources/LisaCoreLedger/CoreExportKeys.swift`, M3-5d's export-key rotation): a full debug build with tests has 0 warnings and the R1 suite passes 376/66 at this HEAD (`m3/suite-at-head-20261125T073144Z/`); M3 harness v19 passes 13/13. The documents follow up to the pause.
+**`1bcd470`** (`Sources/LisaSyncHTTP/HTTPTrustRequests.swift`, M3-5d's device key rotation):
+- **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 with schema v8 (`m3/suite-after-device-keys-20261125T114317Z/`). Lint is clean.
+- **Harnesses:** M3 harnesses v22 (16/16) and v16 (6/6) pass.
+- **Regressions:** regression package v14 (`m2/run-regressions-v15.sh`, run `m2/regressions-run-20261125T114435Z/`) passes all 24 targets, and v35 and v47 pass too.
+- **One commit doesn't build alone:** `5b63c22` (`CoreLedger.swift`) needs the next one, `ace09a9`.
+
+Before it, **`6e55294`** (`Sources/LisaCoreLedger/CoreExportKeys.swift`, M3-5d's export-key rotation): a full debug build with tests has 0 warnings and the R1 suite passes 376/66 at this HEAD (`m3/suite-at-head-20261125T073144Z/`); M3 harness v19 passes 13/13. The documents follow up to the pause.
 
 Before it, **`1daf65f`** (`Package.swift`, formatting only, after M3-4b and M3-4c):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 at this HEAD (`m3/suite-at-head-20261125T072924Z/`). The whole-tree lint shows only R1's own finding (`Package.swift` AddLines, now line 196; `m3/lint-tree-20261125T072843Z.log` was taken before the wrap, and shows the three wrapped lines too).
@@ -252,14 +255,18 @@ No live action or external submission has been requested or performed in this ru
       - **Done, M3-5c** (`docs/VERIFICATION-SCENARIOS.md` M3-5c; SYNC-PROTOCOL §8g): credential reset (the owner's one-time token, a new verifier signed by the existing key, the old credential refused) and challenges (the plan's message, monotonic expiry, run generation, single use, purpose, epoch and body binding, revocation mid-exchange, an unknown key). The harness found that revocation spent open challenges; fixed in `48a4e01`. Harness v15, 10/10.
       - **Done, M3-5d's first items** (`docs/VERIFICATION-SCENARIOS.md` "M3-5d, first items"): an expired certificate refused at first contact in both modes and by an enrolled device, and roster renewal. Harness v16, 6/6.
       - **Done, M3-5d's export-key rotation** (`docs/VERIFICATION-SCENARIOS.md`; `CoreExportKeys`): the roster announces the new key, and an old archive still opens with the retired key. Harness v19, 13/13.
-      - **Next, the rest of M3-5d** (§8.1.4 at M3):
-        - signing-key rotation: a transition record signed by the old and new key with an activation position; devices keep the key history, so receipts, pages and rosters verify with the key valid at their position; a retired key verifies only records from before its retirement; the transition goes to the recovery ledger in M3-7;
-        - K2's private half imported on a fresh host (`trust import-key`), with a mismatching key refused;
-        - device key rotation: a key-update operation signed by the old and the new key, then a new roster;
-        - re-anchoring after the signing key is lost, which comes with M3-7's restore (S-10).
+      - **Done, M3-5d's signing-key rotation** (`docs/VERIFICATION-SCENARIOS.md`; D-65; SYNC-PROTOCOL §8h): dual-signed transitions activating at the next commit position, Core's history (schema v7), opening only with the current key, `importKeyTransition`, the devices' history with receipts verified by position, `GET /v2/trust` with the transitions. Harness v20, 15/15.
+      - **Done, M3-5d's device key rotation** (D-66; SYNC-PROTOCOL §8i): `POST /v2/devices/current/key-update`, the roster's `previousKeys` (schema v8), re-signing pending work, and historical keys for committed operations, which also fixes a revoked device's committed history on replicas. Harness v22, 16/16.
+      - **Left in M3-5:** re-anchoring after the signing key is lost (with M3-7's restore, S-10), and Design B certificates (only if N-1 selects them).
       - **M3-4's leftovers are done:** capabilities negotiation (M3-4b, D-63) and the per-path body limit (M3-4c, D-64).
-      - **Practice:** harnesses build in `m3/harness-scratch-m3-5` (the project volume has 28 GB free). Regressions run with `m2/run-regressions-v9.sh` (package v8; scratch on the root volume). Harness v11 and v8 were corrected before their first builds, and v9 and v13 failed to compile; all four are kept unchanged.
-   6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
+      - **Practice:** the newest harnesses are v22 (loopback, every M3-5 suite) and v16 (TLS). Regression package v14 (`m2/make-regressions-v14.py`, runner `m2/run-regressions-v15.sh`) adds LisaArchive to the products and runs no target when its build fails. v12's run was invalid: its build failed and its runner ran the targets against the previous build. Don't edit Swift sources while a regression runs, because v35 and v47 rebuild from the working tree at its end. Harnesses build in `m3/harness-scratch-m3-5` (the project volume has 28 GB free). Regressions run with `m2/run-regressions-v9.sh` (package v8; scratch on the root volume). Harness v11 and v8 were corrected before their first builds, and v9 and v13 failed to compile; all four are kept unchanged.
+   6. **M3-6, next:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03. §8.12.2 has been read in full (2026-11-25T11:50Z). The slices:
+      - **M3-6a:** the module; Core's parent records (scope, request ID, Core-recomputed fingerprint, child set, dispositions, recorded answer, expiry) in a new schema version; the incarnation derivation (`lisa-v1-incarnation-v1`) beside M1's `LegacyChildIdentity`; Core-signed children through intake; `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics (revision 409, all fields validated together, field children then the status child); replay with `Lisa-Replayed`, and 422 `requestIDReused`.
+        - **Seams to settle first:** R1's `APIRouter.idempotent` (`Sources/LisaAPI/APIRouter.swift:108-150`, scoped key `caller.scope:requestID`, fingerprint over method, path, sorted query and body) and its handlers (`WorkHandlers.createTask`, `updateTask`). The plan's module table (§7.2.1) has LisaLegacyRequests linked by Core's LisaAPI and LisaCoreAPI, so R1's router calls the converter for mutating routes, inside its idempotency path. R1's `DTOMapping` (internal to LisaAPI) then builds the replies as before. LisaApplication's `createTask`, `correctTask` and `setTaskStatus` hold the semantics to reproduce.
+      - **M3-6b:** preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review`/`resolve` (S-03).
+      - **M3-6c:** captures with R1's permanent deduplication, notification receipts with R1's durable prefix, reminder, notification, proposal and plan-block actions.
+      - **M3-6d:** terminal replies (the four cases), the reply dependency index, error templates without caller text, outcome-only migrated parents, and `upgrade_required` on v1.
+      - **M3-6e:** S-01 against the frozen R1 client, queue and CLI from `491c90a` (M3-0's fixtures and `m0/frozen-client/harness4`).
    7. **M3-7:** backups, the recovery ledger, restore, fencing and admission (§8.4.4, §8.4.5, §8.5); S-09, S-10, §19.1.
    8. **M3-8:** `LisaFiringIdentity`, holds, the deterministic `Message-ID`, the Core side of ownership (§8.10); S-11 a–k.
    9. **M3-9:** `volume.json`, `identity --files` and `--offline`, host wrappers, the verification image and Compose inputs, `lisa core` (§8.11, §8.12.3); S-20.
