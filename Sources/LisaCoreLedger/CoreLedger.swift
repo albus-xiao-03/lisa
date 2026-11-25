@@ -47,7 +47,7 @@ public struct CoreLedgerStatus: Hashable, Sendable {
 public final class CoreLedger: Sendable {
     public let storage: LisaStorage
     public let datasetID: Identifier128
-    private let signer: any MessageSigning
+    let signer: any MessageSigning
     private let now: @Sendable () -> Int64
 
     /// The origin key of Core's own operations in round-robin release.
