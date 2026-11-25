@@ -105,6 +105,22 @@ enum CoreOperationRecords {
             [.text(state), CoreColumns.optionalText(reason), .integer(position), CoreColumns.id(operationID)])
     }
 
+    /// Resolves a legacy child's "observed at projection revision N" when Core decides it (plan §8.3.2, §8.12.2): the
+    /// horizon of the state R1's revision N of the entity reflected, kept with the operation for every later fold. A
+    /// revision the map doesn't hold resolves to nothing, so the child observes nothing and conflicts rather than
+    /// superseding pieces it may not have seen.
+    static func resolveObservedRevision(of envelope: OperationEnvelope, in session: SQLiteSession) throws {
+        guard let revision = envelope.observed?.projectionRevision,
+            let row = try session.query(
+                "SELECT epoch_id, position FROM core_projection_revisions WHERE entity_id = ? AND revision = ?",
+                [CoreColumns.id(envelope.entityID), .integer(revision)]
+            ).first
+        else { return }
+        try session.query(
+            "UPDATE core_operations SET observed_epoch = ?, observed_position = ? WHERE operation_id = ?",
+            [row[0], row[1], CoreColumns.id(envelope.operationID)])
+    }
+
     static func setReceipt(_ operationID: Identifier128, _ receipt: SignedCoreReceipt, in session: SQLiteSession)
         throws
     {
