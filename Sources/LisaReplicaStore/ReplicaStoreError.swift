@@ -60,6 +60,10 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     /// A verified custody acknowledgement the replica can't take: for other bytes than the journal's, from this
     /// device, or from a revoked device.
     case custodyRefused(String)
+    /// A roster that didn't verify by the trusted Core key, or wasn't newer than the one held (§8.1.3).
+    case unverifiedRoster(RosterVerificationError)
+    /// An enrollment completion for another device's trust than the one this replica already holds.
+    case trustMismatch
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
