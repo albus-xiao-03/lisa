@@ -131,11 +131,14 @@ let package = Package(
         // R2 v2 router (plan §7.2.1, §8.12.1): the sync routes over the Core ledger. It uses LisaCrypto for the roster's
         // keys; LisaApplication, LisaDevices and LisaPorts join with enrollment and the other v2 routes
         // (docs/DECISIONS.md D-60).
-        .target(name: "LisaCoreAPI", dependencies: ["LisaAPIContract", "LisaCoreLedger", "LisaSyncProtocol", "LisaCrypto"]),
+        .target(
+            name: "LisaCoreAPI", dependencies: ["LisaAPIContract", "LisaCoreLedger", "LisaSyncProtocol", "LisaCrypto"]),
         // R2 sync engine (plan §7.2.1, §8.6.5): the replica's Core session over the CoreTransport port.
-        .target(name: "LisaSyncEngine", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaReplicaStore", "LisaCrypto"]),
+        .target(
+            name: "LisaSyncEngine", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaReplicaStore", "LisaCrypto"]),
         // R2 production CoreTransport (plan §7.2.1, §8.6.5): the v2 messages over LisaClient's transport.
-        .target(name: "LisaSyncHTTP", dependencies: ["LisaSyncEngine", "LisaClient", "LisaAPIContract", "LisaSyncProtocol"]),
+        .target(
+            name: "LisaSyncHTTP", dependencies: ["LisaSyncEngine", "LisaClient", "LisaAPIContract", "LisaSyncProtocol"]),
         .target(
             name: "LisaCoreLedger",
             dependencies: [
