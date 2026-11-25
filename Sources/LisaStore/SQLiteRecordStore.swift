@@ -24,6 +24,19 @@ public final class SQLiteRecordStore: RecordStore {
         try mapErrors { try database.writeTransaction { try body(RecordSession(session: $0)) } }
     }
 
+    /// One write transaction for the R2 Core ledger (plan §8.4.1): the ledger's own tables through the session and R1's
+    /// records through the same transaction, so an operation's projection commits with its ledger rows or not at all.
+    @discardableResult
+    public func ledgerWrite<T>(_ body: (SQLiteSession, any RecordWriting) throws -> T) throws -> T {
+        try mapErrors { try database.writeTransaction { try body($0, RecordSession(session: $0)) } }
+    }
+
+    /// One read transaction over the ledger's tables and R1's records together.
+    @discardableResult
+    public func ledgerRead<T>(_ body: (SQLiteSession, any RecordReading) throws -> T) throws -> T {
+        try mapErrors { try database.readTransaction { try body($0, RecordSession(session: $0)) } }
+    }
+
     private func mapErrors<T>(_ body: () throws -> T) throws -> T {
         do {
             return try body()
