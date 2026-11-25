@@ -281,9 +281,10 @@ public final class CoreLedger: Sendable {
             Date(timeIntervalSince1970: Double($0) / 1_000)
         }
         if project {
-            try TaskProjection.project(
+            let revision = try TaskProjection.project(
                 view, entityID: envelope.entityID, createdAt: created,
                 commitTime: Date(timeIntervalSince1970: Double(time) / 1_000), into: records)
+            try TaskProjection.recordRevision(revision, of: envelope.entityID, at: position, in: session)
         }
         try Self.logChange(
             position, envelope.operationID, decision: conflict ? .acceptedWithConflict : .accepted, epoch: epoch,
