@@ -1,6 +1,8 @@
-// The v2 router (plan §8.12.1, §8.6.5, §8.1.2): the sync routes of the direct HTTPS path over the Core ledger, and the
-// trust routes over Core's trust state. Enrollment (`POST /v2/enrollments`) and the token-free anchors bundle
-// (`GET /v2/trust/tls-anchors`) need no credential: the token, and Core's signature, authenticate them. Every other
+// The v2 router (plan §8.12.1, §8.6.5, §8.1.2, §8.1.4, §8.1.5): the sync routes of the direct HTTPS path over the Core
+// ledger, and the trust routes over Core's trust state. Enrollment (`POST /v2/enrollments`), the token-free anchors
+// bundle (`GET /v2/trust/tls-anchors`), credential reset (`POST /v2/devices/current/credential-reset`) and challenge
+// issue (`POST /v2/challenges`) need no credential: the token or the device's key, and Core's signature, authenticate
+// them, and a device whose credential a restore rewound can still use them. Every other
 // request is an enrolled device's, by its bearer credential, and the roster gives each device's operation key. Paths
 // outside `/v2/` get nil, so R1's router answers them as before. Bodies are canonical JSON (`SyncWire`,
 // `EnrollmentWire`).
@@ -107,6 +109,25 @@ public final class CoreAPIRouter: Sendable {
             } catch {
                 return failure(503, "unavailable", "Core couldn't complete the request")
             }
+        case (.post, "/v2/devices/current/credential-reset"):
+            do {
+                switch try trust.resetCredential([UInt8](request.body ?? Data())) {
+                case .reset(let device, let time):
+                    return success(try CredentialResetRequest.answerBody(deviceID: device, resetAt: time))
+                case .refused(let refusal):
+                    return failure(refusal.status, refusal.code, "Core refused the credential reset")
+                }
+            } catch {
+                return failure(503, "unavailable", "Core couldn't complete the request")
+            }
+        case (.post, "/v2/challenges"):
+            guard let asked = try? Challenge.request(fromBody: [UInt8](request.body ?? Data())) else {
+                return failure(400, "invalid_request", "deviceID and purpose are required")
+            }
+            guard let challenge = try? trust.issueChallenge(device: asked.deviceID, purpose: asked.purpose),
+                let body = try? challenge.canonicalBody()
+            else { return failure(503, "unavailable", "Core couldn't complete the request") }
+            return success(body)
         case (.get, "/v2/trust/tls-anchors"):
             guard let anchors = trust.anchors else {
                 return failure(404, "not_found", "Core has no anchors bundle in pin mode")
