@@ -48,17 +48,27 @@ public struct ObservedSet: Hashable, Sendable {
     /// SHA-256 of the sorted version IDs of every candidate the owner saw, on resolutions.
     public let reviewedSetDigest: Digest256?
     public let group: ResolutionGroupPage?
+    /// On a Core-signed legacy child only: R1's `expectedRevision` from the request, "observed at projection revision
+    /// N" (plan §8.3.2, §8.12.2). Core maps N to the state that revision reflected when it decides the child. It stands
+    /// alone: no horizon, pieces, digest or group beside it.
+    public let projectionRevision: Int64?
 
     public init(
-        horizon: ObservedHorizon?, pieces: [Identifier128], reviewedSetDigest: Digest256?, group: ResolutionGroupPage?
+        horizon: ObservedHorizon?, pieces: [Identifier128], reviewedSetDigest: Digest256?, group: ResolutionGroupPage?,
+        projectionRevision: Int64? = nil
     ) throws(OperationEnvelopeError) {
         guard pieces.count <= Self.maximumPieces, EnvelopeFields.isStrictlyAscending(pieces) else {
             throw .observedPieces
+        }
+        if let projectionRevision {
+            guard projectionRevision >= 1, horizon == nil, pieces.isEmpty, reviewedSetDigest == nil, group == nil
+            else { throw .invalidField("observed.projectionRevision") }
         }
         self.horizon = horizon
         self.pieces = pieces
         self.reviewedSetDigest = reviewedSetDigest
         self.group = group
+        self.projectionRevision = projectionRevision
     }
 
     /// The canonical form, exactly as an envelope's `observed` field carries it. A store that keeps a command before it
@@ -88,6 +98,7 @@ public struct ObservedSet: Hashable, Sendable {
                     ))
             }
             if let reviewedSetDigest { pairs.append(("reviewedSetDigest", .string(reviewedSetDigest.hex))) }
+            if let projectionRevision { pairs.append(("projectionRevision", .integer(projectionRevision))) }
             if let group {
                 pairs.append(
                     (
@@ -134,8 +145,11 @@ public struct ObservedSet: Hashable, Sendable {
                     listDigest: EnvelopeFields.digest(gr.string("listDigest"), "observed.group.listDigest"))
                 try gr.finish()
             }
+            let projectionRevision = try reader.optionalInteger("projectionRevision")
             try reader.finish()
-            try self.init(horizon: horizon, pieces: ids, reviewedSetDigest: reviewed, group: group)
+            try self.init(
+                horizon: horizon, pieces: ids, reviewedSetDigest: reviewed, group: group,
+                projectionRevision: projectionRevision)
         } catch let error as OperationEnvelopeError {
             throw error
         } catch let error as CanonicalFieldError {
