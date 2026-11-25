@@ -16,6 +16,12 @@ import LisaSyncProtocol
 /// Answers the v2 sync routes.
 public final class CoreAPIRouter: Sendable {
     public static let versionHeader = "Lisa-API-Version"
+    /// The capabilities a client requires, comma-separated; any Core lacks gets `upgrade_required` (§8.12.1).
+    public static let requiredFeaturesHeader = "Lisa-Required-Features"
+    /// What this Core offers, strictly ascending.
+    public static let features = [
+        "challenges", "changes", "credential-reset", "enrollment", "operations", "receipts", "trust",
+    ]
 
     let ledger: CoreLedger
     let trust: CoreTrust?
@@ -48,6 +54,7 @@ public final class CoreAPIRouter: Sendable {
     /// The answer to a `/v2/` request; `nil` for any other path.
     public func handle(_ request: APIRequest) -> APIResponse? {
         guard request.path == "/v2" || request.path.hasPrefix("/v2/") else { return nil }
+        if let refusal = Self.negotiate(request) { return refusal }
         if let trust, let answer = Self.credentialFree(request, trust: trust) { return answer }
         guard let credential = Self.bearer(request), authenticate(credential) else {
             return Self.failure(401, "unauthenticated", "a valid device credential is required")
@@ -60,7 +67,7 @@ public final class CoreAPIRouter: Sendable {
                     try SyncWire.capabilitiesBody(
                         SyncWire.Capabilities(
                             apiVersion: SyncWire.apiVersion, datasetID: status.datasetID, epochID: status.epochID,
-                            head: status.lastPosition)))
+                            head: status.lastPosition, features: Self.features)))
             case (.post, "/v2/operations"):
                 let operations = try SyncWire.operations(fromSubmission: [UInt8](request.body ?? Data()))
                 let outcomes = try ledger.intake(operations, deviceKey: roster).map(Self.wire)
@@ -88,6 +95,28 @@ public final class CoreAPIRouter: Sendable {
         } catch {
             return Self.failure(503, "unavailable", "Core couldn't complete the request")
         }
+    }
+
+    /// `upgrade_required` (426) for a request that names another major API version or requires a feature Core lacks;
+    /// nil otherwise. A request without a version header is taken as 2.x.
+    static func negotiate(_ request: APIRequest) -> APIResponse? {
+        if let version = header(request, versionHeader),
+            SyncWire.majorVersion(of: version) != SyncWire.majorVersion(of: SyncWire.apiVersion)
+        {
+            return failure(426, "upgrade_required", "Core speaks API \(SyncWire.apiVersion)")
+        }
+        if let required = header(request, requiredFeaturesHeader) {
+            let names = required.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard names.allSatisfy({ $0.isEmpty || features.contains($0) }) else {
+                return failure(426, "upgrade_required", "Core lacks a capability this client requires")
+            }
+        }
+        return nil
+    }
+
+    /// A header's value, whatever the case of its name.
+    static func header(_ request: APIRequest, _ name: String) -> String? {
+        request.headers[name] ?? request.headers.first { $0.key.lowercased() == name.lowercased() }?.value
     }
 
     /// The routes that need no credential; nil for any other.
