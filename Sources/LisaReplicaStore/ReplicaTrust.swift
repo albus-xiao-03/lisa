@@ -164,13 +164,12 @@ extension ReplicaStore {
     /// held. Its revocations are recorded first, so an interruption can't keep the new roster without them.
     @discardableResult
     public func acceptRoster(_ signed: SignedRoster) throws(ReplicaStoreError) -> TrustRoster {
-        guard let trust = try trustState() else { throw .notEnrolled }
+        guard let keys = try keyHistory() else { throw .notEnrolled }
         let held = try newestRoster()?.roster
-        let datasetID = try identity().datasetID ?? held?.datasetID
-        guard let datasetID else { throw .notEnrolled }
+        let datasetID = keys.datasetID
         let roster: TrustRoster
         do {
-            roster = try RosterSigning.verifyNewer(signed, than: held, dataset: datasetID, coreKey: trust.coreKey)
+            roster = try RosterSigning.verifyNewer(signed, than: held, dataset: datasetID, coreKey: keys.current)
         } catch {
             throw .unverifiedRoster(error)
         }
@@ -194,6 +193,88 @@ extension ReplicaStore {
                 ])
         }
         return roster
+    }
+
+    // MARK: - Core's key history (§8.1.4)
+
+    /// The key history this device trusts: the owner text's key, then every transition verified since.
+    public func keyHistory() throws(ReplicaStoreError) -> CoreKeyHistory? {
+        guard let trust = try trustState(), let dataset = try identity().datasetID else { return nil }
+        let transitions = try read { session in
+            try session.query(
+                "SELECT body, previous_signature, next_signature FROM trust_key_transitions ORDER BY sequence"
+            ).map { row in
+                try SignedKeyTransition(
+                    body: try ReplicaColumns.bytes(row[0]), previousSignature: try ReplicaColumns.bytes(row[1]),
+                    nextSignature: try ReplicaColumns.bytes(row[2]))
+            }
+        }
+        do {
+            return try CoreKeyHistory(datasetID: dataset, anchor: trust.coreKey).applying(all: transitions)
+        } catch {
+            throw .corrupt("the key history: \(error)")
+        }
+    }
+
+    /// Takes Core's transitions, verified against the history this device holds (each new one signed by both of its
+    /// keys, from the current key, the next in sequence; those from before the owner text's key skipped), and keeps
+    /// them, so the history rebuilds the same way. Returns the history.
+    @discardableResult
+    public func acceptKeyTransitions(_ transitions: [SignedKeyTransition]) throws(ReplicaStoreError) -> CoreKeyHistory {
+        guard let held = try keyHistory() else { throw .notEnrolled }
+        let updated: CoreKeyHistory
+        do {
+            updated = try held.applying(all: transitions)
+        } catch {
+            throw .unverifiedKeyTransition(error)
+        }
+        guard updated != held else { return held }
+        var fresh: [(sequence: Int64, signed: SignedKeyTransition)] = []
+        for signed in transitions {
+            if let sequence = try? signed.transition().sequence { fresh.append((sequence, signed)) }
+        }
+        let time = now()
+        _ = try write { session in
+            for item in fresh {
+                try session.query(
+                    """
+                    INSERT OR IGNORE INTO trust_key_transitions (sequence, body, previous_signature, next_signature,
+                      verified_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    [
+                        .integer(item.sequence), ReplicaColumns.bytes(item.signed.body),
+                        ReplicaColumns.bytes(item.signed.previousSignature),
+                        ReplicaColumns.bytes(item.signed.nextSignature), .integer(time),
+                    ])
+            }
+        }
+        return updated
+    }
+
+    /// Records a Core receipt after verifying it by the key history: a final receipt by the key valid at its commit
+    /// position, a provisional one by any key of the history (§8.1.4).
+    @discardableResult
+    public func recordReceipt(_ signed: SignedCoreReceipt, keys: CoreKeyHistory) throws(ReplicaStoreError) -> Bool {
+        guard let datasetID = try identity().datasetID, datasetID == keys.datasetID else { throw .notEnrolled }
+        let receipt: CoreReceipt
+        do {
+            receipt = try keys.verifyReceipt(signed)
+        } catch {
+            throw .unverifiedReceipt(error)
+        }
+        let status: ReplicaReceipt.Status =
+            switch receipt.outcome {
+            case .waitingForDependencies: .waitingForDependencies
+            case .accepted: .accepted
+            case .acceptedWithConflict: .acceptedWithConflict
+            case .rejected: .rejected
+            }
+        return try recordReceipt(
+            ReplicaReceipt(
+                operationID: receipt.operationID, digest: receipt.digest, status: status,
+                epochID: receipt.position == nil ? nil : receipt.epochID, position: receipt.position,
+                signedBytes: signed.storedBytes))
     }
 
     /// The operation key of a device in the newest verified roster; none for an unknown or revoked device.
