@@ -19,6 +19,7 @@ public struct Migration: Hashable, Sendable {
 public enum Migrations {
     public static let all: [Migration] = [
         version1, version2, version3, version4, version5, version6, version7, version8, version9, version10,
+        version11,
     ]
 
     /// The newest schema version this build understands.
@@ -446,5 +447,39 @@ public enum Migrations {
               PRIMARY KEY (entity_id, revision)
             ) STRICT
             """
+        ])
+
+    /// R2's observed horizons of v1 edits (plan §8.3.2, §8.12.2): each projection revision records the epoch of the
+    /// position it reflects, and an operation "observed at projection revision N" keeps the horizon Core resolved N to
+    /// when it decided the operation, because another epoch may resolve the same bytes differently. Revisions recorded
+    /// before this version all belong to the dataset's one epoch.
+    static let version11 = Migration(
+        version: 11, summary: "R2 observed horizons of v1 edits",
+        statements: [
+            """
+            CREATE TABLE core_projection_revisions_v11 (
+              entity_id BLOB NOT NULL CHECK (length(entity_id) = 16),
+              revision INTEGER NOT NULL CHECK (revision >= 1),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              position INTEGER NOT NULL CHECK (position >= 0),
+              PRIMARY KEY (entity_id, revision)
+            ) STRICT
+            """,
+            """
+            INSERT INTO core_projection_revisions_v11 (entity_id, revision, epoch_id, position)
+            SELECT r.entity_id, r.revision, d.epoch_id, r.position
+            FROM core_projection_revisions AS r CROSS JOIN core_dataset AS d WHERE d.singleton = 1
+            """,
+            "DROP TABLE core_projection_revisions",
+            "ALTER TABLE core_projection_revisions_v11 RENAME TO core_projection_revisions",
+            """
+            ALTER TABLE core_operations ADD COLUMN observed_epoch BLOB
+              CHECK (observed_epoch IS NULL OR length(observed_epoch) = 16)
+            """,
+            """
+            ALTER TABLE core_operations ADD COLUMN observed_position INTEGER
+              CHECK ((observed_position IS NULL) = (observed_epoch IS NULL)
+                AND (observed_position IS NULL OR observed_position >= 0))
+            """,
         ])
 }
