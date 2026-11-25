@@ -989,3 +989,19 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Found while building this** (M3 harnesses v28 and v29):
   - **The gap:** legacy edits without an observed set are `accepted_with_conflict`, concurrent with the values they replace. The merged title then shows both candidates, and the display-order first, the old title, wins.
   - **The fix:** the "observed at projection revision N" rule. The child's body carries N, Core maps it to a horizon at that revision's position, and the result must reach replicas in Core-signed data (they don't hold the map). It is M3-6a's next step, to settle after reading §8.3.2's rule in full.
+
+## D-69 — "Observed at projection revision N" resolved by Core when it decides the child (R2 M3, run 20261124-r2-5462; plan §8.3.2, §8.12.2; follows D-68)
+
+- **The body** carries R1's `expectedRevision` as the observed set's `projectionRevision` (`ObservedSet`, `LegacyChange.observedRevision`). It stands alone, so the body stays a pure function of the request, and a device's operation may not carry it.
+- **The resolution** happens when Core decides the child, in the deciding epoch:
+  - Core reads `(epoch, P(N))` for the entity's revision N from the projection-revision map, which records each revision's epoch from schema v11 on.
+  - It keeps the horizon `(epoch, "tasks", P(N))` with the operation (`core_operations.observed_epoch` and `observed_position`, set together).
+  - Core's fold uses it in place of the envelope's observed set (`CoreOperationRecords.resolveObservedRevision`, `CoreTaskFold.view`).
+  - Stored, not recomputed: another epoch may resolve the same bytes differently (§8.12.2, "Decisions are made per epoch").
+- **Exactly P(N), not everything committed:**
+  - **The rule:** the child supersedes the pieces R1's revision N reflected and nothing later.
+  - **In R1's flow:** R1's revision check admits only N equal to the current revision, so the edit replaces what the caller read.
+  - **Beside it:** a piece committed after P(N) without changing the record, for example a device's same-value edit, stays beside the child, as §8.3.2 keeps "a later arrival".
+  - **The harness** (M3 harness v33) shows it with a stale revision: the newer title stays.
+- **A revision the map doesn't hold** resolves to nothing. The child observes nothing and conflicts rather than superseding pieces it may not have seen. Records whose revisions predate Core, such as R1 data at cutover, need their mapping recorded when they are imported (M3-6d and M5, open).
+- **Open, next:** replicas don't hold the map. Core serves the resolved horizon in Core-signed data (the change-page entry and the full snapshot's operation records), and replicas fold with it. Until then a replica folds a legacy edit as observing nothing. Core's own projection, which is what R1's clients read, is already right.
