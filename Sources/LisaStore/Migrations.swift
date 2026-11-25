@@ -17,7 +17,7 @@ public struct Migration: Hashable, Sendable {
 
 /// Lisa's migrations, oldest first.
 public enum Migrations {
-    public static let all: [Migration] = [version1, version2, version3, version4, version5, version6]
+    public static let all: [Migration] = [version1, version2, version3, version4, version5, version6, version7]
 
     /// The newest schema version this build understands.
     public static var latestVersion: Int { all.map(\.version).max() ?? 0 }
@@ -345,5 +345,27 @@ public enum Migrations {
               recorded_at INTEGER NOT NULL
             ) STRICT
             """,
+        ])
+
+    /// R2's Core signing-key history (plan §8.1.1, §8.1.4): the anchor key at sequence 0, then each transition with the
+    /// exact body and both keys' signatures. A key signs commit positions from `valid_from` to before `retired_at`.
+    static let version7 = Migration(
+        version: 7, summary: "R2 Core signing-key history",
+        statements: [
+            """
+            CREATE TABLE core_signing_keys (
+              sequence INTEGER PRIMARY KEY CHECK (sequence >= 0),
+              signing_key BLOB NOT NULL UNIQUE,
+              valid_from INTEGER NOT NULL CHECK (valid_from >= 0),
+              retired_at INTEGER CHECK (retired_at IS NULL OR retired_at > valid_from),
+              transition_body BLOB,
+              previous_signature BLOB CHECK (previous_signature IS NULL OR length(previous_signature) = 64),
+              next_signature BLOB CHECK (next_signature IS NULL OR length(next_signature) = 64),
+              recorded_at INTEGER NOT NULL,
+              CHECK ((sequence = 0) = (transition_body IS NULL)),
+              CHECK ((transition_body IS NULL) = (previous_signature IS NULL)),
+              CHECK ((transition_body IS NULL) = (next_signature IS NULL))
+            ) STRICT
+            """
         ])
 }
