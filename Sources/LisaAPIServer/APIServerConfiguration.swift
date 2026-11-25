@@ -73,12 +73,15 @@ public struct APIServerLimits: Hashable, Sendable {
     public var maxConnections: Int
     /// How long shutdown waits for requests in progress before closing their connections.
     public var shutdownGracePeriod: Duration
+    /// Larger body limits for exact request paths (R2's `POST /v2/operations`, plan §8.12.1); every other path keeps
+    /// `maxBodyBytes`, with the same 413 and close.
+    public var bodyLimitsByPath: [String: Int]
 
     public init(
         maxHeaderBytes: Int = 16_384, maxHeaderFields: Int = 100, maxBodyBytes: Int = APIVersioning.maxRequestBytes,
         maxDiscardBytes: Int = 1_048_576, firstRequestTimeout: Duration = .seconds(20),
         keepAliveTimeout: Duration = .seconds(30), bodyTimeout: Duration = .seconds(30), maxConnections: Int = 64,
-        shutdownGracePeriod: Duration = .seconds(5)
+        shutdownGracePeriod: Duration = .seconds(5), bodyLimitsByPath: [String: Int] = [:]
     ) {
         self.maxHeaderBytes = maxHeaderBytes
         self.maxHeaderFields = maxHeaderFields
@@ -89,6 +92,7 @@ public struct APIServerLimits: Hashable, Sendable {
         self.bodyTimeout = bodyTimeout
         self.maxConnections = maxConnections
         self.shutdownGracePeriod = shutdownGracePeriod
+        self.bodyLimitsByPath = bodyLimitsByPath
     }
 
     /// The problems that make these limits unusable, if any.
@@ -97,6 +101,9 @@ public struct APIServerLimits: Hashable, Sendable {
         if maxHeaderBytes < 1024 { problems.append("maxHeaderBytes must be at least 1024") }
         if maxHeaderFields < 8 { problems.append("maxHeaderFields must be at least 8") }
         if maxBodyBytes < 0 { problems.append("maxBodyBytes must not be negative") }
+        if bodyLimitsByPath.values.contains(where: { $0 < 0 }) {
+            problems.append("a path's body limit must not be negative")
+        }
         if maxDiscardBytes < 0 { problems.append("maxDiscardBytes must not be negative") }
         if maxConnections < 1 { problems.append("maxConnections must be at least 1") }
         for (name, value) in [
