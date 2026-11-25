@@ -289,6 +289,7 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **Release:** waiting operations are released in bounded steps (`releaseStep`): at most 256 edges and 256 operations each, round-robin across origins.
   - **Lookup:** `receipt(for:)` returns an operation's current receipt, provisional or final.
   - **Positions:** every decision, a rejection included, takes the next commit position and is a change-log entry of its item's partition.
+- **Full snapshots from Core** (`CoreLedger.snapshot`): one consistent cut, at the newest position, of the named partitions (§8b). Every accepted operation at or below the cut goes into chunks in position order, with rejections left out. A chunk that would pass 512 KiB carries fewer entries, and the header Core signs has the cut as its version.
 - **Pages from Core** (`CoreLedger.changePage`): a signed page per partition (§8a) carries every decision in `(after, to]`. When entries remain, `to` is the last entry's position; otherwise it is the newest position. A page that would pass 512 KiB carries fewer entries.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
