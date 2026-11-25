@@ -36,4 +36,6 @@ public struct SigningDomain: Hashable, Sendable {
     public static let changePage = SigningDomain("lisa-r2-change-page-v1\n")
     /// A peer's custody acknowledgement, signed by the holder over its canonical body (plan §8.6.1, §8.7).
     public static let custodyAcknowledgement = SigningDomain("lisa-r2-custody-v1\n")
+    /// Core's receipt for one operation, over its canonical body (plan §8.2.1).
+    public static let receipt = SigningDomain("lisa-r2-receipt-v1\n")
 }
