@@ -50,6 +50,11 @@ public struct HTTPCoreTransport: CoreTransport {
         return try decoded(response) { try SyncWire.page(fromBody: $0) }
     }
 
+    /// `GET /v2/trust`: the newest roster and Core's signing-key transitions.
+    public func trust() async throws -> (roster: SignedRoster, transitions: [SignedKeyTransition])? {
+        try decoded(try await send(.get, "/v2/trust")) { try EnrollmentWire.trust(fromBody: $0) }
+    }
+
     func send(_ method: HTTPMethod, _ path: String, query: [String: String] = [:], body: [UInt8]? = nil) async throws
         -> APIResponse
     {
