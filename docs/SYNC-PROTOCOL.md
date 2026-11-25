@@ -60,6 +60,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-receipt-v1\n` | Core's receipt for one operation over its canonical body (§8.2.1; §8d) |
 | `lisa-r2-device-authorization-v1\n` | Core's authorization record for one device, returned at enrollment (§8.1.2 step 5.7; §8f) |
 | `lisa-r2-credential-reset-v1\n` | A device's credential-reset request, signed by its existing operation key (§8.1.4; §8g) |
+| `lisa-r2-key-transition-v1\n` | A transition in Core's signing-key history, signed by both its keys (§8.1.4; §8h) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -399,6 +400,25 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 
   Only `verified` and `revokedDevice` spend the challenge. Revoking a device leaves its open challenges to this verdict.
 - **Consumers:** the routes that take a proof (recovery evidence, credential refresh, owner import, legacy-link lookups) arrive with M3-7 and the migration spans.
+
+## 8h. Core's signing-key history (plan §8.1.1, §8.1.4, §8.5.3; `docs/DECISIONS.md` D-65)
+
+- **Transition** (`SigningKeyTransition`):
+  - **Fields:** `{"datasetID", "sequence", "previousKey", "nextKey", "activationPosition", "issuedAt"}`, the keys as base64url SubjectPublicKeyInfo DER, at most 4 KiB.
+  - **Signatures:** both keys sign the exact body under `lisa-r2-key-transition-v1\n`. It travels as `{"body", "previousSignature", "nextSignature"}`.
+  - **Activation:** the activation position is the first commit position the next key signs.
+- **History** (`CoreKeyHistory`): entries `{key, sequence, validFrom, retiredAt}`, starting at an anchor.
+  - **A new link must** be signed by both keys, for this dataset, from the current key, the next in sequence when the current key's sequence is known, activating after the current key's start, and with a key never used before.
+  - **A device's anchor** is the owner text's key, of unknown sequence until the transition that activated it arrives. Transitions from before the anchor are skipped while the anchor is all the history holds.
+- **Verification:**
+  - a final receipt by the key valid at its position;
+  - pages, snapshots, rosters, anchors bundles and enrollment results by the current key;
+  - a provisional receipt by any key of the history.
+- **`GET /v2/trust`:** `{"roster": …, "keyTransitions": [signed, …]}` once Core has rotated, in sequence order; before that, `{"roster": …}` alone.
+- **Core** (`CoreLedger.rotateSigningKey`, `importKeyTransition`):
+  - **Rotation:** activation is the last position plus one; a rotation with nothing committed since the last one is refused; the rotating ledger stops signing.
+  - **Opening:** only with the history's current key (`signerRetired`, `signerMismatch`).
+  - **Import:** a transition that continues the store's history, once the store has reached its activation.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
