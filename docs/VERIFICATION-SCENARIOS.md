@@ -1212,3 +1212,56 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **The rotation:** Core takes K2, and its next roster announces K2. The device fetches it over HTTP and accepts it.
   - **Opening:** the old archive opens with the retained K1, and an archive sealed to the announced K2 opens with K2. An archive sealed to a key Core never held finds none. The old archive is still authentic by the device's key.
 - **Result: PASS.** Still open in M3-5d: signing-key rotation with key history, K2's private half imported on a fresh host, device key rotation, and re-anchoring (with M3-7).
+
+### M3-5d, signing-key rotation and K2 on a fresh host (plan §8.1.4 "signing-key rotation with historical receipts, K2's private half imported on a fresh host (and a mismatching key refused)"; `docs/DECISIONS.md` D-65)
+
+- **Code:**
+  - `SigningKeyTransition` and `EnrollmentWire.trustBody`/`trust(fromBody:)` (LisaSyncProtocol); `CoreKeyHistory`, `KeyTransitionSigning` and the domain `lisa-r2-key-transition-v1\n` (LisaTrust).
+  - Schema v7 (`core_signing_keys`); `CoreLedger`'s open check and retirable signer; `CoreSigningKeys` (rotation, history, `importKeyTransition`).
+  - `GET /v2/trust` with `keyTransitions`; the replica's `trust_key_transitions`, `keyHistory`, `acceptKeyTransitions` and `recordReceipt(_:keys:)`; `CoreSession(replica:transport:)`; `HTTPCoreTransport.trust()`.
+  - Records: `docs/SYNC-PROTOCOL.md` §8h.
+- **Full build and R1 suite:** `m3/suite-after-key-rotation-20261125T113411Z/`, debug build 0 warnings, 376/66 passed with schema v7.
+- **Harness:** `m3/harness-v20/` passed 15/15 on its first run (`harness-v20-test-20261125T113341Z.log`). It holds v19's tests, except that the signer case now rotates through a transition before Core reopens with the next key, as D-65 refuses a reopen with a key the history doesn't hold. `m3/harness-v16/` (TLS) passes 6/6 on these sources.
+- **Cases:**
+  - **The transition:** sequence 1, activating at position 2, from K1 to K2, signed by both keys.
+  - **The rotating ledger** refuses to sign again (`signerRetired`). Reopening the store with K1 is refused (`signerRetired`), and so is a key the history doesn't hold (`signerMismatch`).
+  - **Core reopens with K2:**
+    - The device's session takes the transition and the K2-signed roster first.
+    - Its new capture is accepted at position 2, under K2. Its history reads K1 for position 1 and K2 from position 2.
+    - The historical receipt at position 1 verifies by the history and not by K2 alone.
+  - **Refused:** a receipt for position 3 signed by K1, and a newer roster re-signed by K1.
+  - **A device enrolled after the rotation:** anchored at K2, it learns that its anchor's sequence is 1 and skips K1→K2.
+  - **A second rotation, K2→K3:** it chains on both devices (sequences `[0, 1, 2]` and `[1, 2]`). A third rotation with nothing committed since the last is refused.
+  - **Fresh hosts:**
+    - **A store copied after the rotation** opens with K2, holds the transition, and refuses K1 and an unknown key.
+    - **A store copied before it** refuses K2 until `importKeyTransition` adds the transition. A tampered transition is refused, importing twice changes nothing, and K1 is then refused.
+    - **A forking transition** (K1→K4, from the retired K1) is refused.
+- **Regressions:**
+  - **Regression package v12** (`m2/make-regressions-v12.py`, v18 and v12 replaced by v20 and v21; run `m2/regressions-run-20261125T113520Z/`) is **invalid**.
+    - Its build failed, because LisaArchive, which harness v19 and later import, wasn't among its products.
+    - Its runner then ran every target with `--skip-build` against the previous round's binaries, so its "passes" test the older sources. It is kept as written.
+  - **Package v13** added the product, and its runner (`run-regressions-v14.sh`) runs no target when the build fails. It was never run.
+  - **Package v14** (`m2/make-regressions-v14.py`, v20 replaced by v22; runner `m2/run-regressions-v15.sh`; run `m2/regressions-run-20261125T114435Z/`) built with exit 0 and passes all 24 targets, and v35 and v47 pass too. This includes `m3/harness-v21/`, M3 harness v12 with `trust_key_transitions` added to the table list.
+- **Result: PASS.** Later: appending the transition to the recovery ledger and backups, anchoring from a key backup, and backups older than the activation (M3-7); re-anchoring (S-10).
+
+### M3-5d, device key rotation, and a revoked device's committed history (plan §8.1.4 "device key rotation", §8.1.3 "committed data stays"; `docs/DECISIONS.md` D-66)
+
+- **Code:**
+  - `DeviceKeyUpdate` and roster entries' `previousKeys` (LisaSyncProtocol); `DeviceKeyUpdateSigning`, `OperationSigning`'s `previousKeys` and the domain `lisa-r2-device-key-update-v1\n` (LisaTrust).
+  - Schema v8 (`core_device_keys`); `CoreDeviceKeys`; `POST /v2/devices/current/key-update`.
+  - The replica's verifiers with `previousKeys`, `rosterHistoricalKeys` and `resignLocalOperations`; `CoreSession`'s historical keys for pages; `HTTPTrustRequests.updateKey`.
+  - Records: `docs/SYNC-PROTOCOL.md` §8i.
+- **Full build and R1 suite:** `m3/suite-after-device-keys-20261125T114317Z/`, debug build 0 warnings, 376/66 passed with schema v8. Lint is clean.
+- **Harness:** `m3/harness-v22/` (v20's 15 tests unchanged, plus 1) passed 16/16 on its first run (`harness-v22-test-20261125T114240Z.log`) and again on the committed sources (`…114337Z`), with v16 6/6.
+- **Cases:**
+  - **Refused before the update:** an update from a key the registry doesn't hold (403 `key_update_invalid`), one to the iPad's key (409 `key_update_key_in_use`), and one sent with the iPad's credential (403).
+  - **The update:**
+    - The new roster names the next key and lists the old one in `previousKeys`.
+    - The device's pending capture is re-signed with the same body and digest and a new signature, then accepted at position 2.
+    - An operation signed by the old key afterwards is `unverified`.
+  - **The iPad** installs the page carrying the capture committed under the old key, by its previous key.
+  - **A negative control:** a device verifying with current keys only refuses that page.
+  - **Waiting work:** an operation of the device waiting for a dependency at Core blocks the next update (409 `key_update_operations_waiting`). One `device_key_rotated` trust event.
+  - **After the device is revoked,** a device enrolled later installs both of its committed operations, by its previous key and its last key.
+- **Regressions:** regression package v14 (above) passes on these sources.
+- **Result: PASS.**
