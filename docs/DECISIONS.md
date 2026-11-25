@@ -897,3 +897,17 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - with the ballast already empty, or if the second open also lacks space, the error is `storageFull`, never a misleading I/O error.
 - **Recovery:** the ballast is restored whole by `restoreBallastIfSpaceReturned()` once a full reserve would still be free after it, or at a later launch when space has returned. Nothing else is deleted, and the database, WAL and saved work are untouched.
 - **Evidence:** `docs/VERIFICATION-SCENARIOS.md` M3-D61, a real full tmpfs in the pinned container.
+
+## D-62 — Core keeps its own device registry for R2 enrollment; the trust formats and their bindings (R2 M3, run 20261124-r2-5462; plan §8.1.2, §8.1.3, §8.12.1)
+
+- **Registry:**
+  - R2 devices enroll into Core's own tables (schema v6: `core_enrollments`, `core_devices`, `core_rosters`, `core_revocations`, `core_credential_resets`, `core_challenges`, `core_trust_events`), not into R1's pairing registry.
+  - A router made from `CoreTrust` authenticates v2 requests by Core's registry: the bearer credential's SHA-256 must match an active device's verifier. It takes operation keys from the same registry.
+  - R1's pairing and its v1 credentials are unchanged. The legacy link that connects an R1 companion to its R2 enrollment is §8.14.5's (M3-6 and later), and is not yet part of the request.
+- **Request digest:** SHA-256 of the exact signed request body, the bytes the device's signature covers, as for operations (§8.2.1). A retry replays the identical body and signature.
+- **Anchors bundle:** it carries no time, so its body, and therefore the digest the roster carries, depends only on the dataset and the configured CA and intermediates, and stays the same across Core restarts. Freshness comes from the roster that binds the digest.
+- **Roster pages:** the summary first, then devices (64 a page), then revocations (256 a page), each a canonical object. The summary's counts fix how many pages of each kind there are, on top of the header's page count and Merkle root.
+- **The newest roster must verify under the current signer.** Otherwise, as after a restart under another key, Core signs a new version at once. Signing-key rotation proper (dual-signed transitions and key history, §8.1.4) is a later M3-5 slice.
+- **Revoked origins:** operations from a revoked device are refused before anything is stored (`unverified`, because the registry gives no key), whoever submits them and whatever time they claim. Committed data stays.
+- **Device-side trust lives in the replica:** `trust_state` and `trust_rosters`, added to the unreleased replica schema v1 in place. The pending item, which holds the secret-bearing request, is a port (`PendingEnrollmentStore`): the Keychain on Apple platforms, a file-backed stand-in in the harnesses.
+- **The owner's intended name and class** from issuance go into the roster. The request's class must match the intended one; the device's own name is informational.
