@@ -59,6 +59,7 @@ A signature is a raw 64-byte P-256 ECDSA value (`r ‖ s`) over a signing domain
 | `lisa-r2-custody-v1\n` | A peer's custody acknowledgement over its canonical body (§8.6.1, §8.7; §8c) |
 | `lisa-r2-receipt-v1\n` | Core's receipt for one operation over its canonical body (§8.2.1; §8d) |
 | `lisa-r2-device-authorization-v1\n` | Core's authorization record for one device, returned at enrollment (§8.1.2 step 5.7; §8f) |
+| `lisa-r2-credential-reset-v1\n` | A device's credential-reset request, signed by its existing operation key (§8.1.4; §8g) |
 
 A signature under one domain never verifies under another, and a body differing by one byte never verifies.
 
@@ -356,7 +357,43 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - A failed attempt is committed with the refusal, and the fifth invalidates.
 - **Device completion** (`CoreEnrollment`, `ReplicaStore.completeEnrollment`): in one transaction, the dataset and device ID, the trust state (Core URL and signing key from the owner text, TLS mode, host, CA and intermediates, enrollment ID, request digest) and the roster. Repeating it with the same digest changes nothing. The pending item is removed only afterwards.
   - The item goes on `enrollment_consumed`, `_expired` and `_invalidated`, and at the owner text's expiry plus 24 hours. Other refusals and unverifiable results keep it for an exact replay.
-- **Revocation** (`CoreTrust.revoke`): the device's status, a permanent revocation at the current epoch and commit position, its open resets and challenges cancelled, and a new roster version. Its credential is then refused (401), and its operations, from any submitter, are `unverified`.
+- **Revocation** (`CoreTrust.revoke`): the device's status, a permanent revocation at the current epoch and commit position, its open resets cancelled, and a new roster version. Its credential is then refused (401), and its operations, from any submitter, are `unverified`. A challenge it answers afterwards is refused as `revokedDevice` (§8g), so its upload can be quarantined.
+
+## 8g. Credential reset and challenges (plan §8.1.4, §8.1.5)
+
+- **Reset token** (`CredentialResetToken`):
+  - 32 random bytes, shown once to the owner as unpadded base64url, and usable for 10 minutes.
+  - Core keeps only `SHA-256(ASCII "lisa-reset-token-v1" ‖ 0x00 ‖ token)`. A device that isn't active gets none.
+- **Reset request** (`CredentialResetRequest`): `{"datasetID", "deviceID", "token", "newVerifier", "createdAt"}`, signed by the device's existing operation key under `lisa-r2-credential-reset-v1\n`. It carries the token, so it is secret-bearing.
+- **`POST /v2/devices/current/credential-reset`** takes `{"request": signed}` and needs no credential.
+  - **Core, in one write transaction:** the device must be active; its registry key must verify the signature; and an open token for that device must match in constant time and be unexpired.
+  - **Then** the verifier is replaced, the token used, and the device's other open tokens cancelled. The old credential is then refused (401).
+  - **The answer** is `{"deviceID", "resetAt"}`, or:
+    - `credential_reset_unknown` 404;
+    - `device_revoked` 403;
+    - `credential_reset_invalid` 403: a wrong key, token, dataset or verifier, or a cancelled token;
+    - `credential_reset_expired` 410;
+    - `credential_reset_used` 410.
+- **Challenge** (`Challenge`): `POST /v2/challenges` takes `{"deviceID", "purpose"}`, needs no credential, and answers `{"challengeID", "nonce", "purpose", "datasetID", "epochID", "deviceID", "expiresInSeconds": 120}`.
+  - **Purposes:** `recovery-evidence`, `trust-evidence`, `credential-refresh`, `owner-import`, `legacy-link-lookup`.
+  - **Storage:** Core keeps each challenge with its run generation (a random 128-bit value per Core process) and a deadline on its monotonic clock.
+- **Response** (`ChallengeSigning`): the device signs, with its operation key, the exact bytes `"lisa-challenge-v1" ‖ 0x00 ‖ purpose ‖ datasetID ‖ epochID ‖ challengeID ‖ nonce ‖ deviceID ‖ keyID ‖ SHA-256(body)`.
+  - The purpose is its ASCII token, identifiers are their 16 raw bytes, the nonce is 32 bytes, and `keyID` is SHA-256 of the operation key's SubjectPublicKeyInfo DER.
+  - The proof travels with the body it authorizes as `{"challengeID", "keyID", "signature"}`.
+- **Verification** (`CoreTrust.verifyChallenge`, one write transaction), in this order:
+  1. `unknown`.
+  2. `used`.
+  3. `otherRun`: issued before a Core restart.
+  4. `otherEpoch`.
+  5. `purposeMismatch`.
+  6. `expired`, by the monotonic deadline. A wall-clock step has no effect.
+  7. `unknownKey` when the registry has no such device. The device's trust records then reach Core only as an owner-mediated trust bundle (§8.5.3).
+  8. `revokedDevice` when it is revoked: the challenge is spent, and the caller keeps the upload as quarantined evidence.
+  9. `unknownKey` when the key ID isn't the active device's key.
+  10. `invalidSignature`: this covers a body changed after signing, and a response signed for another epoch.
+
+  Only `verified` and `revokedDevice` spend the challenge. Revoking a device leaves its open challenges to this verdict.
+- **Consumers:** the routes that take a proof (recovery evidence, credential refresh, owner import, legacy-link lookups) arrive with M3-7 and the migration spans.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
