@@ -84,8 +84,9 @@ public struct HostEndpoint: Hashable, Sendable, CustomStringConvertible {
     /// - Throws: `APITransportError.refused` when the path does not start with `/v1/` or is not usable.
     public func url(for request: APIRequest) throws(APITransportError) -> URL {
         let apiPrefix = APIVersioning.pathPrefix + "/"
-        guard request.path.hasPrefix(apiPrefix) else {
-            throw .refused("the request path does not start with \(apiPrefix)")
+        // R2 extends the shared transport to the v2 routes (plan §8.6.5).
+        guard request.path.hasPrefix(apiPrefix) || request.path.hasPrefix("/v2/") else {
+            throw .refused("the request path does not start with \(apiPrefix) or /v2/")
         }
         guard let target = request.encodedTarget() else {
             throw .refused(
