@@ -1317,5 +1317,24 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - The encoding is `{"pieces":[],"projectionRevision":4}` and round-trips. An observed set without it still encodes as `{"pieces":[]}`.
   - **Refused:** revision 0, and a projection revision beside pieces.
   - A Core-signed legacy child carries it through signing and decoding; a device's operation with it is refused.
-- **Regressions:** regression package v16 (`m2/make-regressions-v16.py`, v26 replaced by v30; run `m2/regressions-run-20261125T120453Z/`) passed all 25 targets, and v35 and v47 passed too, before this change. Package v17 (v30 replaced by v31) runs on it.
+- **Regressions:** regression package v16 (`m2/make-regressions-v16.py`, v26 replaced by v30; run `m2/regressions-run-20261125T120453Z/`) passed all 25 targets, and v35 and v47 passed too, before this change. Package v17 (v30 replaced by v31; run `m2/regressions-run-20261125T120847Z/`) then passed all 25 targets on it, and v35 and v47 passed too.
 - **Result: PASS.** Next, Core mapping N to the horizon of the state it reflected, at decision time, and serving it to replicas (§11).
+
+### M3-6a, observed horizons at Core: "observed at projection revision N" resolved when Core decides the child (plan §8.3.2, §8.12.2; `docs/DECISIONS.md` D-69)
+
+- **Code:**
+  - Schema v11 rebuilds `core_projection_revisions` with each revision's epoch, and adds `core_operations.observed_epoch` and `observed_position` (`1a8436e`).
+  - `TaskProjection.recordRevision` writes the epoch (`2399cda`), and `CoreOperationRecords.resolveObservedRevision` resolves N to `(epoch, "tasks", P(N))` at decision (`0e313a2`). `CoreLedger.apply` calls it before the fold (`ce45e30`), and `CoreTaskFold.view` folds with the stored horizon (`e5bea9a`).
+  - `LegacyChange.observedRevision` puts N in the child (`6b3ec91`).
+  - `1a8436e` builds alone but its projections fail until `2399cda`.
+- **Full build and R1 suite:** `m3/suite-after-observed-horizon-20261125T121653Z/`, debug build with tests 0 warnings, 376/66 passed with schema v11. Lint is clean on the six files.
+- **The migration's copy path:** `m3/check-migration-v11-v1.py` (log `m3/check-migration-v11-v1-*.log`, SQLite 3.46.1) reads v11's statements from `Migrations.swift` and applies them to a v10-shaped database with two revisions and an operation. Both revisions are copied with the dataset's epoch. Five writes are refused: one observed column without the other, a negative position, a short epoch, and a revision without its epoch. **PASS.**
+- **Harness:** `m3/harness-v33/` (v31's 9 tests plus 6), 15/15 on its first run (`m3/harness-v33-test-20261125T121918Z.log`). v32 holds the same tests with two `#expect(Set(try …) == …)` forms, which v25 showed don't compile; it was superseded before its first build and is kept.
+- **Cases:**
+  - **The body:** the child carries N alone, `{"pieces":[],"projectionRevision":1}`, and the same request gives the same bytes.
+  - **Supersession:** an edit observed at revision 1 supersedes the creation's title: `accepted`, one candidate, revision 2 at position 2. Two fields in one request each supersede their own field.
+  - **Exactly P(N):** a second edit at revision 2 supersedes the first. After it, an edit observed at revision 1 covers only what revision 1 reflected: `accepted_with_conflict`, and the newer title stays beside it.
+  - **No mapping:** an unmapped revision (9), or none, observes nothing: `accepted_with_conflict`.
+- **Not yet:** replicas fold a legacy edit as observing nothing until Core serves the resolved horizon (D-69, "Open, next").
+- **Regressions:** regression package v18 (`m2/make-regressions-v18.py`, v31 replaced by v33; runner `m2/run-regressions-v19.sh`, run `m2/regressions-run-20261125T122040Z/`) passes all 25 targets, and v35 and v47 pass too. 23.3 GB were free at its end.
+- **Result: PASS** for Core's resolution. Next, serving the resolved horizon to replicas (`R2-CHECKPOINT.md` §11).
