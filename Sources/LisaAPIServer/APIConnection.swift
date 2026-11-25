@@ -15,7 +15,9 @@ struct APIConnection {
         inbound: NIOAsyncChannelInboundStream<HTTPServerRequestPart>,
         outbound: NIOAsyncChannelOutboundWriter<HTTPServerResponsePart>
     ) async throws {
-        var assembler = RequestAssembler(maxBodyBytes: limits.maxBodyBytes, maxDiscardBytes: limits.maxDiscardBytes)
+        var assembler = RequestAssembler(
+            maxBodyBytes: limits.maxBodyBytes, maxDiscardBytes: limits.maxDiscardBytes,
+            bodyLimitsByPath: limits.bodyLimitsByPath)
         var parts = inbound.makeAsyncIterator()
         while let part = try await parts.next() {
             switch assembler.consume(part) {
