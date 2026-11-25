@@ -15,9 +15,12 @@ import LisaSyncProtocol
 import LisaTime
 
 enum TaskProjection {
-    /// Writes `view` into R1's record of `entityID`; `createdAt` is the creation's display time.
+    /// Writes `view` into R1's record of `entityID`; `createdAt` is the creation's display time. With `force`, an
+    /// existing record is written even when no field changed, as R1's `TaskService.correct` does, so one R1 service
+    /// call is one revision step (§8.12.2 "Projection revisions").
     static func project(
-        _ view: TaskView?, entityID: Identifier128, createdAt: Date?, commitTime: Date, into records: any RecordWriting
+        _ view: TaskView?, entityID: Identifier128, createdAt: Date?, commitTime: Date, into records: any RecordWriting,
+        force: Bool = false
     ) throws {
         let id = TaskID(R1Identity.uuidString(entityID))
         let existing = try records.get(LisaTask.self, id: id)
@@ -85,7 +88,7 @@ enum TaskProjection {
             if task.origin == .extracted { task.ownerCorrected.insert(.status) }
             material = true
         }
-        guard changed || material else { return }
+        guard changed || material || force else { return }
         if material { task.changeSequence += 1 }
         task.updatedAt = commitTime
         _ = try records.update(task)
