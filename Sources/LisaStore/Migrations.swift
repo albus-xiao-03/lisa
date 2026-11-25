@@ -17,7 +17,7 @@ public struct Migration: Hashable, Sendable {
 
 /// Lisa's migrations, oldest first.
 public enum Migrations {
-    public static let all: [Migration] = [version1, version2, version3, version4, version5]
+    public static let all: [Migration] = [version1, version2, version3, version4, version5, version6]
 
     /// The newest schema version this build understands.
     public static var latestVersion: Int { all.map(\.version).max() ?? 0 }
@@ -242,6 +242,106 @@ public enum Migrations {
               arriving_digest BLOB NOT NULL CHECK (length(arriving_digest) = 32),
               known_operation_id BLOB NOT NULL CHECK (length(known_operation_id) = 16),
               known_digest BLOB NOT NULL CHECK (length(known_digest) = 32),
+              recorded_at INTEGER NOT NULL
+            ) STRICT
+            """,
+        ])
+
+    /// R2's Core trust state (plan §8.1): enrollment records, which keep only the token's hash, and after consumption
+    /// the request digest, the device and, for 7 days, the public-only stored response; Core's device registry with
+    /// each device's public keys and credential verifier; every signed roster version; the permanent revocations;
+    /// one-time credential-reset tokens (hashes only); challenges bound to a run generation; and trust events.
+    static let version6 = Migration(
+        version: 6, summary: "R2 Core trust: enrollments, devices, rosters, revocations, resets, challenges",
+        statements: [
+            """
+            CREATE TABLE core_enrollments (
+              enrollment_id BLOB PRIMARY KEY CHECK (length(enrollment_id) = 16),
+              token_hash BLOB NOT NULL CHECK (length(token_hash) = 32),
+              issued_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL,
+              attempts INTEGER NOT NULL CHECK (attempts >= 0),
+              state TEXT NOT NULL CHECK (state IN ('open', 'consumed', 'invalidated', 'cancelled')),
+              device_name TEXT NOT NULL,
+              device_class TEXT NOT NULL CHECK (device_class IN ('iphone', 'ipad', 'mac')),
+              host TEXT NOT NULL,
+              issuer_fingerprint BLOB NOT NULL CHECK (length(issuer_fingerprint) = 32),
+              invalidated_reason TEXT,
+              request_digest BLOB CHECK (request_digest IS NULL OR length(request_digest) = 32),
+              device_id BLOB CHECK (device_id IS NULL OR length(device_id) = 16),
+              consumed_at INTEGER,
+              response BLOB,
+              response_purged_at INTEGER,
+              CHECK ((state = 'consumed') = (request_digest IS NOT NULL)),
+              CHECK ((state = 'consumed') = (device_id IS NOT NULL)),
+              CHECK ((state = 'consumed') = (consumed_at IS NOT NULL)),
+              CHECK (state = 'consumed' OR (response IS NULL AND response_purged_at IS NULL)),
+              CHECK (response IS NULL OR response_purged_at IS NULL)
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_devices (
+              device_id BLOB PRIMARY KEY CHECK (length(device_id) = 16),
+              name TEXT NOT NULL,
+              device_class TEXT NOT NULL CHECK (device_class IN ('iphone', 'ipad', 'mac')),
+              status TEXT NOT NULL CHECK (status IN ('active', 'revoked')),
+              operation_key BLOB NOT NULL,
+              export_key BLOB NOT NULL,
+              credential_verifier BLOB NOT NULL UNIQUE CHECK (length(credential_verifier) = 32),
+              enrollment_id BLOB NOT NULL UNIQUE CHECK (length(enrollment_id) = 16),
+              incarnation_id BLOB NOT NULL CHECK (length(incarnation_id) = 16),
+              enrolled_at INTEGER NOT NULL,
+              last_seen_at INTEGER,
+              revoked_at INTEGER,
+              CHECK ((status = 'revoked') = (revoked_at IS NOT NULL))
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_rosters (
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              version INTEGER NOT NULL CHECK (version >= 1),
+              issued_at INTEGER NOT NULL,
+              signed BLOB NOT NULL,
+              PRIMARY KEY (epoch_id, version)
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_revocations (
+              device_id BLOB PRIMARY KEY CHECK (length(device_id) = 16),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              position INTEGER NOT NULL CHECK (position >= 0),
+              revoked_at INTEGER NOT NULL
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_credential_resets (
+              reset_id BLOB PRIMARY KEY CHECK (length(reset_id) = 16),
+              device_id BLOB NOT NULL CHECK (length(device_id) = 16),
+              token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32),
+              issued_at INTEGER NOT NULL,
+              expires_at INTEGER NOT NULL,
+              state TEXT NOT NULL CHECK (state IN ('open', 'used', 'cancelled'))
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_challenges (
+              challenge_id BLOB PRIMARY KEY CHECK (length(challenge_id) = 16),
+              nonce BLOB NOT NULL CHECK (length(nonce) = 32),
+              purpose TEXT NOT NULL,
+              device_id BLOB NOT NULL CHECK (length(device_id) = 16),
+              epoch_id BLOB NOT NULL CHECK (length(epoch_id) = 16),
+              run_generation BLOB NOT NULL CHECK (length(run_generation) = 16),
+              deadline INTEGER NOT NULL,
+              state TEXT NOT NULL CHECK (state IN ('open', 'used')),
+              issued_at INTEGER NOT NULL
+            ) STRICT
+            """,
+            """
+            CREATE TABLE core_trust_events (
+              event_id INTEGER PRIMARY KEY,
+              kind TEXT NOT NULL,
+              subject BLOB CHECK (subject IS NULL OR length(subject) = 16),
+              detail TEXT NOT NULL,
               recorded_at INTEGER NOT NULL
             ) STRICT
             """,
