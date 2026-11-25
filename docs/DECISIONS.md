@@ -927,3 +927,25 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Behaviour:** exceeding either limit gets the same 413, drain and close R1 tests for. Without the map, R1's behaviour is byte-for-byte what it was.
 - **Core:** `CoreAPIRouter.bodyLimits` maps `/v2/operations` to 512 KiB, the plan's budget for one submission, and the composition root passes it. Every other path, v1 or v2, keeps 256 KiB.
 - **Matching:** paths match exactly, before the query, so a prefix can't widen a limit by accident.
+
+## D-65 — Signing-key rotation: the transition, the key history and which key verifies which record (R2 M3, run 20261124-r2-5462; plan §8.1.1, §8.1.4, §8.5.3)
+
+- **The transition** (`SigningKeyTransition`): `{datasetID, sequence, previousKey, nextKey, activationPosition, issuedAt}`, signed by both keys over the same body under `lisa-r2-key-transition-v1\n`. The activation position is Core's last commit position plus one at the rotation, so the previous key signed every position before it and the next key signs every position from it.
+  - A rotation with nothing committed since the last one is refused, so every key signs at least one position.
+- **Core:**
+  - Schema v7's `core_signing_keys` holds the anchor (sequence 0) and each transition.
+  - The ledger that rotates retires its signer at once and signs nothing more. Core restarts with the next key's private half.
+  - Opening requires the signer to be the history's current key: a retired key gets `signerRetired` and an unknown key `signerMismatch`. So Core never signs with a retired key and never forks the history.
+- **On a fresh host:** a store restored from after the rotation opens with the restored current key.
+  - **An older store:** `CoreLedger.importKeyTransition` (`lisa core trust import-key`) appends a transition that continues its history, and only once the store has reached the activation position.
+  - **Backups behind the activation:** a backup older than that, with the epochs a restore starts, is M3-7's.
+- **Which key verifies which record:**
+  - **A final receipt** by the key valid at its commit position, so a retired key verifies only receipts from before its retirement.
+  - **Artifacts signed when served** (change pages, snapshots, rosters, anchors bundles, enrollment results) by the current key. They carry no signing position, and a retired key never signs them.
+  - **A provisional receipt** by any key of the history: it has no position and never counts as commitment. One issued before a rotation may come back unchanged on a retry.
+- **Distribution:**
+  - `GET /v2/trust` answers `{"roster", "keyTransitions"}` once Core has rotated.
+  - `CoreSession(replica:transport:)` takes the transitions and the roster first in each reconciliation (§8.6.5 step 2). It verifies the chain before trusting the roster under the new current key.
+  - **Anchors and sequences:** sequences are Core's. A device anchored by an owner text issued after a rotation learns its anchor's sequence from the transition that activated it, and skips what came before.
+- **The harness's earlier signer change:** M3 harness v10 (and the harnesses that carried its tests) reopened Core with a new key and no transition, and that is now refused by design. Harness v20 rotates first.
+- **Later:** appending the transition to the recovery ledger and backup sets, and anchoring from an independent key backup, come with M3-7, and re-anchoring with S-10.
