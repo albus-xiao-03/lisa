@@ -872,3 +872,17 @@ This file records significant architectural choices and assumptions, as R1 §1 r
 - **Shared rules, two copies for now:**
   - Core's persisted causal release and its task fold, with paged resolution groups, follow the replica's rules in Core's own tables and code.
   - The plan keeps Core and client modules apart: Core never links LisaReplicaStore. Moving the shared parts into LisaMerge is a later refactor, which would carry the replica's regressions with it.
+
+## D-60 — The v2 sync routes join R1's server through one defaulted hook; the shared transport reaches `/v2/` (R2 M3, run 20261124-r2-5462; plan §8.6.5, §8.12.1)
+
+- **Server:**
+  - `HostAPIServer.start(for:limits:v2:)` gains a defaulted `v2` handler, tried first for requests on the devices listener. It answers `nil` for paths it doesn't own, and R1's router then answers them as before.
+  - Without the handler nothing changes: `lisa serve`, the owner listener and R1's in-process router, which still answers `/v2/` with R1's typed 404 (`L20APIValidationTests`).
+  - The composition root passes `CoreAPIRouter.handle`.
+- **Client:** LisaClient's `HostEndpoint.url(for:)` accepts `/v2/` paths as well as `/v1/`, as the plan's shared transport requires (§8.6.5). No R1 test checks the old refusal, and R1's own callers only send `/v1/`.
+- **Body limit:** the server's request limit stays R1's 256 KiB for every path, because one R1 test depends on its close-on-413 behaviour. A per-path limit for `POST /v2/operations` (512 KiB in the plan) waits for a change to LisaAPIServer's request assembler that keeps that behaviour for `/v1/`.
+- **Dependencies:**
+  - LisaCoreAPI uses LisaAPIContract, LisaCoreLedger, LisaSyncProtocol and LisaCrypto (the roster's keys). LisaApplication, LisaDevices and LisaPorts join with enrollment and the other v2 routes.
+  - LisaSyncEngine uses LisaSyncProtocol, LisaTrust, LisaReplicaStore and LisaCrypto.
+  - LisaSyncHTTP uses LisaSyncEngine, LisaClient, LisaAPIContract and LisaSyncProtocol.
+- **Credentials and keys:** device authentication is R1's bearer credential, through `LisaApplication.authenticateDevice`. The roster that gives each device's operation key is a resolver the composition root provides, until enrollment and the roster arrive (M3-5).
