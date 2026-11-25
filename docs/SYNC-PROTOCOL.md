@@ -121,7 +121,7 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `protocolVersion` | `2` |
 | `schemaVersion`, `policyVersion` | Integers ≥ 1 |
 | `datasetID`, `operationID` | Identifiers. A device's operation ID is random and stable for the logical action; a legacy child's is derived (below) |
-| `origin` | `{"kind": "device", "deviceID", "incarnationID", "sequence" (≥ 1), "previous"?: {"incarnationID", "lastSequence"}}`, where `previous` may appear only on sequence 1; or `{"kind": "coreLegacyTranslation"}` |
+| `origin` | `{"kind": "device", "deviceID", "incarnationID", "sequence" (≥ 1), "previous"?: {"incarnationID", "lastSequence"}}`, where `previous` may appear only on sequence 1; or `{"kind": "coreLegacyTranslation", "incarnationID", "sequence" (≥ 1)}`, the incarnation derived from the request and the sequence the child's index plus one (§8j) |
 | `entity` | `{"type", "id"}`, the type from the catalog (`OperationCatalog`) |
 | `type` | The operation type, `<entity>.<action>` from the catalog (§8.2.3) |
 | `payload` | The type's payload. The schemas implemented so far are below ("Item payloads"); other types' payloads stay opaque to the envelope codec until theirs are |
@@ -434,6 +434,25 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - Core's pages, repairs and snapshots verify a device's committed operations with its current key, its `previousKeys`, or its last key once it is revoked (`ReplicaStore.rosterHistoricalKeys`).
   - Operations received from peers verify only with the current key.
 - **The device after an update:** it re-signs its pending and submitted operations with the next key; IDs and digests are unchanged.
+
+## 8j. Legacy children and parents (plan §8.12.2; `docs/DECISIONS.md` D-67)
+
+- **Children are a pure function of the request** (`LisaLegacyRequests.LegacyChildSet`):
+  - **ID:** the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`.
+  - **Origin:** `coreLegacyTranslation` with incarnation `SHA-256("lisa-v1-incarnation-v1" ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID)` (first 16 bytes; no 0x00 after this label) and sequence index + 1.
+  - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`; no observed set.
+  - **`legacyParent`:** `{scope, requestID, discriminator, index, count, setDigest}`, the set digest being SHA-256 of the ordered child IDs.
+  - **Dependencies:** at most one, the immediate predecessor among the request's children in the same chain (the same entity, or for preferences the same key).
+  - **Created entities:** an entity the request creates gets the child-ID derivation of `entity:<discriminator>`.
+  - Only Core's signature, which the digest leaves out, differs between conversions.
+- **Vectors** (dataset bytes `00…0f`, scope `device:0123456789abcdef0123456789abcdef`, request ID `queue-2026-11-25-0001`; reproduced with Python's hashlib):
+  - incarnation `e1f2790dce9f30d247e55dd97a508704`;
+  - `field:title` → `e7b59fbce39fe1aa9ff9a26d3531afc0`, `field:notes` → `5e634746fd0cb2e0dbcc9ca31e3e937d`, `status` → `6fa66a242b90a415efe5442d24e6676c`;
+  - their set digest `e5bbe52476f4abf64d2d262b1954e690ea65fc94d9449448c1cf94fa06b5d7ee`;
+  - `entity:create:task` → `1ac3159244ac03e49f884a399bf4707f`.
+- **Parents** (`CoreLedger.legacyConvert`, schema v9): one per `(scope, requestID)`, Core-only.
+  - **The transaction:** the lookup again (`replay`, `bodyExpired`, `mismatch`, `awaitingReview`, or `unknown`), the route's conversion with the children taken in through the ledger, and, for an answer R1 records (2xx, 400, 403, 404, 409, 413), the parent with its children's dispositions and the answer, the body kept for 30 days by default.
+  - **Nothing is kept** of a conversion that throws or answers otherwise.
 
 ## 9. Paged artifacts (plan §8.1.3, §8.4.3)
 
