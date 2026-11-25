@@ -52,6 +52,8 @@ public struct CoreTrustConfiguration: Hashable, Sendable {
     public var maximumNearbyTrustAgeDays: Int64 = TrustRoster.defaultNearbyTrustAgeDays
     /// The capabilities a newly enrolled device gets.
     public var deviceCapabilities: [String] = ["sync"]
+    /// How long a credential-reset token stays usable, in milliseconds (10 minutes, §8.1.4).
+    public var resetLifetime: Int64 = 600_000
 
     public init() {}
 }
