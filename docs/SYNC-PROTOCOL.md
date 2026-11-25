@@ -279,7 +279,8 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **Fields:** `{"datasetID", "digest", "epochID", "operationID", "outcome"}`, plus as the outcome requires: `position` on final receipts; `missing`, ascending and never empty, on the provisional `waiting_for_dependencies`; `reason` (lowercase letters and `_`, at most 64 bytes) and an optional `recoveryHint` (at most 1 KiB) on `rejected`.
   - **Outcomes:** `accepted`, `accepted_with_conflict`, `rejected`, `waiting_for_dependencies`.
   - **Rejection reasons so far:** `malformed`, `unknown_item`, `dependency_rejected`, `dependency_cycle`, `unsupported_operation`.
-  - **On a replica:** a receipt counts as Core commitment only when it verifies by Core's key from the verified key history (`ReceiptSigning.verify`).
+  - **On a replica:** a receipt counts as Core commitment only when it verifies by Core's key from the verified key history. `recordReceipt(_:coreKey:)` verifies it (`ReceiptSigning.verify`), refuses a forged, foreign or other-digest receipt without change, and keeps the body and signature as the receipt's bytes.
+  - **Vector:** dataset `0123456789abcdef0123456789abcdef`, epoch `fedcba9876543210fedcba9876543210`, operation `1111…` (32 hex digits), digest `2222…` (64), `accepted` at position 7 encode as `{"datasetID":"0123456789abcdef0123456789abcdef","digest":"2222…","epochID":"fedcba9876543210fedcba9876543210","operationID":"1111…","outcome":"accepted","position":7}`. A provisional receipt lists `missing` between `epochID` and `operationID`, and has no `position`.
 - **Intake at Core** (`CoreLedger.intake`):
   - **Before the transaction:** each operation is verified (dataset, the origin's roster key, the signature). An unverified one gets no receipt.
   - **Then one write transaction, with a savepoint per operation:**
