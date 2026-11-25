@@ -9,6 +9,7 @@ import LisaCrypto
 import LisaSQLite
 import LisaStore
 import LisaSyncProtocol
+import LisaTime
 import LisaTrust
 
 /// Core's enrollment, roster and device registry.
@@ -19,19 +20,25 @@ public final class CoreTrust: Sendable {
     public let configuration: CoreTrustConfiguration
     /// The signed anchors bundle, in `ca` mode.
     public let anchors: SignedBody?
-    private let now: @Sendable () -> Int64
+    /// This run's generation: a Core restart invalidates every outstanding challenge (§8.1.5).
+    public let runGeneration = Identifier128.random()
+    /// Challenge deadlines; a wall-clock step has no effect on them.
+    let monotonic: any MonotonicClock
+    let now: @Sendable () -> Int64
 
     /// Opens Core's trust state over `ledger`. The newest roster must carry the current pins, anchors digest, export
     /// key and policy; otherwise Core signs a new version now.
     public init(
         ledger: CoreLedger, tls: CoreTLSIdentity, exportKey: P256AgreementPublicKey,
         configuration: CoreTrustConfiguration = CoreTrustConfiguration(),
+        monotonic: any MonotonicClock = BootTimeClock(),
         now: @escaping @Sendable () -> Int64 = { Int64((Date().timeIntervalSince1970 * 1000).rounded(.down)) }
     ) throws(CoreLedgerError) {
         self.ledger = ledger
         self.tls = tls
         self.exportKey = exportKey
         self.configuration = configuration
+        self.monotonic = monotonic
         self.now = now
         if tls.mode == .ca, let ca = tls.caCertificate {
             do {
@@ -465,8 +472,9 @@ public final class CoreTrust: Sendable {
     }
 
     /// Revokes a device (`lisa core device revoke`): marks it revoked, records the permanent revocation at the
-    /// current epoch and position, cancels its open resets and challenges, and signs a new roster. Committed data
-    /// stays. Returns the new roster, or nil for an unknown device; revoking twice changes nothing.
+    /// current epoch and position, cancels its open resets, and signs a new roster. Committed data stays. A challenge
+    /// it answers afterwards is refused as revoked, so its upload can be quarantined (§8.1.5). Returns the new roster,
+    /// or nil for an unknown device; revoking twice changes nothing.
     @discardableResult
     public func revoke(_ device: Identifier128) throws(CoreLedgerError) -> SignedRoster? {
         let time = now()
@@ -490,9 +498,6 @@ public final class CoreTrust: Sendable {
                 [CoreColumns.id(device), dataset[0], dataset[1], .integer(time)])
             try session.query(
                 "UPDATE core_credential_resets SET state = 'cancelled' WHERE device_id = ? AND state = 'open'",
-                [CoreColumns.id(device)])
-            try session.query(
-                "UPDATE core_challenges SET state = 'used' WHERE device_id = ? AND state = 'open'",
                 [CoreColumns.id(device)])
             try Self.recordEvent("device_revoked", subject: device, detail: "by the owner", time, session)
             return try self.signRoster(in: session, time: time).signed
