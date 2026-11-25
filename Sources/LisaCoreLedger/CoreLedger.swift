@@ -266,6 +266,7 @@ public final class CoreLedger: Sendable {
         let position = try Self.nextPosition(in: session)
         try CoreOperationRecords.decide(
             envelope.operationID, state: "accepted", reason: nil, position: position, in: session)
+        try CoreOperationRecords.resolveObservedRevision(of: envelope, in: session)
         let view = try CoreTaskFold.view(envelope.entityID, in: session)
         let conflict = view.map { CoreTaskFold.leavesConflict(payload, in: $0) } ?? false
         if conflict {
