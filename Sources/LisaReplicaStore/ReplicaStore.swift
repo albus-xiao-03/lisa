@@ -18,6 +18,9 @@ public final class ReplicaStore: Sendable {
     public let configuration: ReplicaStoreConfiguration
     /// This launch's incarnation.
     public let incarnationID: Identifier128
+    /// Whether this launch could open the replica only by emptying the ballast (D-61): the app says "Storage is almost
+    /// full", and the ballast is restored when space returns.
+    public let releasedBallastAtOpen: Bool
     /// The monitor of this replica's long reads: search, staging catch-up passes and export assembly (§8.15.2).
     public let readers: SQLiteReaderMonitor
     let database: SQLiteWALDatabase
@@ -26,7 +29,10 @@ public final class ReplicaStore: Sendable {
     private let now: @Sendable () -> Int64
     private let freeSpace: @Sendable () -> Int64?
 
-    /// Opens (or creates) the replica in `directoryPath` as its only writer, and starts a new incarnation.
+    /// Opens (or creates) the replica in `directoryPath` as its only writer, and starts a new incarnation. When storage
+    /// is so full that even opening fails (WAL mode needs room for its sidecars, and the launch records its incarnation),
+    /// it empties the ballast and opens once more (the owner's decision of 2026-11-25, `docs/DECISIONS.md` D-61):
+    /// `releasedBallastAtOpen` and `storageIsAlmostFull` then say so, and the ballast is restored once space returns.
     /// - Parameters:
     ///   - now: Unix milliseconds, for creation times; never used to order operations.
     ///   - freeSpace: the bytes available on the replica's file system, read fresh each time; `statvfs` by default.
@@ -38,31 +44,32 @@ public final class ReplicaStore: Sendable {
     ) throws(ReplicaStoreError) {
         let directory = try ReplicaDirectory.prepare(at: directoryPath)
         let incarnation = Identifier128.random()
-        let database: SQLiteWALDatabase
-        do {
-            if !FileManager.default.fileExists(atPath: directory.databasePath) {
-                // An empty file is a new database; SQLite gives its WAL and shared-memory files the same mode.
-                guard
-                    FileManager.default.createFile(
-                        atPath: directory.databasePath, contents: nil, attributes: [.posixPermissions: 0o600])
-                else { throw ReplicaStoreError.directory("cannot create \(directory.databasePath)") }
-            }
-            database = try SQLiteWALDatabase(path: directory.databasePath)
-            let time = now()
-            try database.writer.writeTransaction { session in
-                try ReplicaSchema.migrate(session)
-                if try session.query("SELECT 1 FROM replica_identity WHERE singleton = 1").isEmpty {
-                    try session.query(
-                        "INSERT INTO replica_identity (singleton, installation_id, created_at) VALUES (1, ?, ?)",
-                        [ReplicaColumns.id(Identifier128.random()), .integer(time)])
-                }
-                try IncarnationChain.start(incarnation, at: time, in: session)
-            }
-        } catch {
-            throw ReplicaStoreError.classify(error)
-        }
         let databasePath = directory.databasePath
         let freeSpace = freeSpace ?? { SQLiteFreeSpace.availableBytes(at: databasePath) }
+        let reserveBytes = Int64(configuration.captureReserveBytes)
+        // An open fails for lack of space when SQLite says so, or when it reports an I/O error (it couldn't create its
+        // WAL sidecars, as on a full tmpfs) while the file system has less than a reserve left.
+        func outOfSpace(_ error: ReplicaStoreError) -> Bool {
+            switch error {
+            case .storageFull: true
+            case .io: (freeSpace() ?? .max) < reserveBytes
+            default: false
+            }
+        }
+        let database: SQLiteWALDatabase
+        var releasedBallastAtOpen = false
+        do {
+            database = try Self.open(directory, incarnation: incarnation, at: now())
+        } catch let error where outOfSpace(error) {
+            guard directory.ballastBytes > 0 else { throw .storageFull }
+            try directory.releaseBallast()
+            releasedBallastAtOpen = true
+            do {
+                database = try Self.open(directory, incarnation: incarnation, at: now())
+            } catch let error where outOfSpace(error) {
+                throw .storageFull
+            }
+        }
         if FileManager.default.fileExists(atPath: directory.ballastPath) {
             try Self.restoreBallastIfSpaceReturned(
                 directory, reserveBytes: configuration.captureReserveBytes, available: freeSpace())
@@ -76,10 +83,39 @@ public final class ReplicaStore: Sendable {
         self.directory = directory
         self.configuration = configuration
         self.incarnationID = incarnation
+        self.releasedBallastAtOpen = releasedBallastAtOpen
         self.database = database
         self.signing = signing
         self.indexing = indexing
         self.now = now
+    }
+
+    /// Opens the database and records this launch's incarnation in one transaction; every failure is classified.
+    private static func open(_ directory: ReplicaDirectory, incarnation: Identifier128, at time: Int64)
+        throws(ReplicaStoreError) -> SQLiteWALDatabase
+    {
+        do {
+            if !FileManager.default.fileExists(atPath: directory.databasePath) {
+                // An empty file is a new database; SQLite gives its WAL and shared-memory files the same mode.
+                guard
+                    FileManager.default.createFile(
+                        atPath: directory.databasePath, contents: nil, attributes: [.posixPermissions: 0o600])
+                else { throw ReplicaStoreError.directory("cannot create \(directory.databasePath)") }
+            }
+            let database = try SQLiteWALDatabase(path: directory.databasePath)
+            try database.writer.writeTransaction { session in
+                try ReplicaSchema.migrate(session)
+                if try session.query("SELECT 1 FROM replica_identity WHERE singleton = 1").isEmpty {
+                    try session.query(
+                        "INSERT INTO replica_identity (singleton, installation_id, created_at) VALUES (1, ?, ?)",
+                        [ReplicaColumns.id(Identifier128.random()), .integer(time)])
+                }
+                try IncarnationChain.start(incarnation, at: time, in: session)
+            }
+            return database
+        } catch {
+            throw ReplicaStoreError.classify(error)
+        }
     }
 
     // MARK: - Identity
