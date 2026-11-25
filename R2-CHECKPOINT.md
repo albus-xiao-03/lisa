@@ -1,7 +1,11 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-24T23:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary.** M2-0 to M2-20 are done, and the clean reconstruction of the M2 head `815bbbc` passed: debug and release, the R1 suite, fixtures, lint and every current M2 harness (`docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:** done are M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica) and M3-4's first slice (the direct path end to end over loopback HTTP) (§11, `docs/VERIFICATION-SCENARIOS.md`). **Paused (quota, fourth pause) at 02:13Z**, with 63% used (reading `cc154a9540c4`, 02:11:55Z) and the reset at 2026-11-25T06:20:00Z. The note is `.tmp/r2/20261124-r2-5462/pause-20261125T0213Z-*.md`. The writer was guard launch `L-0df4d1307f` (session `a360702d-4fbc-4872-82f8-ee97a82cf107`), which resumed at 01:23Z; its launch wrapper releases the writer lock when it exits. Guard v2 resumes after the reset (§9). **Working:** session `d53fb9c3-8475-433d-91c1-c05c3a4743fa`, a background job that Claude Code forked from the interactive session at 20:34:58Z. It holds lease `interactive:4804`, and guard v2 runs as pid 197451 (§5, §9). Fresh reading at 23:28:27Z: 64% used, reset 2026-11-25T01:20:00Z.
+**Updated:** 2026-11-24T23:45Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary.** M2-0 to M2-20 are done, and the clean reconstruction of the M2 head `815bbbc` passed: debug and release, the R1 suite, fixtures, lint and every current M2 harness (`docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:** done are M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica) and M3-4's first slice (the direct path end to end over loopback HTTP) (§11, `docs/VERIFICATION-SCENARIOS.md`). **Paused (quota, fourth pause) at 02:13Z**, with 63% used (reading `cc154a9540c4`, 02:11:55Z) and the reset at 2026-11-25T06:20:00Z. The note is `.tmp/r2/20261124-r2-5462/pause-20261125T0213Z-*.md`. The writer was guard launch `L-0df4d1307f` (session `a360702d-4fbc-4872-82f8-ee97a82cf107`), which resumed at 01:23Z; its launch wrapper releases the writer lock when it exits. Guard v2 resumes after the reset (§9). **Owner decisions (2026-11-25T05:5xZ), acted on in session `d53fb9c3-…`, lease `interactive:428192`, 05:58–06:1xZ:**
+- Regenerable build output may be removed, inside the run directory too, now and later: 30.72 GB were removed (§5).
+- The replica may release its ballast to open at launch: implemented as D-61 (`33b0322`).
+- Both come with an explicit record in each report.
+- The lease is then released. The pending pause `P-20261125T021240Z-00ab27` resumes M3 after the 06:20Z reset (§9).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
 
@@ -89,7 +93,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
 | Frozen fixtures not yet produced | The raw `sending` queue file and the pruning pair were produced at M3's start (`docs/VERIFICATION-SCENARIOS.md` M3-0). Still to produce: `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
-| Reopening the replica at 0 bytes free | Observed in M2-4: it fails with "storage full" (opening records a new incarnation, and WAL mode needs room for its `-wal` and `-shm` files); every save stays intact and it opens once space returns. The plan releases the ballast only on the capture path. **For the owner:** whether the ballast may also be released to open the replica at launch; otherwise the app (M5) reports "Storage is full" without the replica and retries the open when space returns |
+| Reopening the replica at 0 bytes free | **Decided and done (D-61, `33b0322`).** The owner allowed it on 2026-11-25. At launch the replica empties its ballast and opens once more. That applies on `SQLITE_FULL`, or on the I/O error SQLite reports on a full tmpfs while less than a reserve is free. `releasedBallastAtOpen` and `storageIsAlmostFull` say so, and the ballast is restored when space returns. Tested on a real full tmpfs in the pinned container (M3-D61) |
 | SQLite WAL-reset fix | Settled by design (D-55, M2-0): the loaded library isn't shown to carry the fix, so every WAL database has one writer and checkpointer under an exclusive lock and read-only readers; the guard's checks pass. The production image's library is judged the same way at M4 |
 
 **Writer lease lapse (2026-11-24T20:35:00Z–22:52:26Z), found and fixed:**
@@ -105,13 +109,25 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **Reclaimed:** superseded M1 build output in `.build/` (611 MB, `m3/disk-reclaim-20261125T020802Z.txt`).
 - **Workaround:** regression builds now use a scratch path on the container's root volume, `/tmp/lisa-r2-20261124-r2-5462/regressions-scratch` (`m2/run-regressions-v7.sh`), which had 11 GB free. Build output isn't a temporary file (`CONSTRICTION.md`); harness sources, logs and evidence stay in the run directory.
 - **Remaining room:** 515 MB on the project volume and 7.2 GB on the root volume.
-- **For the owner:** the same question as below. The project volume can't hold new build output, and the root volume is a container overlay that a sandbox reset may wipe.
+- **Decided by the owner (2026-11-25):** see "Owner-approved reclaim" below.
 
 **Disk (2026-11-24T23:27Z):**
 - **What happened:** the volume fell to 349 MB free. Each harness's own `.build` rebuilt on every regression round, and switching the shared scratch path's index setting rebuilt it once more.
 - **Reclaimed:** superseded SwiftPM output from before this run was removed from `.build/`: `.build/out` and `.build/toolchain-6.4.3`, 7.1 GB (`m2/disk-reclaim-20261124T232752Z.txt`). That is ordinary build output under `CONSTRICTION.md` and lies outside the run directory. 7.5 GB were then free.
 - **Since then:** new harnesses share one scratch path (`m2/harness-scratch-late`). Regressions run as one package with byte-identical copies of the current harnesses' sources (`m2/make-regressions-v1.py`, `-v2.py`), with v35 and v47 in their own packages.
-- **For the owner:** the run directory holds about 35 GB, mostly SwiftPM build output: superseded harness copies' `.build` folders and the two clean-checkout runs (about 5 GB each). Plan §10.2 keeps everything in the run directory. 2.2 GB were free after the M2 boundary (23:44Z). Decide whether those regenerable build folders may be removed, or the volume grown. M3's builds need the room.
+- **Decided by the owner (2026-11-25):** regenerable build output may be removed.
+
+**Owner-approved reclaim (2026-11-25T05:59Z):**
+- **Override:** plan §10.2's no-removal rule, for SwiftPM build output only (DEVELOPMENT-ENVIRONMENT-REPORT.md §14).
+- **Removed:** 43 directories, 30.72 GB:
+  - every `m2/harness-vN/.build`, from v11 to v46;
+  - `m2/harness-scratch-late`;
+  - `m1/harness/.build`, `m1/harness-v2/.build` and `m1/proof-proposal/cert-check/.build`;
+  - the `build-debug`, `build-release` and harness scratch folders of `m1/clean-20261124T134046Z`, `m2/clean-20261124T225253Z` and `m2/clean-20261124T233606Z`.
+- **Kept:** the frozen R1 builds under `m0/` (`r1-src/.build` and the frozen-client harnesses), and `m2/harness-v42/.build`, which is not shown to be SwiftPM output.
+- **Free space:** 514 MB before, 31,108 MB after.
+- **Record:** `.tmp/r2/20261124-r2-5462/reclaim-20261125T055921Z-planned.tsv` (each path, size, newest file and recovery command) and `…-done.md`.
+- **Recovery:** each is SwiftPM output; run the command in its row. For a clean run, that is the build line of its `matrix.sh` into a new path, never re-running `matrix.sh`, whose logs are evidence.
 
 **Process deviation, recorded (temporary files):** harness v47's test file was edited in place once, before its first build (a `World` value moved into each test). The rule asks for a new version. Every later fix went into a new version.
 
@@ -136,9 +152,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **Engine:** the rootful Docker daemon inside `lisa.lab` (owner, 2026-11-24; P-02, P-03, account-free P-09a at their milestones).
 - **P-07:** any R1 test or test-support change needs the owner's approval of a request naming the file, reason and evidence.
 - **Dependencies:** existing versions may change after the freeze when necessary or beneficial (swift-crypto 5.1.2 first, SwiftNIO 2.105.1 assessed), each with revisions, rationale, lockfile change and regression results. **P-08** stays conditional on N-1 and on the owner's approval of the exact swift-certificates pin. **P-09a:** Proton Mail Bridge 3.27.2 on amd64.
+- **Build output (owner, 2026-11-25):** regenerable build output may be removed, inside the run directory too, now and later. Each report states the override, the deleted files and the recovery steps.
+- **The replica's ballast (owner, 2026-11-25):** it may be released to open the replica at launch (D-61), with the same reporting.
 - **Kept by the owner:** the host, accounts, image publication, production deployment, real-data cutover, the Apple Developer account, every live provider action and every device session.
 
 ## 8. Last buildable checkpoint
+
+**`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with tests has 0 warnings, and the R1 suite passes 376/66 (`m3/suite-after-ballast-at-open-io-20261125T060530Z/`). M3 harness v7 passes 2/2 on the host and 1/1 on a full tmpfs in the pinned container (`m3/container-20261125T0604Z/run-20261125T060502Z/`). Regression package v6, run by `m2/run-regressions-v7.sh`, passes in `m2/regressions-run-20261125T060539Z/`.
 
 **`9cc02f4`** (`Package.swift`, the LisaCoreAPI, LisaSyncEngine and LisaSyncHTTP targets). The full debug build with tests has 0 warnings, the R1 suite passes 376/66, M3 harness v5 passes 2/2, and regression package v6 passes with its 23 targets plus v35 and v47 (`m2/regressions-run-20261125T020817Z/`, scratch on the root volume). Before it: **`aade818`** (`ReplicaStore.swift`, Core receipts verified on a replica). The full debug build with tests has 0 warnings, the R1 suite passes 376/66, M3 harnesses v3 and v4 pass, and regression package v5 passes with its 22 targets plus v35 and v47 (`m2/regressions-run-20261125T015607Z/`). Before it: `1286627` (Core snapshots), then **`13736ee`** (`Package.swift`, the LisaCoreLedger target). A full debug build with tests has 0 warnings, and the unmodified R1 suite passes 376/66 with schema v5. M3 harness v2 passes 8/8, and regression package v4 passes with all 20 targets plus v35 and v47 (`m2/regressions-run-20261125T014819Z/`). Before it:
 
@@ -188,7 +208,7 @@ No live action or external submission has been requested or performed in this ru
       - **Body limit:** `APIServerLimits.maxBodyBytes` = 256 KiB, server-wide, checked before routing (`RequestAssembler.swift:39-41,69-73`). A larger v2 limit (512 KiB for `POST /v2/operations`) needs a per-path hook. Raising the global limit would break `L20APINetworkTests.swift:157,203-207`, which expects 413 and a closed connection.
       - **Client:** `URLSessionTransport` refuses paths outside `/v1/` (`HostEndpoint.url(for:)`, `HostEndpoint.swift:86-89`). The plan extends it to `/v2/`, and no R1 test checks that refusal. `LisaAPIClient.send` is internal and checks the 1.x `Lisa-API-Version`, so the v2 client builds its own requests and credentials.
       - **Harness pattern:** R1's loopback helpers (`LoopbackAPIServer`, `TestHost`, `SyntheticCompanion`) are test-only. A harness opens `LisaHost.open(settings:platform:)`, starts the server, pairs in process (`createPairingCode`, `pairDevice`), and calls the device listener over loopback HTTP.
-   5. **M3-5:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05.
+   5. **M3-5:** enrollment, the roster, revocation, key and credential lifecycle, challenges (§8.1); S-04, S-05. (Done outside the span order: D-61, opening at 0 bytes free, as M3-D61.) New harnesses may build on the project volume again (31 GB free). Remove superseded build output only with the owner's reporting rule (§7).
    6. **M3-6:** `LisaLegacyRequests` and the v1 translation (§8.12.2); S-01 (with M3-0's fixtures), S-03.
    7. **M3-7:** backups, the recovery ledger, restore, fencing and admission (§8.4.4, §8.4.5, §8.5); S-09, S-10, §19.1.
    8. **M3-8:** `LisaFiringIdentity`, holds, the deterministic `Message-ID`, the Core side of ownership (§8.10); S-11 a–k.
