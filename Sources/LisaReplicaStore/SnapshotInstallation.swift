@@ -82,7 +82,8 @@ extension ReplicaStore {
     /// it into the staged tables in its own transaction. Chunks come from the network or files, never through a long
     /// database reader.
     public func stageSnapshotChunk(
-        _ page: PagedArtifactPage, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+        _ page: PagedArtifactPage, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?,
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }
     ) throws(ReplicaStoreError) {
         guard let dataset = try identity().datasetID else { throw .notEnrolled }
         guard let state = try read({ session in try Self.installationState(in: session) }) else {
@@ -118,7 +119,9 @@ extension ReplicaStore {
             operationEntries.append(entry)
             do {
                 envelopes.append(
-                    try OperationSigning.verify(operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                    try OperationSigning.verify(
+                        operation, dataset: dataset, deviceKey: deviceKey, previousKeys: previousKeys,
+                        coreKey: coreKey))
             } catch {
                 throw .unverified(error)
             }
