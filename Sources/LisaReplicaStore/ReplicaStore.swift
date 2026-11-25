@@ -661,7 +661,8 @@ public final class ReplicaStore: Sendable {
     /// version; nothing missing from a page is read as deleted. A page that fails verification changes nothing.
     @discardableResult
     public func applyChangePage(
-        _ signed: SignedChangePage, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+        _ signed: SignedChangePage, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?,
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }
     ) throws(ReplicaStoreError) -> [String: PartitionPageOutcome] {
         guard let dataset = try identity().datasetID else { throw .notEnrolled }
         let page: ChangePage
@@ -679,7 +680,9 @@ public final class ReplicaStore: Sendable {
             }
             do {
                 envelopes.append(
-                    try OperationSigning.verify(operation, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey))
+                    try OperationSigning.verify(
+                        operation, dataset: dataset, deviceKey: deviceKey, previousKeys: previousKeys,
+                        coreKey: coreKey))
             } catch {
                 throw .unverified(error)
             }
@@ -702,7 +705,8 @@ public final class ReplicaStore: Sendable {
     /// this partition only. The cursor becomes the cut if that is later; it never moves backward.
     @discardableResult
     public func finishRepair(
-        _ partition: String, cut: Int64, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?
+        _ partition: String, cut: Int64, coreKey: P256Verifier, deviceKey: (Identifier128) -> P256Verifier?,
+        previousKeys: (Identifier128) -> [P256Verifier] = { _ in [] }
     ) throws(ReplicaStoreError) -> [PartitionPageOutcome] {
         guard let dataset = try identity().datasetID else { throw .notEnrolled }
         return try write { session in
@@ -718,7 +722,9 @@ public final class ReplicaStore: Sendable {
                 for entry in page.entries {
                     envelopes.append(
                         try entry.operation.map {
-                            try OperationSigning.verify($0, dataset: dataset, deviceKey: deviceKey, coreKey: coreKey)
+                            try OperationSigning.verify(
+                                $0, dataset: dataset, deviceKey: deviceKey, previousKeys: previousKeys,
+                                coreKey: coreKey)
                         })
                 }
                 if let outcome = try self.apply(
