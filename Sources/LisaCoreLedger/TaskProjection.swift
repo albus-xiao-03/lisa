@@ -11,22 +11,24 @@ import Foundation
 import LisaDomain
 import LisaMerge
 import LisaPorts
+import LisaSQLite
 import LisaSyncProtocol
 import LisaTime
 
 enum TaskProjection {
-    /// Writes `view` into R1's record of `entityID`; `createdAt` is the creation's display time. With `force`, an
+    /// Writes `view` into R1's record of `entityID` and returns the revision written, if any; `createdAt` is the
+    /// creation's display time. With `force`, an
     /// existing record is written even when no field changed, as R1's `TaskService.correct` does, so one R1 service
     /// call is one revision step (§8.12.2 "Projection revisions").
     static func project(
         _ view: TaskView?, entityID: Identifier128, createdAt: Date?, commitTime: Date, into records: any RecordWriting,
         force: Bool = false
-    ) throws {
+    ) throws -> Int64? {
         let id = TaskID(R1Identity.uuidString(entityID))
         let existing = try records.get(LisaTask.self, id: id)
         guard let view, view.exists, !view.isDeleted else {
             if existing != nil { try records.delete(LisaTask.self, id: id) }
-            return
+            return nil
         }
         let title = view.title.first ?? ""
         let notes = view.notes.joined(separator: "\n\n")
@@ -42,8 +44,7 @@ enum TaskProjection {
             task.status = status(view.status, current: .open)
             if task.status == .completed { task.completedAt = commitTime }
             task.updatedAt = commitTime
-            _ = try records.insert(task)
-            return
+            return try records.insert(task).revision.value
         }
         var changed = false
         var material = false
@@ -88,10 +89,23 @@ enum TaskProjection {
             if task.origin == .extracted { task.ownerCorrected.insert(.status) }
             material = true
         }
-        guard changed || material || force else { return }
+        guard changed || material || force else { return nil }
         if material { task.changeSequence += 1 }
         task.updatedAt = commitTime
-        _ = try records.update(task)
+        return try records.update(task).revision.value
+    }
+
+    /// Records that R1's revision `revision` of `entityID` reflects every commit up to `position`, so a v1 edit
+    /// "observed at projection revision N" can be mapped to the pieces it saw (plan §8.3.2, §8.12.2).
+    static func recordRevision(
+        _ revision: Int64?, of entityID: Identifier128, at position: Int64, in session: SQLiteSession
+    )
+        throws
+    {
+        guard let revision else { return }
+        try session.query(
+            "INSERT OR REPLACE INTO core_projection_revisions (entity_id, revision, position) VALUES (?, ?, ?)",
+            [CoreColumns.id(entityID), .integer(revision), .integer(position)])
     }
 
     /// R1's status for a merge status: an open task keeps R1's own in-progress or blocked state.
