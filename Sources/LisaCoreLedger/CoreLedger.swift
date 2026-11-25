@@ -153,9 +153,11 @@ public final class CoreLedger: Sendable {
         return outcomes.map { $0 ?? .unverified(.malformed(.invalidField("intake"))) }
     }
 
+    /// - Parameter project: whether an applied operation is projected into R1's records now; a legacy conversion
+    ///   defers it to project a correction once (§8.12.2 "Projection revisions").
     func intakeOne(
         _ operation: SignedOperation, envelope: OperationEnvelope, epoch: Identifier128, time: Int64,
-        session: SQLiteSession, records: any RecordWriting
+        session: SQLiteSession, records: any RecordWriting, project: Bool = true
     ) throws -> CoreIntakeOutcome {
         let digest = OperationDigest.of(body: operation.body)
         let byID = try CoreOperationRecords.known(byID: envelope.operationID, in: session)
@@ -235,14 +237,16 @@ public final class CoreLedger: Sendable {
             return .receipted(receipt)
         case .ready:
             return .receipted(
-                try apply(envelope, digest: digest, epoch: epoch, time: time, session: session, records: records))
+                try apply(
+                    envelope, digest: digest, epoch: epoch, time: time, session: session, records: records,
+                    project: project))
         }
     }
 
     /// Applies a ready operation at the next commit position: merge, projection, change log, final receipt.
     private func apply(
         _ envelope: OperationEnvelope, digest: Digest256, epoch: Identifier128, time: Int64, session: SQLiteSession,
-        records: any RecordWriting
+        records: any RecordWriting, project: Bool = true
     ) throws -> SignedCoreReceipt {
         let payload = try ItemOperationPayload(operationType: envelope.operationType, payload: envelope.payload)
         var isCreation = false
@@ -276,9 +280,11 @@ public final class CoreLedger: Sendable {
         let created = try CoreOperationRecords.creationTime(of: envelope.entityID, in: session).map {
             Date(timeIntervalSince1970: Double($0) / 1_000)
         }
-        try TaskProjection.project(
-            view, entityID: envelope.entityID, createdAt: created,
-            commitTime: Date(timeIntervalSince1970: Double(time) / 1_000), into: records)
+        if project {
+            try TaskProjection.project(
+                view, entityID: envelope.entityID, createdAt: created,
+                commitTime: Date(timeIntervalSince1970: Double(time) / 1_000), into: records)
+        }
         try Self.logChange(
             position, envelope.operationID, decision: conflict ? .acceptedWithConflict : .accepted, epoch: epoch,
             partition: CoreTaskFold.partition, in: session)
