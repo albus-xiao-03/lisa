@@ -64,6 +64,8 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case unverifiedRoster(RosterVerificationError)
     /// An enrollment completion for another device's trust than the one this replica already holds.
     case trustMismatch
+    /// A signing-key transition that doesn't continue the key history this device holds (§8.1.4).
+    case unverifiedKeyTransition(KeyHistoryError)
 
     /// Classifies a failure raised while using the database.
     static func classify(_ error: any Error) -> ReplicaStoreError {
