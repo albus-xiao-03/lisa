@@ -55,6 +55,8 @@ public enum ReplicaStoreError: Error, Hashable, Sendable {
     case reserveProtected
     /// A custody acknowledgement that didn't verify (§8.6.1).
     case unverifiedCustody(CustodyVerificationError)
+    /// A Core receipt that didn't verify by Core's key (§8.2.1).
+    case unverifiedReceipt(ReceiptVerificationError)
     /// A verified custody acknowledgement the replica can't take: for other bytes than the journal's, from this
     /// device, or from a revoked device.
     case custodyRefused(String)
