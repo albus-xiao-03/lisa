@@ -184,6 +184,16 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - References to temporary notes were replaced by D-54.
   - The frame header and hello now come from the portable modules.
 - **Result:** ready for X1 (owner-run). N-1, E-1 and E-2 stay open until the owner's results.
+- **X1, first attempt (the owner, reported 2026-11-26T00:34Z): `FAIL` at the first Xcode build of `LisaProof`.**
+  - **The report:** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130`. It came in the Claude session, with no harness export. The Xcode version, destinations, commit and any other errors weren't stated.
+  - **The expression at line 130:** Design A's PSK selection probe. A closure with no written types sits in a `? :` branch, holding a nested `@MainActor` `Task` and `hintBytes.map(String.init) ?? "none"`. Its types agree with `DesignAParameters.make`, but the type checker found no solution and named no error.
+  - **Why the Linux check missed it:** this file imports `Network`, so it was among the 31 files checked for syntax only. X1 was its first type-check.
+  - **Status:**
+    - `OV-APPLE-X1-01`–`03` (E-2) can't pass until a fixed build passes.
+    - The nearby cells (N-1), the fetch probe (E-1) and test plan `X1` weren't reached.
+    - N-1, E-1 and E-2 stay open.
+  - **Evidence:** `.tmp/r2/20261124-r2-5462/owner/x1-attempt1-20261126T0034Z-v2.md` (the verbatim report, the analysis and the proposed fix; not applied, since the owner said this was not a resume).
+  - **Next, on resume:** the fix, a Linux type-check of the Apple-importing files against stand-ins, then a new X1 request naming the fixed commit (`R2-CHECKPOINT.md` §6).
 
 ### M1-9 The owner-verification harness core and S-24 at M1 (plan §10.8; R2-DEV-02)
 
