@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T01:35Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T01:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -224,7 +224,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
   The Xcode version and any other errors in the build log would help.
 
-**X1 attempt 2 is requested (2026-11-26T01:35Z)** at commit `795b4f3` or later.
+**X1 attempt 2 is requested (2026-11-26T01:29Z)** at commit `795b4f3` or later.
 - **Unchanged:** the entry point, sheet and cases, as above.
 - **What changed:**
   - The fix for line 130 (`f03cf24`).
@@ -340,7 +340,7 @@ No live action or external submission has been requested or performed in this ru
 
 ## 11. Next steps
 
-**Done first on resuming (2026-11-26T01:04Z–01:35Z):** the X1 build fix, the whole-target Linux type-check (D-70) and X1 attempt 2's request (§6). **Now:** M3-6a's replica side, below.
+**Done first on resuming (2026-11-26T01:04Z–01:29Z):** the X1 build fix, the whole-target Linux type-check (D-70) and X1 attempt 2's request (§6). **Now:** M3-6a's replica side, below.
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
    1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; the receipt's vector and the replica's verifying receipt path followed in M3-3). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
