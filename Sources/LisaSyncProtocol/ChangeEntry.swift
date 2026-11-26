@@ -1,7 +1,9 @@
 // One change-log entry in a signed change page or snapshot (plan §8.4.2, §8.2.1 "Every decision is also a change-feed
 // entry", §8.3.5): an operation's decision at its commit position, with the operation's exact signed bytes, or a
 // derived record (an occurrence row or its deletion); either names every partition it touches. A calendar entry names
-// the buckets of both its old and its new range, so a move reaches every bucket it left.
+// the buckets of both its old and its new range, so a move reaches every bucket it left. A committed legacy child also
+// carries the horizon Core resolved its "observed at projection revision N" to (§8.3.2, §8.12.2; docs/DECISIONS.md
+// D-69): its body names only N, and replicas don't hold Core's projection-revision map.
 
 /// A change in the change log: an operation's decision, or a derived record.
 public struct ChangeEntry: Hashable, Sendable {
@@ -23,23 +25,38 @@ public struct ChangeEntry: Hashable, Sendable {
     /// Strictly ascending (Unicode scalar order), at least one.
     public let partitions: [String]
     public let change: Change
+    /// Only on a committed legacy child, one whose observed set carries a projection revision: every piece of the item
+    /// with commit position ≤ the horizon's, as Core resolved the revision when it decided the child. Encoded only when
+    /// present, so every other entry's bytes are unchanged.
+    public let observedHorizon: ObservedHorizon?
 
-    public init(position: Int64, partitions: [String], change: Change) throws(OperationEnvelopeError) {
+    public init(position: Int64, partitions: [String], change: Change, observedHorizon: ObservedHorizon? = nil)
+        throws(OperationEnvelopeError)
+    {
         guard position >= 1 else { throw .invalidField("entry.position") }
         guard !partitions.isEmpty, partitions.count <= Self.maximumPartitions,
             zip(partitions, partitions.dropFirst()).allSatisfy({
                 $0.unicodeScalars.lexicographicallyPrecedes($1.unicodeScalars)
             }), partitions.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 128 })
         else { throw .invalidField("entry.partitions") }
+        if observedHorizon != nil {
+            guard case .operation(let operation, let decision) = change, decision != .rejected,
+                (try? OperationEnvelope.decode(body: operation.body))?.observed?.projectionRevision != nil
+            else { throw .invalidField("entry.observedHorizon") }
+        }
         self.position = position
         self.partitions = partitions
         self.change = change
+        self.observedHorizon = observedHorizon
     }
 
-    public init(position: Int64, partitions: [String], operation: SignedOperation, decision: Decision)
-        throws(OperationEnvelopeError)
-    {
-        try self.init(position: position, partitions: partitions, change: .operation(operation, decision))
+    public init(
+        position: Int64, partitions: [String], operation: SignedOperation, decision: Decision,
+        observedHorizon: ObservedHorizon? = nil
+    ) throws(OperationEnvelopeError) {
+        try self.init(
+            position: position, partitions: partitions, change: .operation(operation, decision),
+            observedHorizon: observedHorizon)
     }
 
     public init(position: Int64, partitions: [String], record: DerivedRecord) throws(OperationEnvelopeError) {
@@ -75,6 +92,18 @@ public struct ChangeEntry: Hashable, Sendable {
                             ]))
                     ))
                 pairs.append(("decision", .string(decision.rawValue)))
+                if let observedHorizon {
+                    pairs.append(
+                        (
+                            "observedHorizon",
+                            .object(
+                                try CanonicalObject([
+                                    ("epochID", .string(observedHorizon.epochID.hex)),
+                                    ("partition", .string(observedHorizon.partition)),
+                                    ("position", .integer(observedHorizon.position)),
+                                ]))
+                        ))
+                }
             case .record(let record):
                 pairs.append(("record", try record.canonicalValue))
             }
@@ -93,6 +122,7 @@ public struct ChangeEntry: Hashable, Sendable {
             }
             let position = try reader.integer("position")
             let change: Change
+            var horizon: ObservedHorizon?
             if let record = reader.optionalValue("record") {
                 change = .record(try DerivedRecord(canonicalValue: record))
             } else {
@@ -104,9 +134,17 @@ public struct ChangeEntry: Hashable, Sendable {
                     throw OperationEnvelopeError.invalidField("entry.decision")
                 }
                 change = .operation(signed, decision)
+                if let object = try reader.optionalObject("observedHorizon") {
+                    var fields = CanonicalFieldReader(object: object)
+                    horizon = try ObservedHorizon(
+                        epochID: EnvelopeFields.identifier(
+                            try fields.string("epochID"), "entry.observedHorizon.epochID"),
+                        partition: try fields.string("partition"), position: try fields.integer("position"))
+                    try fields.finish()
+                }
             }
             try reader.finish()
-            try self.init(position: position, partitions: partitions, change: change)
+            try self.init(position: position, partitions: partitions, change: change, observedHorizon: horizon)
         } catch let error as OperationEnvelopeError {
             throw error
         } catch let error as CanonicalFieldError {
