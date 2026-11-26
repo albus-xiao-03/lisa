@@ -126,7 +126,7 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `type` | The operation type, `<entity>.<action>` from the catalog (§8.2.3) |
 | `payload` | The type's payload. The schemas implemented so far are below ("Item payloads"); other types' payloads stay opaque to the envelope codec until theirs are |
 | `dependencies` | At most 32 operation IDs, strictly ascending, never the operation's own ID |
-| `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}` |
+| `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}`. On a legacy child only: `{"pieces": [], "projectionRevision": N}`, R1's `expectedRevision` ("observed at projection revision N", ≥ 1), alone (§8j) |
 | `legacyParent` | Only on Core legacy children: `{"scope", "requestID" (R1's 8–128-character alphabet), "discriminator", "index" (in 0..<count), "count", "setDigest"}` |
 | `createdAt` | Unix milliseconds, display and audit only; required on device operations, absent on legacy children |
 
@@ -189,6 +189,7 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
   - the operation's exact signed bytes are base64url;
   - `partitions` is the 1–256 partitions it touches, strictly ascending;
   - `position` is ≥ 1.
+  - `observedHorizon`, optional: `{"epochID", "partition", "position"}`, only on an `accepted` or `accepted_with_conflict` entry whose operation is a legacy child carrying a projection revision. It is the horizon Core resolved the revision to when it decided the child (§8j). An entry without one has exactly the bytes it had before the field existed.
   - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`).
 - **A derived-record entry** is `{"partitions", "position", "record": {"id", "row": <row> | null, "type": "occurrence"}}`: a row Core computed, or its deletion (`DerivedRecord`, plan §8.3.5). It has no signature of its own; the Core-signed page or snapshot vouches for it.
   - **An occurrence row** (`OccurrenceRow`) is `{"civil"?, "expandedZone"?, "sourceID", "timing", "title"}`. The timing is either:
@@ -440,7 +441,8 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 - **Children are a pure function of the request** (`LisaLegacyRequests.LegacyChildSet`):
   - **ID:** the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`.
   - **Origin:** `coreLegacyTranslation` with incarnation `SHA-256("lisa-v1-incarnation-v1" ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID)` (first 16 bytes; no 0x00 after this label) and sequence index + 1.
-  - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`; no observed set.
+  - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`.
+  - **Observed set:** none, except on an edit made against R1's `expectedRevision` N: `{"pieces": [], "projectionRevision": N}` (`LegacyChange.observedRevision`, D-69). It stays a pure function of the request.
   - **`legacyParent`:** `{scope, requestID, discriminator, index, count, setDigest}`, the set digest being SHA-256 of the ordered child IDs.
   - **Dependencies:** at most one, the immediate predecessor among the request's children in the same chain (the same entity, or for preferences the same key).
   - **Created entities:** an entity the request creates gets the child-ID derivation of `entity:<discriminator>`.
@@ -450,6 +452,10 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - `field:title` → `e7b59fbce39fe1aa9ff9a26d3531afc0`, `field:notes` → `5e634746fd0cb2e0dbcc9ca31e3e937d`, `status` → `6fa66a242b90a415efe5442d24e6676c`;
   - their set digest `e5bbe52476f4abf64d2d262b1954e690ea65fc94d9449448c1cf94fa06b5d7ee`;
   - `entity:create:task` → `1ac3159244ac03e49f884a399bf4707f`.
+- **"Observed at projection revision N"** (D-69; schema v10 and v11):
+  - **At decision:** when Core accepts such a child, it resolves N through its projection-revision map to the horizon `(epoch, "tasks", P(N))`, the state R1's revision N of the entity reflected. It keeps the horizon with the operation (`core_operations.observed_epoch`, `observed_position`).
+  - **Folding:** Core's fold uses that horizon in place of the observed set. A revision the map doesn't hold resolves to nothing, so the child observes nothing and conflicts.
+  - **On replicas:** they don't hold the map. Core serves the horizon in its signed change entries and snapshot chunks (`observedHorizon`, §8a). A replica keeps it with the canonical operation and folds with it the same way, so its view equals Core's.
 - **Parents** (`CoreLedger.legacyConvert`, schema v9): one per `(scope, requestID)`, Core-only.
   - **The transaction:** the lookup again (`replay`, `bodyExpired`, `mismatch`, `awaitingReview`, or `unknown`), the route's conversion with the children taken in through the ledger, and, for an answer R1 records (2xx, 400, 403, 404, 409, 413), the parent with its children's dispositions and the answer, the body kept for 30 days by default.
   - **Nothing is kept** of a conversion that throws or answers otherwise.
