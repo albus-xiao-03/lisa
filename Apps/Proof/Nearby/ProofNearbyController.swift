@@ -125,15 +125,19 @@ final class ProofNearbyController {
         case .a:
             listenerWindow = currentWindow
             let entries = try DesignAPSKTable.listenerEntries(keys: keys, roster: dialRoster, window: listenerWindow)
-            let probe: (@Sendable (Int?) -> Void)? =
-                configuration.probeSelectionBlock
-                ? { [weak self] hintBytes in
+            // Written @Sendable and assigned in an `if`: as a branch of `? :` the closure isn't inferred @Sendable from
+            // the declared type, and with `[weak self]` Swift 6.4 then fails to produce a diagnostic (X1, attempt 1).
+            let probe: (@Sendable (Int?) -> Void)?
+            if configuration.probeSelectionBlock {
+                probe = { @Sendable [weak self] (hintBytes: Int?) -> Void in
+                    let hint = hintBytes.map { String($0) } ?? "none"
                     Task { @MainActor [weak self] in
-                        self?.log(
-                            "PSK selection block called on the listener; hint bytes: \(hintBytes.map(String.init) ?? "none")"
-                        )
+                        self?.log("PSK selection block called on the listener; hint bytes: \(hint)")
                     }
-                } : nil
+                }
+            } else {
+                probe = nil
+            }
             parameters = DesignAParameters.make(
                 entries: entries, policy: configuration.suitePolicy, selectionProbe: probe)
             service = NWListener.Service(name: ownServiceName, type: DesignADiscovery.serviceType)
