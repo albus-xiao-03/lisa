@@ -19,10 +19,12 @@ enum TaskProjection {
     /// Writes `view` into R1's record of `entityID` and returns the revision written, if any; `createdAt` is the
     /// creation's display time. With `force`, an
     /// existing record is written even when no field changed, as R1's `TaskService.correct` does, so one R1 service
-    /// call is one revision step (§8.12.2 "Projection revisions").
+    /// call is one revision step (§8.12.2 "Projection revisions"). With `markDeadlineCorrected`, the deadline is
+    /// marked owner-corrected even when its value didn't change, as `TaskService.correct` marks it whenever a
+    /// correction sets or clears it (D-72).
     static func project(
         _ view: TaskView?, entityID: Identifier128, createdAt: Date?, commitTime: Date, into records: any RecordWriting,
-        force: Bool = false
+        force: Bool = false, markDeadlineCorrected: Bool = false
     ) throws -> Int64? {
         let id = TaskID(R1Identity.uuidString(entityID))
         let existing = try records.get(LisaTask.self, id: id)
@@ -89,6 +91,7 @@ enum TaskProjection {
             if task.origin == .extracted { task.ownerCorrected.insert(.status) }
             material = true
         }
+        if markDeadlineCorrected { task.ownerCorrected.insert(.deadline) }
         guard changed || material || force else { return nil }
         if material { task.changeSequence += 1 }
         task.updatedAt = commitTime
