@@ -1510,3 +1510,29 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **A replica** pulling Core's `preferences` partition, two entries a page, holds the same views as Core, the conflict included. The `tasks` partition holds no preference entry.
 - **Regressions:** regression package v24 (`m2/make-regressions-v24.py`, v23 plus harness v43; runner `m2/run-regressions-v25.sh`) passes all 31 targets, v35 and v47 among them (`m2/regressions-run-20261126T023013Z/summary.txt`). 21 GB were free.
 - **Result: PASS** for Core and the replica. Next, the conversion of `PATCH /v1/preferences` (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, third step, first part: R1's `PATCH /v1/preferences` through the converter (plan §8.12.2, §8.17; R2-TRUST-05; `docs/DECISIONS.md` D-74)
+
+- **Code** (`aa0ec19` → `8313d30`):
+  - **`PreferenceRules`** (LisaOwnerData): R1's 24 supported keys; the administrative keys, R1's consequential ones; the permitted keys, which alone replicate; R1's value check.
+  - **Core's intake** rejects a device's preference operation as `unsupported_key`, `administrative_key` or `invalid_value`, with no key or value in the reason or hint.
+  - **What a converted child observes:** R1's record as Core found it (`resolveFoundRecord`). For a record, the horizon its revision reflects. For an absent key, every commit before the child. `ChangeEntry` serves the horizon on every legacy preference child.
+  - **`LegacyChildPlan`:** a child set's IDs, digest and chains from discriminators alone, envelopes encoded when taken in.
+  - **`LegacyPreferenceRoutes` and `convertUpdatePreferences`:** `change:<index>` children chained per key; R1's checks in R1's order; the stop at the first refusal; one projection per change, forced for a set or confirm; R1's audit events; R1's full list on success; refusals from templates naming positions; the 409 terminal reply.
+- **Full build and R1 suite:** `m3/suite-after-preference-conversion-20261126T025433Z/`: 0 warnings, 0 errors, 376/66. Lint is clean on the nine changed files, apart from R1's own `Package.swift` line 206.
+- **Harness:** `m3/harness-v45/`, 10/10 on its first build (`m3/harness-v45-test-20261126T025359Z.log`). v44 is kept, never built. It had a quiet-hours value R1 refuses, and it compared device audit actors across hosts whose device IDs differ.
+- **Cases,** each sent to R1's unconverted router on one host and the converting router on another, at one wall clock:
+  - **Sets, then a confirm, a set at the record's revision and a delete:** 200 with R1's full list, byte for byte. The records match (value, origin, confirmed, revision, time), and so do the audit events. Every child is `applied`, with `change:0`–`change:2`.
+  - **The first refusal stops the request:** a stale `expectedRevision` at change 1 is R1's 409 with current revision 1. R2's message is "changes[1] changed since it was read; reload it and try again". The dispositions are `applied`, `refused`, `not_reached`. A retry replays the refusal on both hosts. Other bytes under the same request ID are 422 on both.
+  - **The canaries:** an unknown weekday token, `canaryday`, is R1's 400 on both. R2's answer is "changes[1].value has an unknown weekday", with field `changes[1].value`. An unsupported key, `canary-key-7f3e`, is "changes[0].key is not a supported preference", with field `changes[0].key`. Its confirm is the 404 template. R1's bodies contain the canaries, and R2's don't, nor do its replay, the ledger's served children or the audit events.
+  - **A paired device:** an owner-only key is R1's 403 and stops the request ("changes[1] can be changed only by the owner on the host"). A delete is R1's 403. A confirm is applied, one revision step.
+  - **Fifty changes to one key:** one chain, each child depending on its immediate predecessor only, with `legacyParent.count` 50. The last value and revision 50 match on both hosts. Fifty-one changes are R1's 400 on both.
+  - **A replica:** a set, its delete, a set again and a second key. Every served entry carries Core's horizon, and a replica pulling the partition two entries a page holds Core's views, without conflicts.
+  - **An expired reply:** after 31 days, a retry gets the 409 terminal reply, and the record stays at revision 1.
+  - **An administrative key in owner scope:** the conversion fails for now (500), keeping nothing, not even the earlier change, until M3-6b's next part adds holds.
+  - **Core's device rules:** a device's set of `delivery.emailEnabled` and delete of `model.endpoint` are `administrative_key`, a set of `canary-key-7f3e` is `unsupported_key`, and a set of `brief.time` to `25:99` is `invalid_value`. A permitted set and a confirm are accepted.
+  - **A device's set, then R1's blind set** on the owner listener: the converted child replaces the device's value without a conflict, one revision step on.
+- **Regressions:** regression package v26 (`m2/make-regressions-v26.py`; runner `m2/run-regressions-v27.sh`) passes all 29 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T025545Z/summary.txt`). 20.6 GB were free.
+  - **Its changes from v24:** harness v45 is added, and v43 is replaced by v46. v46 is v43's tests with a permitted key, `planning.bufferMinutes`, where two devices set `delivery.emailEnabled`, which Core now refuses.
+  - **Generator v25** is kept, never run. It would have written its runner over the existing `run-regressions-v25.sh`.
+- **Result: PASS** for the first part. Next, M3-6b step 3b (`R2-CHECKPOINT.md` §11).
