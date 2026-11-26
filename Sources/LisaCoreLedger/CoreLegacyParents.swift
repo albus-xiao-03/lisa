@@ -82,6 +82,10 @@ public struct LegacyTransaction {
     /// Core's signing key, which signs every child.
     public var signer: any MessageSigning { ledger.signer }
 
+    /// The conversion's time: the parent's, the children's decisions', and what R1's services would read as now for
+    /// the records the conversion writes beside the projection, such as R1's audit events.
+    public var now: Date { Date(timeIntervalSince1970: Double(time) / 1_000) }
+
     /// Takes Core-signed children into the ledger in this transaction, one outcome each, in order. A child Core's key
     /// didn't sign is `unverified`. Without `projecting`, applied children aren't projected into R1's records yet:
     /// `project` then writes the entity once, so a correction of several fields is one R1 revision step.
