@@ -148,8 +148,8 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `task.create` | `{"confirmation","deadline","estimate","priority","splittable","title"}`, all six present | As `task.edit` per field; R1's defaults are the caller's (normal priority, not splittable) |
 | `task.edit` | `{"field": <field>, "value": <value>}` | `title` 1–200 characters; `priority` `low`, `normal`, `high` or `urgent`; `deadline` a deadline or `null` to clear; `estimate` minutes ≥ 1 or `null`; `splittable` a boolean; `confirmation` `confirmed`, `possible` or `informational` |
 | `task.complete`, `task.cancel`, `item.delete` | `{}` | The operation ID is the terminal action's or the deletion's identity |
-| `task.reopen` | `{"reopens": [IDs]}` | 1–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect |
-| `note.add`, `note.replaceObserved` | `{"text": <text>}` | Non-empty, within the text budget below; a replacement removes exactly the note pieces its observed set covers |
+| `task.reopen` | `{"reopens": [IDs]}` | 0–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect. An empty list reopens the terminal actions its observed set covers, by ID or by commit position under its horizon; a v1 reopen observed at a projection revision is one (D-72) |
+| `note.add`, `note.replaceObserved` | `{"text": <text>}` | Within the text budget below; an addition is non-empty. A replacement removes exactly the note pieces its observed set covers; an empty one adds nothing, so it clears them (R1's `notes: ""`, D-72) |
 | `tags.change` | `{"change": "add" \| "remove", "tag": <tag>}` | One tag of 1–64 characters; a removal covers only additions of its own tag that its observed set covers |
 | `conflict.resolve` | `{"field": <task field>, "value"?: <its value>}` | The value is read under the declared field. A single resolution carries its value; in a paged group (`observed.group`, pages numbered 1…count, each depending on the previous one) only the last page does. The candidates it resolves are its observed set |
 
@@ -442,7 +442,7 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **ID:** the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`.
   - **Origin:** `coreLegacyTranslation` with incarnation `SHA-256("lisa-v1-incarnation-v1" ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID)` (first 16 bytes; no 0x00 after this label) and sequence index + 1.
   - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`.
-  - **Observed set:** none, except on an edit made against R1's `expectedRevision` N: `{"pieces": [], "projectionRevision": N}` (`LegacyChange.observedRevision`, D-69). It stays a pure function of the request.
+  - **Observed set:** none, except on a PATCH child made against R1's `expectedRevision` N, a field edit, a notes replacement or a reopen: `{"pieces": [], "projectionRevision": N}` (`LegacyChange.observedRevision`, D-69, D-72). It stays a pure function of the request.
   - **`legacyParent`:** `{scope, requestID, discriminator, index, count, setDigest}`, the set digest being SHA-256 of the ordered child IDs.
   - **Dependencies:** at most one, the immediate predecessor among the request's children in the same chain (the same entity, or for preferences the same key).
   - **Created entities:** an entity the request creates gets the child-ID derivation of `entity:<discriminator>`.
