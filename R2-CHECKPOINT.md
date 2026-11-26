@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-25T12:25Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T00:42Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -19,7 +19,13 @@
   - Core's resolution of legacy edits' "observed at projection revision N" (D-69, schema v11; harness v33, 15/15).
 
   Serving the resolved horizon to replicas is next (§11).
-- **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset is at 2026-11-25T16:20:00Z.
+- **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
+- **Not resumed (environment event, §5):**
+  - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
+  - The VM then stopped at about 17:26Z and booted again at 17:32Z. The guard didn't survive the restart.
+  - Nothing was lost.
+  - The pause is still pending and the guard isn't running. Resuming waits for the owner's approval.
+- **X1, recorded 2026-11-26** (the owner said this was not a resume): **`FAIL` at the first Xcode build of `LisaProof`.** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130` (§6). Recorded by session `d53fb9c3-…` under lease `interactive:312`, which didn't consume the pause.
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
@@ -104,12 +110,33 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Rootless engine evidence for G2: UID/GID mapping, secret access | `NOT_RUN_ENVIRONMENT` (Claude; this engine is rootful). Genuine rootless amd64 evidence is still required |
 | arm64 | `NOT_RUN_ENVIRONMENT` (Claude; no arm64 environment); R1's historical results only |
 | SELinux, VPN and off-VPN reachability over IPv4 and IPv6, D05 | The owner's, on the target host; pending M4 |
-| Apple builds and devices (X1–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
+| X1: `Apps/Proof`, N-1, E-1, E-2 | **`FAIL`** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". Every X1 case waits for a fixed build (§6) |
+| Apple builds and devices (X2–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
 | Frozen fixtures not yet produced | The raw `sending` queue file and the pruning pair were produced at M3's start (`docs/VERIFICATION-SCENARIOS.md` M3-0). Still to produce: `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
 | Reopening the replica at 0 bytes free | **Decided and done (D-61, `33b0322`).** The owner allowed it on 2026-11-25. At launch the replica empties its ballast and opens once more. That applies on `SQLITE_FULL`, or on the I/O error SQLite reports on a full tmpfs while less than a reserve is free. `releasedBallastAtOpen` and `storageIsAlmostFull` say so, and the ballast is restored when space returns. Tested on a real full tmpfs in the pinned container (M3-D61) |
 | SQLite WAL-reset fix | Settled by design (D-55, M2-0): the loaded library isn't shown to carry the fix, so every WAL database has one writer and checkpointer under an exclusive lock and read-only readers; the guard's checks pass. The production image's library is judged the same way at M4 |
+
+**Environment event (2026-11-25T16:23Z–17:33Z): the sixth pause wasn't resumed**
+- **What happened:**
+  - The guard held pause `P-20261125T122450Z-9de75e` for the 16:20Z reset.
+  - From 16:23:05Z every reading failed. The credentials of the usage reader's headless Claude Code had stopped working: its first fetch failed, and later readings fetched nothing.
+  - The guard refused eight readings, up to 17:23:11Z, as not fresh, and launched nothing.
+  - The VM stopped after the guard's last heartbeat at 17:25:42Z and booted again at 17:32:29Z. The guard doesn't survive a restart.
+  - The owner signed in again (`/login`) at about 17:33Z. A fresh reading at 17:39:32Z worked, bound to the same account (`0c503c8f4594e0fb`).
+- **Impact:**
+  - Nothing was lost. The last writer, `38d24e96-…`, paused cleanly at 12:26Z with everything committed (HEAD `dc86f0a`, clean tree), and no writer ran after it.
+  - The run has been idle since 16:23Z.
+- **The owner's instruction:** report the interruption (done in the session) and wait for approval before resuming. The guard stays stopped until then, since starting it would launch the pending resume.
+- **State at 2026-11-26T00:34Z:**
+  - The guard isn't running, the pause is pending and the writer lock is free.
+  - HEAD was `dc86f0a` before the X1 record.
+  - A fresh reading (`791f946832fc`) showed 0% used, next reset 05:30:00Z.
+  - The lease `interactive:312` was taken without `--consume-pauses` for the X1 record and released afterwards.
+- **Weakness found:** the guard tells no one while its readings keep failing. It disarms only after 48 failed readings, about 11 hours with its backoff. Proposed to the owner: a visible notice after three consecutive failed readings.
+
+**Process deviation, recorded (2026-11-26, about 00:35Z, Git):** while finding where X1 results are recorded, this session ran `git ls-files` once, piped into `grep`. It is read-only and changed nothing, but it is outside plan §3's allowed set. Searches use `grep -r` over the tree instead.
 
 **Writer lease lapse (2026-11-24T20:35:00Z–22:52:26Z), found and fixed:**
 - **What happened:** at 20:34:58Z Claude Code moved the interactive session into a background job. That forked it as session `d53fb9c3-…` (pid 4804) and ended the interactive process (pid 321). The lease helper saw its owner exit and released the lease at 20:35:00Z.
@@ -161,6 +188,28 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 ## 6. Pending owner sessions and experiments
 
 **X1 is requested (2026-11-24T13:50Z):** entry point `Apps/Proof` (scheme `LisaProof`, test plan `X1`) with `swift run lisa-verify quickstart`; the sheet is `Harness/docs/SETUP-APPLE.md` (prerequisites, build and signing, roster, the nine nearby cells for both designs, the nine fetch-probe cases on each device, the three E-2 builds, expected observations, and the redacted export to return). Cases: `OV-NEAR-{MI,MP,IP}-01..03` (paired), `OV-APPLE-X1-01..03`, `OV-APPLE-X1-FETCH-01..09`. Still to come: X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
+
+**X1, first attempt: `FAIL` at the build** (the owner, reported 2026-11-26T00:34Z)
+- **The owner's report:** "`Xcode` reported `Failed to produce diagnostic for expression; please submit a bug report` at `Apps/Proof/Nearby/ProofNearbyController.swift`, line `130`. The Xcode build failed."
+  - It came in the Claude session, with no harness export.
+  - Not stated: the Xcode version, the destinations, the commit and any other errors.
+  - The verbatim report, with the analysis below: `.tmp/r2/20261124-r2-5462/owner/x1-attempt1-20261126T0034Z-v2.md`. It supersedes the first version beside it and corrects it on three points.
+- **Line 130:** the file is unchanged since `b5b69b6`, so every commit the owner could have fetched has this line.
+  - Design A's listener builds its PSK selection probe as `configuration.probeSelectionBlock ? { [weak self] hintBytes in Task { @MainActor [weak self] in self?.log("… \(hintBytes.map(String.init) ?? "none")") } } : nil`, against the declared type `(@Sendable (Int?) -> Void)?`.
+  - The types agree with `DesignAParameters.make`. The type checker found no solution and couldn't name an error. That is a compiler defect on this shape of expression, and it may also hide a real error.
+  - No other Swift file under `Apps/` or `Harness/Sources` uses a closure as a branch of `? :`.
+- **Why M1 missed it:** M1-8 type-checked only the 38 files without an Apple-only import. This file imports `Network`, so it had syntax checks only. X1 was its first type-check.
+- **Status:**
+  - The `LisaProof` build: `FAIL` (owner).
+  - `OV-APPLE-X1-01`–`03` (E-2) can't pass until a fixed build passes.
+  - The nearby cells (N-1), the fetch probe (E-1) and test plan `X1` weren't reached.
+  - N-1, E-1 and E-2 stay open, so M6's nearby transport and M7's retrieval design keep waiting (plan §9). Other work doesn't wait.
+- **Next, once the owner approves resuming (not done now):**
+  1. Rewrite the expression with an explicitly typed closure and no `? :` (the proposed code is in the evidence note).
+  2. Type-check `Apps/Proof`'s Apple-importing files on Linux against stand-ins, as M1-8 did for the portable files, so the next attempt doesn't stop at the following error.
+  3. Commit, and request X1 again, naming the new commit.
+
+  The Xcode version and any other errors in the build log would help.
 
 ## 7. Permissions in force
 
@@ -253,9 +302,11 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
 
 ## 10. Owner action ledger
 
-No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only; it involves no account, provider or real action, so the action ledger records none.
+No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only. It involves no account, provider or real action, so the action ledger records none. Its first attempt failed at the build (reported 2026-11-26), before any device ran.
 
 ## 11. Next steps
+
+**Proposed first step, once the owner approves resuming:** the X1 build fix and a Linux type-check of `Apps/Proof`'s Apple-importing files, then a new X1 request (§6). Then M3-6a's replica side, below.
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
    1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; the receipt's vector and the replica's verifying receipt path followed in M3-3). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
