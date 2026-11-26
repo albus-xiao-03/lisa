@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T03:23Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T03:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -36,6 +36,9 @@
   - The VM then stopped at about 17:26Z and booted again at 17:32Z. The guard didn't survive the restart.
   - Nothing was lost.
 - **X1, recorded 2026-11-26** (the owner said this was not a resume): **`FAIL` at the first Xcode build of `LisaProof`.** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130` (§6). Recorded by session `d53fb9c3-…` under lease `interactive:312`, which didn't consume the pause.
+- **Paused (the seventh pause, quota), 2026-11-26T03:29Z,** at `54c4699` with a clean tree, after M3-6b's steps 2 to 3b-ii's first part (§9).
+  - **The reading:** 80% at 03:28:47Z (reading `866b0f5c68f4`), with the reset at 05:29:59Z.
+  - **Not resumed automatically:** this session runs as a background job outside the guard's bound lineage (§5), so the guard rejects its pause. **The owner resumes it manually after 05:30Z.**
 - **Resumed (the seventh resume, manual, 2026-11-26T01:04Z),** after the owner approved resuming:
   - It runs in the interactive session `d53fb9c3-…`, pid 312, which holds the lease `interactive:312` and consumed `P-20261125T122450Z-9de75e`.
   - The guard was restarted as pid 17963.
@@ -90,6 +93,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - M3-6b's converted `PATCH /v1/preferences` (step 3a): `aa0ec19` → `8313d30` (LisaOwnerData one file, `Package.swift`, LisaCoreLedger three, LisaSyncProtocol one, LisaLegacyRequests two, LisaAPI one), then D-74, `docs/SYNC-PROTOCOL.md`, `docs/REQUIREMENTS-MATRIX.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6b's administrative holds (step 3b-i): `9b09007` → `e920b58` (LisaTrust, LisaStore, LisaCoreLedger, LisaLegacyRequests and LisaAPI, one file each), then `40ec2d7` → `1621ecb` (`Package.swift`, LisaLegacyRequests one file, LisaAPI one), then D-75, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6b's `resolve` and the refusal guard (step 3b-ii, first part): `3a10979` → `8580aae` (LisaStore one file, LisaCoreLedger two, LisaLegacyRequests one), then D-76, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's review description of a hold: `54c4699` (LisaLegacyRequests one file), then `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -219,6 +223,21 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 **Process deviation, recorded:** before 08:08Z this run used five read-only Git commands outside the plan's allowed set (§3): `git worktree list`, `git merge-base --is-ancestor`, `git ls-files`, `git rev-list --max-parents=0` and `git symbolic-ref`. None changed anything. Each was replaced (by `rev-parse`, `log` or a `git show` walk), and only `status`, `diff`, `log`, `show`, `rev-parse`, `add` and `commit` are used since.
 
+**Environment event (2026-11-26, from 01:09Z or later to 03:29Z): the session ran outside the guard's bound lineage.**
+- **What happened:**
+  - At 01:09:16Z or later, the seventh resume's interactive session (`d53fb9c3-…`, pid 312) moved to a background job. 01:09:16Z is the start time of the processes below, 20:09:16 EST; the exact moment of the move isn't recorded.
+  - Claude Code's daemon (`claude daemon run --origin transient --spawned-by {"label":"claude",…,"pid":312}`, pid 24166) started a spare process (`claude bg-spare`, pid 24204). That process continued the conversation as session `555b677a-9501-49f7-98a2-ac656bfeb1b2`.
+  - The lease `interactive:312` lapsed with pid 312, and `writer.lock` was free from then on.
+- **What I found:** at 03:26Z, before pausing. The session wasn't in `guardctl-v2 status`'s lineage, and pid 312 no longer existed.
+- **The check that failed:** guard v2's `extend-lineage` needs a process whose first argument contains `/claude/` and which shows `--session-id`, `--fork-session` and `--resume`. The spare process shows none of them. The attempt is recorded as `lineage_refused` at 03:27:06Z, "the process is not Claude Code".
+- **No other writer ran:** the guard's events show no launch and no lease after 01:04:21Z, and the guard, pid 17963, had no pending pause. Every commit since 01:04Z was made in this one conversation, first as `d53fb9c3-…` and then as `555b677a-…`.
+- **What I didn't do:** I didn't weaken the guard's check, and I didn't record the pause under the parent session's ID.
+- **Consequences:** this pause is recorded with the session's real ID, so the guard rejects it and won't launch. The owner resumes manually.
+- **For the owner to decide (proposal, not built):** a guard v3 whose `extend-lineage` also accepts a daemon-spawned spare, with evidence:
+  - the spare's parent chain reaching a `claude daemon run` whose `--spawned-by` pid held a lineage session's lease, per a `writer_acquired` event;
+  - the transcript `<session>.jsonl` under the project's transcript directory, continuing the parent's.
+
+
 ## 6. Pending owner sessions and experiments
 
 **X1 is requested (2026-11-24T13:50Z):** entry point `Apps/Proof` (scheme `LisaProof`, test plan `X1`) with `swift run lisa-verify quickstart`; the sheet is `Harness/docs/SETUP-APPLE.md` (prerequisites, build and signing, roster, the nine nearby cells for both designs, the nine fetch-probe cases on each device, the three E-2 builds, expected observations, and the redacted export to return). Cases: `OV-NEAR-{MI,MP,IP}-01..03` (paired), `OV-APPLE-X1-01..03`, `OV-APPLE-X1-FETCH-01..09`. Still to come: X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
@@ -269,7 +288,12 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`8580aae`** (`Sources/LisaLegacyRequests/LegacyPreferenceRoutes.swift`, M3-6b step 3b-ii's `resolve` with the refusal, D-76):
+**`54c4699`** (`Sources/LisaLegacyRequests/LegacyPreferenceRoutes.swift`, the review description of a hold, D-76):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-review-20261126T032513Z/`).
+- **Harness:** M3 harness v50 passes 15/15.
+- **Regressions:** regression package v30 (`m2/run-regressions-v31.sh`, run `m2/regressions-run-20261126T032524Z/`) passes all 29 targets, and v35 and v47 pass too.
+
+Before it, **`8580aae`** (`Sources/LisaLegacyRequests/LegacyPreferenceRoutes.swift`, M3-6b step 3b-ii's `resolve` with the refusal, D-76):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-resolve-refuse-20261126T031944Z/`). Lint is clean on the four changed files.
 - **Harness:** M3 harness v49 passes 14/14.
 - **Regressions:** regression package v29 (`m2/run-regressions-v30.sh`, run `m2/regressions-run-20261126T031958Z/`) passes all 29 targets, and v35 and v47 pass too.
@@ -401,6 +425,11 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
     - the guard restarted (pid 17963) with no pending pause;
     - the watchdog at 85% (`watchdog_v1.py --threshold 85 --max-hours 5`, a background task).
   - **Why this session:** the resume runs here, in the owner's interactive session, not as a forked resume of `38d24e96-…`. Its first work, X1 attempt 2, had been analyzed in this session.
+- **The seventh resume's work and the seventh pause (2026-11-26):**
+  - **Work, 01:04Z to 03:29Z:** X1 attempt 2's request, M3-6a's replica side and task routes, and M3-6b from the preference model to `resolve`'s refusal, from 4% to 80%.
+  - **Costs** stayed at about 0.3–0.9 points a minute. A build-and-regression round cost about 2–3 points.
+  - **The pause:** at 03:29Z for quota (reading `866b0f5c68f4`, 80%, reset 05:29:59Z). It stopped there because the next slice, the Core-only partition with `apply`, can't finish before about 88%.
+  - **The guard's record:** the pause is recorded with `guardctl-v2 pause` under this session's ID, which the guard rejects (§5). The watchdog is stopped.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
