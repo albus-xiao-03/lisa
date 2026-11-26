@@ -104,7 +104,9 @@ public final class APIRouter: Sendable {
         return credential
     }
 
-    /// Runs a mutation at most once per (caller, request ID). A retry returns the recorded response.
+    /// Runs a mutation at most once per (caller, request ID). A retry returns the recorded response. With a legacy
+    /// converter, a converted route goes through it (`converted`), and the other routes also respect the keys the
+    /// converted ones used.
     func idempotent(_ request: APIRequest, route: APIRoute, caller: Caller) async throws -> APIResponse {
         guard let requestID = request.header(APIVersioning.requestIDHeader), Self.isValidRequestID(requestID) else {
             throw APIFailure.invalid(
@@ -113,6 +115,20 @@ public final class APIRouter: Sendable {
         }
         let scopedKey = "\(caller.scope):\(requestID)"
         let fingerprint = Self.fingerprint(request)
+        if let converter = configuration.legacyConverter {
+            if Self.isConverted(route) {
+                return try converted(
+                    request, route: route, caller: caller, requestID: requestID, fingerprint: fingerprint,
+                    converter: converter)
+            }
+            switch try converter.ledger.legacyLookup(
+                scope: caller.scope, requestID: requestID, fingerprint: fingerprint)
+            {
+            case .unknown: break
+            case .replay(let status, let body): return Self.replayed(status: status, body: Data(body))
+            case .mismatch, .bodyExpired, .awaitingReview: throw Self.requestIDReused
+            }
+        }
         switch try application.lookupRequest(scopedKey: scopedKey, fingerprint: fingerprint) {
         case .replay(let statusCode, let body):
             var replayed = APIResponse(
