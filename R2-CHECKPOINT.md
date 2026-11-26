@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T02:17Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T02:23Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -21,7 +21,8 @@
   - R1's `POST /v1/tasks` through the legacy converter in R1's router (D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7, against R1's own path; regression v20). It isn't enabled in `LisaHost` yet.
   - R1's `PATCH /v1/tasks/{id}` through the converter (D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15, against R1's own path). It adds two protocol rules: a reopen that names nothing, and an empty notes replacement. R1's in progress and blocked are R1-only states of an open task.
 
-  M3-6a's task routes are done. Next: the M3-6 slices in §11.
+  M3-6a's task routes are done.
+- **M3-6b begun (2026-11-26):** the preference operations, the key's entity and its register merge (D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7). Next: Core's fold and projection for preferences (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -77,6 +78,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - M3-6a's observed horizons on replicas: `53e2a5a` → `89fcb1a` (LisaSyncProtocol one file, LisaCoreLedger three, LisaReplicaStore four), then `docs/SYNC-PROTOCOL.md`, `docs/DECISIONS.md` (D-69), `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6a's converted `POST /v1/tasks`: `f4879b6` → `12bd3fb` (LisaCoreLedger, LisaOwnerData, `Package.swift`, LisaLegacyRequests, LisaAPI four), then D-71, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6a's converted `PATCH /v1/tasks/{id}`: `ae0c52d` → `6cc8073` (LisaSyncProtocol one file, LisaMerge three, LisaCoreLedger two, LisaLegacyRequests one, LisaAPI two), then D-72, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's preference model: `95d3e55` → `fc1c17f` (LisaSyncProtocol, LisaTrust, LisaMerge, one file each), then D-73, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -254,7 +256,12 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`6cc8073`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6a's converted `PATCH /v1/tasks/{id}`, D-72):
+**`fc1c17f`** (`Sources/LisaMerge/PreferenceMergeState.swift`, M3-6b's preference model, D-73):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-model-20261126T022139Z/`).
+- **Harness:** M3 harness v41 passes 7/7.
+- **Regressions:** regression package v23 (`m2/run-regressions-v24.sh`, run `m2/regressions-run-20261126T022204Z/`) passes all 27 targets, and v35 and v47 pass too.
+
+Before it, **`6cc8073`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6a's converted `PATCH /v1/tasks/{id}`, D-72):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-patch-final-20261126T020726Z/`). Lint is clean on the nine changed files.
 - **Harnesses:** M3 harness v38 passes 15/15, and M3 harness v39 passes 7/7. v39 is M2 harness v15's tests with an expectation that D-72 superseded.
 - **Regressions:** regression package v22 (`m2/run-regressions-v23.sh`, run `m2/regressions-run-20261126T021223Z/`) passes all 26 targets, and v35 and v47 pass too. Package v21's run found the superseded expectation (`m2/regressions-run-20261126T020805Z/`).
@@ -461,10 +468,17 @@ No live action or external submission has been requested or performed in this ru
           - So a later set re-creates the key, as R1's delete-then-set does. §8.3.1's dominating tombstone is for owner items, which a key isn't.
           - A confirmation marks the model-authority candidates it observed as confirmed.
           - The key is absent only when every survivor is a delete. Otherwise the projection shows the first surviving value in display order.
-        - **Then:**
-          - Core's fold, and the projection into R1's `Preference` record. The projection-revision map already works per entity.
-          - The replica's fold.
-          - The conversion: `change:<index>` children, R1's stop at the first refusal, holds, `review` and `resolve`, restricted siblings.
+        - **Step 1 done** (2026-11-26; D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7): the payloads, the entity and the merge as designed.
+        - **Now, the exact next action, step 2:** Core and the replica for preferences.
+          - **Supported operations:** `CoreLedger.isSupported` and `checkPayload` accept `preference.*` on entity type `preference`. `checkPayload` decodes `PreferenceOperationPayload` and requires `entityID == PreferenceEntity.id(forKey:)`.
+          - **`apply`:** it branches by entity type into a `CorePreferenceFold`, modeled on `CoreTaskFold` with resolved horizons. `PreferenceView.isConflict` gives `accepted_with_conflict`. The change log uses partition `preferences`.
+          - **The projection** (`PreferenceProjection`) writes R1's `Preference` record: insert, update or delete by key, with origin `explicit` for owner authority and `confirmed` from the view.
+            - It takes a `force` for R1's always-writing `set` and `confirm`.
+            - It records the revision with `TaskProjection.recordRevision`, which works for any entity.
+            - The value maps as text, number via `Double` and back, flag and list.
+          - **The replica's fold** for preferences comes the same way, so Core's and a replica's view match.
+          - **Restricted keys** (`model.endpoint`, `model.dataSharing`, "Core's model settings", §8.17): never served in change pages. Decide whether to keep them out of the `preferences` partition or refuse their device operations, before or with step 3.
+        - **Step 3:** the conversion (`change:<index>` children, R1's stop at the first refusal, holds, `review` and `resolve`, restricted siblings).
       - **M3-6b's whole scope:**
         - **The scope:** the preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review` and `resolve` (S-03).
         - **The model it needs first:** preference operations (set, confirm and delete per key) with a per-key merge and the projection into R1's preference records; restricted siblings with redacted receipts (§8.12.2); error templates without caller text.
