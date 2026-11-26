@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T01:41Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T01:58Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -18,8 +18,9 @@
   - one R1 revision step per R1 call with the projection-revision map (D-68; harnesses v28 and v30);
   - Core's resolution of legacy edits' "observed at projection revision N" (D-69, schema v11; harness v33, 15/15).
   - The replica side (2026-11-26): Core serves the resolved horizon in its signed entries, and replicas fold with it (`53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19).
+  - R1's `POST /v1/tasks` through the legacy converter in R1's router (D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7, against R1's own path; regression v20). It isn't enabled in `LisaHost` yet.
 
-  R1's router hook for the task routes is next (§11).
+  `PATCH /v1/tasks/{id}` is next (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -73,6 +74,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - X1 attempt 2: the fix `f03cf24`, then the key-path bindings `0528fc3` → `795b4f3` (`ProofModel`, then the two views);
   - then D-70, `docs/VERIFICATION-SCENARIOS.md` M1-8b, `Harness/docs/SETUP-APPLE.md`, `docs/REQUIREMENTS-MATRIX.md` and this file.
   - M3-6a's observed horizons on replicas: `53e2a5a` → `89fcb1a` (LisaSyncProtocol one file, LisaCoreLedger three, LisaReplicaStore four), then `docs/SYNC-PROTOCOL.md`, `docs/DECISIONS.md` (D-69), `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6a's converted `POST /v1/tasks`: `f4879b6` → `12bd3fb` (LisaCoreLedger, LisaOwnerData, `Package.swift`, LisaLegacyRequests, LisaAPI four), then D-71, `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -250,7 +252,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`89fcb1a`** (`Sources/LisaReplicaStore/ReplicaStore.swift`, M3-6a's observed horizons on replicas, D-69):
+**`12bd3fb`** (`Sources/LisaAPI/APIRouter.swift`, M3-6a's converted `POST /v1/tasks`, D-71):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-create-committed-20261126T015435Z/`). Lint is clean on the changed files, apart from R1's own `Package.swift` line.
+- **Harness:** M3 harness v36 passes 7/7.
+- **Regressions:** regression package v20 (`m2/run-regressions-v21.sh`, run `m2/regressions-run-20261126T015451Z/`) passes all 26 targets, and v35 and v47 pass too.
+- **The span:** `f4879b6` to `12bd3fb`. Each commit builds.
+
+Before it, **`89fcb1a`** (`Sources/LisaReplicaStore/ReplicaStore.swift`, M3-6a's observed horizons on replicas, D-69):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors. The R1 suite passes 376/66 (`m3/suite-after-replica-horizon-20261126T013338Z/`). Lint is clean on the eight changed files.
 - **Harness:** M3 harness v34 passes 20/20.
 - **Regressions:** regression package v19 (`m2/run-regressions-v20.sh`, run `m2/regressions-run-20261126T013734Z/`) passes all 25 targets, and v35 and v47 pass too.
@@ -396,7 +404,24 @@ No live action or external submission has been requested or performed in this ru
               2. add an optional `observedHorizon` to `ChangeEntry`'s operation change, encoded only when present, so other entries' bytes don't change. The page's signature covers it;
               3. add a replica column, and use it in the replica's fold exactly as `CoreTaskFold.view` does;
               4. test it end to end: a legacy edit at Core, a replica pulling the page, and the same `TaskView` on both. Repeat it with a snapshot install.
-          - **Now, the exact next action:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`. Plan §8.12.2's route table (re-read 2026-11-26, about 01:39Z):
+          - **The router hook and `POST /v1/tasks`, done (2026-11-26; D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7; regression v20).**
+          - **Now, the exact next action: `PATCH /v1/tasks/{id}`** under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`.
+            - **The design** (2026-11-26T02:00Z, for D-72):
+              - **The conversion:** inside the parent, in R1's order: the body size; the decode (400); the record (404 "the task"); the revision check (409 "the task changed since it was read", `currentRevision`); the correction, its deadline parsed (400); `TaskService`'s checks (403, 400). Nothing is committed before them.
+              - **Field children:** one per field the request carries, with discriminators named after R1's fields: `field:title`, `field:notes`, `field:priority`, `field:deadline` (also for `clearDeadline`), `field:estimatedMinutes`, `field:confirmation`. Each is observed at N. They are taken in without projecting and projected once with `forceRevision` (R1's `correct` always writes), with a hint that marks `deadline` owner-corrected whenever the request sets or clears it, as R1 does.
+              - **Then:** the `task.corrected` audit and `.taskChanged(material:)`.
+              - **The status child, decided by the target alone, so the set stays a pure function of the request:**
+                - `completed` → `task.complete`; `cancelled` → `task.cancel`;
+                - `open` → `task.reopen` with no named actions, observed at N;
+                - `inProgress` and `blocked`: no child. They are R1-only substates of an open task, which the projection already keeps, and the converter writes them to R1's record with R1's transition.
+                - R1's transition rules decide the child against the record after the correction. A refusal (409 "the task cannot move from …") records `refused` and the answer, with the field children committed.
+                - A status equal to the current one writes no audit, as R1 does.
+              - **Protocol and merge changes:**
+                - `note.replaceObserved` may have empty text, which removes the observed notes and adds none (R1's `notes: ""`).
+                - `task.reopen` may name no action, and then reopens the terminal actions its observed coverage covers. `TerminalActions` keeps commit positions, so a horizon can cover them.
+              - **The terminal replies for PATCH:** 200 with the current `TaskDTO` and `Lisa-Reply: current`; 404 "This change was applied; the task was deleted afterwards."
+              - **The harness:** v37, differential against R1's path, as v36.
+            - **Plan §8.12.2's route table** (re-read 2026-11-26, about 01:39Z):
             - **`POST /v1/tasks`:** one create-task child, the task ID derived from the parent; 201 `TaskDTO`, recorded atomically.
             - **`PATCH /v1/tasks/{id}`:** the revision check (409 "the task changed since it was read"), then every correction field validated together (400, nothing committed), then the field children, then the status child. A refused status (409 "the task cannot move from …") leaves the field children committed, with the error recorded.
             - **Replays:** the same key and fingerprint get the recorded response with `Lisa-Replayed: true`; a different fingerprint gets 422 `requestIDReused`.
