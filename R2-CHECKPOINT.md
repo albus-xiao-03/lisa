@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T03:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T18:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -36,6 +36,10 @@
   - The VM then stopped at about 17:26Z and booted again at 17:32Z. The guard didn't survive the restart.
   - Nothing was lost.
 - **X1, recorded 2026-11-26** (the owner said this was not a resume): **`FAIL` at the first Xcode build of `LisaProof`.** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130` (§6). Recorded by session `d53fb9c3-…` under lease `interactive:312`, which didn't consume the pause.
+- **Handoff (2026-11-26T18:29Z): the owner is moving development to a new environment.**
+  - **The documents:** `Handoff.md`, for the next agent: the state, the rules, the quota and auto-resume policy, the environment setup and the resume steps. `Handoff-Report.md`, for the owner: the state, the runnable owner tests and the decisions waiting.
+  - **At the handoff,** the host lacked this sandbox's 106 commits and the handoff's own. The run directory `.tmp/r2/20261124-r2-5462/` exists only in `lisa.lab` (`Handoff-Report.md` §2).
+  - **The pause still held** when checked at 18:00Z: no writer, and no pending pause in the guard.
 - **Paused (the seventh pause, quota), 2026-11-26T03:29Z,** at `54c4699` with a clean tree, after M3-6b's steps 2 to 3b-ii's first part (§9).
   - **The reading:** 80% at 03:28:47Z (reading `866b0f5c68f4`), with the reset at 05:29:59Z.
   - **Not resumed automatically:** this session runs as a background job outside the guard's bound lineage (§5), so the guard rejects its pause. **The owner resumes it manually after 05:30Z.**
@@ -437,6 +441,8 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
 No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only. It involves no account, provider or real action, so the action ledger records none. Its first attempt failed at the build (reported 2026-11-26), before any device ran. Attempt 2 is requested at `795b4f3`.
 
 ## 11. Next steps
+
+**At the handoff (2026-11-26T18:29Z):** resume only on the owner's explicit go-ahead, in the new environment, following `Handoff.md` §7. The exact next action is unchanged: step 3c-i with 3b-iii, below.
 
 **Done first on resuming (2026-11-26T01:04Z–01:29Z):** the X1 build fix, the whole-target Linux type-check (D-70) and X1 attempt 2's request (§6). **Now:** M3-6a's replica side, below.
 
