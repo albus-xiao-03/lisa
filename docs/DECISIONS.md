@@ -1128,10 +1128,14 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Authority:** a model value never replaces an owner value and is kept as a suggestion.
   - **Confirmations:** a confirmation confirms the model-authority candidates it observed.
   - **The view:** the key is absent only when every survivor is a delete. Otherwise the shown value is the first surviving value in display order. Two or more survivors, a delete among them or not, are a conflict.
-- **Next steps (M3-6b):**
-  - Core's intake and fold for preferences, with the check that the entity ID matches the key;
-  - the projection into R1's `Preference` record, with R1's audit events;
+- **Step 2, done** (`f404e2c`–`44cb3ed`; harness v43):
+  - Core's intake and fold, with the check that the entity ID matches the key;
+  - the projection into R1's `Preference` record (`PreferenceProjection`);
   - the replica's fold;
+  - partition `preferences`.
+
+  R1's audit events come with the conversion.
+- **Next (M3-6b):**
   - the conversion of `PATCH /v1/preferences`: `change:<index>` children, R1's stop at the first refusal, administrative holds, `legacy review` and `resolve`, and restricted siblings.
 - **Shown by** M3 harness v41 (v40 was corrected before its first build and is kept, never built):
   - the canonical forms and round trips;
