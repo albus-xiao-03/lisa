@@ -72,12 +72,7 @@ extension APIRouter {
             throw APIFailure.conflict("the task changed since it was read", currentRevision: current.revision.value)
         }
         var task = current
-        let correction = TaskCorrection(
-            title: body.title, notes: body.notes,
-            priority: body.priority.flatMap { TaskPriority(rawValue: $0.rawValue) },
-            deadline: try Self.deadline(body.deadline, field: "deadline"), clearDeadline: body.clearDeadline ?? false,
-            estimatedMinutes: body.estimatedMinutes,
-            confirmation: body.confirmation.flatMap { Confirmation(rawValue: $0.rawValue) })
+        let correction = try taskCorrection(body)
         if correction != TaskCorrection() {
             task = try application.correctTask(taskID, expectedRevision: task.revision, correction, by: principal)
         }
@@ -85,6 +80,17 @@ extension APIRouter {
             task = try application.setTaskStatus(taskID, to: status, expectedRevision: task.revision, by: principal)
         }
         return try json(DTOMapping.task(task))
+    }
+
+    /// `PATCH /v1/tasks/{id}`'s correction as R1's handler reads it, its deadline checked; R1's path and the legacy
+    /// conversion share it.
+    func taskCorrection(_ body: TaskPatchRequest) throws -> TaskCorrection {
+        TaskCorrection(
+            title: body.title, notes: body.notes,
+            priority: body.priority.flatMap { TaskPriority(rawValue: $0.rawValue) },
+            deadline: try Self.deadline(body.deadline, field: "deadline"), clearDeadline: body.clearDeadline ?? false,
+            estimatedMinutes: body.estimatedMinutes,
+            confirmation: body.confirmation.flatMap { Confirmation(rawValue: $0.rawValue) })
     }
 
     func listIdeas(_ request: APIRequest) throws -> APIResponse {
