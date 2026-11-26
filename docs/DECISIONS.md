@@ -1005,3 +1005,23 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **The harness** (M3 harness v33) shows it with a stale revision: the newer title stays.
 - **A revision the map doesn't hold** resolves to nothing. The child observes nothing and conflicts rather than superseding pieces it may not have seen. Records whose revisions predate Core, such as R1 data at cutover, need their mapping recorded when they are imported (M3-6d and M5, open).
 - **Open, next:** replicas don't hold the map. Core serves the resolved horizon in Core-signed data (the change-page entry and the full snapshot's operation records), and replicas fold with it. Until then a replica folds a legacy edit as observing nothing. Core's own projection, which is what R1's clients read, is already right.
+
+## D-70 — Apple app code is type-checked on Linux against framework stand-ins before each owner build (R2, run 20261124-r2-5462; after X1 attempt 1; plan §10.6, §17 "Scale")
+
+- **Why:**
+  - X1's first Xcode build failed at `Apps/Proof/Nearby/ProofNearbyController.swift:130`: "failed to produce diagnostic for expression".
+  - M1-8 had type-checked only the 38 proof files without an Apple-only import. The other 31 had syntax checks only.
+  - The failure isn't Apple-specific. Swift 6.4.2 and 6.4.3 on Linux reproduce it exactly, from a minimal copy and in the whole target.
+- **The practice:** before an owner session builds Apple code, the whole target is type-checked on Linux as one module.
+  - **Setup:** Swift 6 mode, with the real portable modules built from HEAD and the real Observation module.
+  - **Stand-ins:** for the Apple frameworks it imports, carrying the SDK's Swift signatures and the Sendable and isolation annotations as known.
+  - **Passes:** one per platform condition (`canImport(UIKit)`, `os(macOS)`).
+  - **A baseline:** a pass with the last failing source, to show the check catches what the owner saw.
+  - **Negative controls:** to show it reaches view-builder bodies, handlers and Swift 6 isolation checks.
+
+  The stand-ins and runs stay in the run directory. `docs/VERIFICATION-SCENARIOS.md` records each run.
+- **Its limit:** a stand-in is only as right as its signatures. An Apple build stays the owner's evidence (C5). Where an SDK annotation is uncertain, the app code is written so that it compiles either way.
+- **First use, X1 attempt 2:**
+  - **Line 130:** an untyped closure as a branch of `? :` isn't inferred `@Sendable` from the declared type. With `[weak self]`, the compiler fails to report the conversion error. The fix writes the closure explicitly `@Sendable` and assigns it in an `if` (`f03cf24`).
+  - **Uncertain annotation:** whether `Binding(get:set:)`'s closures are `@Sendable` in the iOS 18 SDK. The proof views now bind through key-path subscripts on `ProofModel` (`0528fc3`–`795b4f3`).
+- **Next uses:** X2's probe app (after M3) and the production apps before X3 (M5), the same way.
