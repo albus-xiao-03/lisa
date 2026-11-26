@@ -1400,3 +1400,28 @@ Run directories exist only in this sandbox. Tracked records like this file reach
     - An entry without one has no such key and round-trips as before.
 - **Regressions:** regression package v19 (`m2/make-regressions-v19.py`, with harness v33 replaced by v34; runner `m2/run-regressions-v20.sh`) passes all 25 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T013734Z/summary.txt`). 22.6 GB were free. The background command around the runner reported exit 1 only because its final `cat` matched a stray `.txt` path; the runner itself exited 0.
 - **Result: PASS.** A replica's view of a legacy edit equals Core's. Next, R1's router hook for `POST /v1/tasks` and `PATCH /v1/tasks/{id}` (`R2-CHECKPOINT.md` §11).
+
+### M3-6a, R1's `POST /v1/tasks` through the legacy converter in R1's router (plan §8.12.2; `docs/DECISIONS.md` D-71)
+
+- **Code:** `f4879b6` → `12bd3fb`:
+  - `LegacyTransaction.now`;
+  - R1's `TaskService` rules made public, unchanged;
+  - the module wiring;
+  - `LisaLegacyRequests.LegacyTaskRoutes`: R1's checks, `create:task` plus `field:notes` (D-71), one projection, R1's audit;
+  - `RouterConfiguration.legacyConverter` (nil by default) and `APIRouter.converting(with:)`;
+  - the shared `taskDraft(_:)`;
+  - `LegacyRouting.swift`: R1's ledger and the parent consulted, the conversion recorded with R1's answer, replays, 422, the terminal reply, propagation after the commit;
+  - the hook in `idempotent`.
+
+  `LisaHost` doesn't enable it yet.
+- **Full build and R1 suite on the committed tree:** `m3/suite-after-converted-create-committed-20261126T015435Z/`: 0 warnings, 0 errors, 376/66. With no converter, R1's path is unchanged. Lint is clean on the changed files, apart from R1's own `Package.swift` line, which HEAD already had.
+- **Harness:** `m3/harness-v36/`, 7/7 on its first run (`m3/harness-v36-test-20261126T015349Z.log`). v35 failed to compile because `RequestOrigin.authenticateHeaders` takes `isLoopback:`; it is kept unchanged. Each case sends the same requests to R1's router on one host and to the converting router on another, at the same wall clock:
+  - **The answer:** 201 with the same headers and the same `TaskDTO` but for its ID, which is the parent's derived task ID. The title is trimmed, the notes kept, revision 1. One `task.created` audit event with the same detail, actor and time.
+  - **Replay:** the same request again replays with `Lisa-Replayed: true` and creates nothing more.
+  - **Reuse:** the same key with another body gets R1's 422 on both.
+  - **Refusals:** an empty title, minutes 0, a malformed body and an unknown zone give the same 400 bodies on both. Both record them and replay them. No child and no change-log entry exists for any of them.
+  - **The children:** `create:task` and `field:notes`, both `applied`. A replica pulling Core's page shows the title, the notes and `high`.
+  - **One key space:** a key the converted POST used gets 422 on the unconverted PATCH, and a key the PATCH used gets 422 on the converted POST, on both hosts.
+  - **A paired device** creates under `device:<id>`, and the task ID is derived from that scope.
+- **Regressions:** regression package v20 (`m2/make-regressions-v20.py`: v19 plus harness v36, with LisaAPI among the products; runner `m2/run-regressions-v21.sh`) passes all 26 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T015451Z/summary.txt`). 22.2 GB were free.
+- **Result: PASS** for `POST /v1/tasks`. Next, `PATCH /v1/tasks/{id}` (`R2-CHECKPOINT.md` §11).
