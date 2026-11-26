@@ -43,7 +43,7 @@ public struct PreferenceMergeState: Hashable, Sendable {
                     || confirmations.values.contains { $0.covers(candidate.id, committedAt: candidate.commit) }
             } ?? false
         return PreferenceView(
-            values: values.map(\.value), shownID: shown?.id, confirmed: confirmed,
+            values: values.map(\.value), shownID: shown?.id, shownAuthority: shown?.authority, confirmed: confirmed,
             suggestions: register.suggestions.compactMap(\.value))
     }
 }
@@ -54,6 +54,8 @@ public struct PreferenceView: Hashable, Sendable {
     public let values: [PreferenceWireValue?]
     /// The write whose value is shown, when any survivor has a value.
     public let shownID: Identifier128?
+    /// Its authority: an owner's value is R1's `explicit` preference, a model's R1's `inferred` one.
+    public let shownAuthority: MergeAuthority?
     /// Whether the shown value takes effect as the owner's: an owner value, or a model value a confirmation observed.
     public let confirmed: Bool
     /// Model and source values kept beside surviving owner values.
