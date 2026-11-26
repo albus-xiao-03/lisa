@@ -1197,3 +1197,43 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - R1's own checks run first, so an invalid value is still R1's 400 at once.
   - `LisaHost` doesn't enable the converter.
 - **Shown by** M3 harness v45, 10/10 on its first build, against R1's own path on a second host, and regression package v26. v44 was corrected before its first build and is kept, never built (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step).
+
+## D-75 — Administrative holds of v1 requests: when a request waits, what the waiting parent keeps, and the decision key and token (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2; R2-TRUST-05)
+
+- **When a request holds:** in owner scope, the loopback v1 owner listener, a preferences change to an administrative key holds the request once it passes R1's own checks (D-74).
+  - **R1's checks come first,** so an invalid value is still R1's 400 at once, and nothing holds.
+  - **The state-dependent checks,** the revision and whether the record exists, run again when the hold is applied (M3-6b step 3b-ii).
+  - **The held child** is `held_for_administrative_review`, and every later one `pending_behind_review`, a second administrative key among them.
+  - **Neither is taken in:** no receipt, and nothing served.
+  - **Earlier children** are decided and committed as usual.
+  - **Device scope** is unchanged: R1 refuses the key (403).
+- **The parent waits** in state `awaiting_administrative_review`, with no status or body.
+  - **The original request bytes** are kept until it completes (`core_legacy_parents.request_body`, schema v12).
+  - **The frame** (`legacyConvert`) keeps such a conversion although its answer isn't one R1 records.
+- **The answer:** R1's 503 `unavailable`, `retryAfterSeconds: 300`, "This change is waiting for review on the administrative terminal."
+  - It is rendered as R1 renders a 503, with `Retry-After: 300`. The first answer and every retry's are alike.
+  - It is never recorded.
+  - A retry with the same bytes gets it again from the parent, and other bytes under the request ID get 422.
+  - `lisaCode: "awaiting_administrative_review"` comes with M3-6d.
+  - The earlier children's domain changes are propagated after the commit.
+- **The hold** (`core_legacy_holds`, schema v12): one row for every hold Core ever issues.
+  - **It holds** the generation (1 for a request's first hold; `resolve` issues the next), the child, its index and the time.
+  - **The decision key** and its base32 text are each unique.
+  - **The decision record's columns** fill when `resolve` decides the hold: the decision ID, action, actor, time and outcome.
+- **The decision key and token** (`LegacyDecisionToken`, LisaTrust): §8.12.2's formula. The plan leaves the encodings open; they are:
+  - the dataset and the child ID as their 16 raw bytes;
+  - the scope and the request ID as UTF-8;
+  - the generation as decimal digits in ASCII.
+
+  Fixed lengths and text without NUL keep the parts apart.
+  - **The token** is `LR-` and the key in base32: RFC 4648's alphabet, upper case, no padding, 52 characters in full.
+  - **Shown** at 8 characters (40 bits), or longer in steps of 4 (20 bits) until it is unique among every hold (`legacyHolds()`).
+  - **A typed token** is `LR-` and 8–52 base32 characters. Lower case is accepted; nothing else is mapped.
+  - **Vectors** (dataset `00…0f`, scope `owner`, request ID `prefs-0801`, child `e7b59fbce39fe1aa9ff9a26d3531afc0`; Python's hashlib and `base64.b32encode`):
+    - generation 1 → `a05b9242ac3e567ccfec899dbee869ba1e86e029e3eaf168c33989cb2a77be4d`, `LR-UBNZEQVM`;
+    - generation 2 → `6ce9fd5ec24757300c1bfa2be27afe52eaa6065ff7f84dbeb09533d198957f7f`, `LR-NTU72XWC`.
+- **One reading of R1's bytes** (`LegacyPreferenceAnswers`, LisaLegacyRequests, which now depends on LisaAPIContract):
+  - **Shared:** the request's parsing, with R1's three refusals of a body, and R1's answers: the full list, the refusal templates, and the 503 while held.
+  - **Used by** the router now. The administrative terminal's `resolve` will continue a held request from its kept bytes with the same code, so a request decided after a hold gets the bytes it would have got at once.
+- **Next** (M3-6b step 3b-ii): `resolve` with its replay, stale-token and decision rules; the content-free refusal guard (§8.14.8); `lisa core legacy review` and `resolve`. Restricted siblings are step 3c.
+- **Shown by** M3 harness v47, 12/12 on its first build. It holds v45's tests, with v45's case of an administrative key failing the conversion replaced by the hold. Harness v48 adds the two 503s compared, `Retry-After` included, 12/12. Regression packages v27 and v28 pass (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step, second part).
