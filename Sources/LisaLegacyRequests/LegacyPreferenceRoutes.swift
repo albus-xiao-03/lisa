@@ -177,6 +177,23 @@ public enum LegacyPreferenceRoutes {
         }
     }
 
+    /// What `legacy review` shows of a hold, at the administrative terminal only (§8.12.2): its token, the held change's
+    /// position, the request, the generation, and the administrative key with the requested value. `nil` when the kept
+    /// bytes no longer read as a preferences request.
+    public static func review(_ hold: LegacyHold, requestBody: [UInt8]) -> String? {
+        guard case .success(let requested) = requested(Data(requestBody)), requested.indices.contains(hold.childIndex)
+        else { return nil }
+        let change = requested[hold.childIndex]
+        let what: String
+        switch change.action {
+        case .set(let value, _): what = "set \(change.key) to \(value)"
+        case .confirm: what = "confirm \(change.key)"
+        case .delete: what = "delete \(change.key)"
+        }
+        return "\(hold.token): change \(hold.childIndex + 1) of \(requested.count) of \(hold.scope) request "
+            + "\(hold.requestID), generation \(hold.generation): \(what)"
+    }
+
     /// R1's checks of one change, in R1's order (`PreferenceService.set` and `confirm`, `DeletionService.delete`),
     /// against R1's records as the earlier changes left them.
     static func check(_ change: Change, key: PreferenceKey, by principal: Principal, in tx: LegacyTransaction) throws
