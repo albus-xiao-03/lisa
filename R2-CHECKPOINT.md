@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T01:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T01:41Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -17,8 +17,9 @@
   - M3-6a's legacy children and Core's conversion frame (harness v26);
   - one R1 revision step per R1 call with the projection-revision map (D-68; harnesses v28 and v30);
   - Core's resolution of legacy edits' "observed at projection revision N" (D-69, schema v11; harness v33, 15/15).
+  - The replica side (2026-11-26): Core serves the resolved horizon in its signed entries, and replicas fold with it (`53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19).
 
-  Serving the resolved horizon to replicas is next (§11).
+  R1's router hook for the task routes is next (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -71,6 +72,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - the X1 record: `b86d272`, `ee98b23`, `8ba308e`;
   - X1 attempt 2: the fix `f03cf24`, then the key-path bindings `0528fc3` → `795b4f3` (`ProofModel`, then the two views);
   - then D-70, `docs/VERIFICATION-SCENARIOS.md` M1-8b, `Harness/docs/SETUP-APPLE.md`, `docs/REQUIREMENTS-MATRIX.md` and this file.
+  - M3-6a's observed horizons on replicas: `53e2a5a` → `89fcb1a` (LisaSyncProtocol one file, LisaCoreLedger three, LisaReplicaStore four), then `docs/SYNC-PROTOCOL.md`, `docs/DECISIONS.md` (D-69), `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -248,7 +250,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`6b3ec91`** (`Sources/LisaLegacyRequests/LegacyChildSet.swift`, M3-6a's observed horizons at Core, D-69):
+**`89fcb1a`** (`Sources/LisaReplicaStore/ReplicaStore.swift`, M3-6a's observed horizons on replicas, D-69):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors. The R1 suite passes 376/66 (`m3/suite-after-replica-horizon-20261126T013338Z/`). Lint is clean on the eight changed files.
+- **Harness:** M3 harness v34 passes 20/20.
+- **Regressions:** regression package v19 (`m2/run-regressions-v20.sh`, run `m2/regressions-run-20261126T013734Z/`) passes all 25 targets, and v35 and v47 pass too.
+- **The span:** `53e2a5a` (`ChangeEntry`) to `89fcb1a`. Each commit builds. Until `a59ce54`, a snapshot swap drops the new columns, but nothing reads them before `89fcb1a`.
+
+Before it, **`6b3ec91`** (`Sources/LisaLegacyRequests/LegacyChildSet.swift`, M3-6a's observed horizons at Core, D-69):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 with schema v11 (`m3/suite-after-observed-horizon-20261125T121653Z/`). Lint is clean on the six changed files.
 - **Harness and migration check:** M3 harness v33 passes 15/15. `m3/check-migration-v11-v1.py` passes v11's copy path on a v10-shaped database.
 - **Regressions:** regression package v18 (`m2/run-regressions-v19.sh`, run `m2/regressions-run-20261125T122040Z/`) passes all 25 targets, and v35 and v47 pass too.
@@ -379,7 +387,7 @@ No live action or external submission has been requested or performed in this ru
             - A child is decided only when R1's `expectedRevision` equals the current projection revision N, so the edit saw exactly the state up to P(N), the position revision N reflects.
             - **The body** carries N in its `ObservedSet` (`projectionRevision`, **done**: `b6abecb`, `47f32cf`; harness v31, 9/9), so it stays a pure function of the request.
             - **At decision, done** (D-69; `1a8436e` to `6b3ec91`; harness v33, 15/15): Core resolves N through `core_projection_revisions` (schema v11 adds each revision's epoch) to the horizon `(epoch, "tasks", P(N))`, keeps it with the operation (`core_operations.observed_epoch` and `observed_position`), and folds with it in `CoreTaskFold.view`. `LegacyChange.observedRevision` puts N in the child. An unmapped N observes nothing.
-            - **For replicas, the exact next action:** Core serves the resolved horizon in Core-signed data, and replicas keep it with the canonical operation and fold with it, since they don't hold the map. "Decisions are made per epoch" (§8.12.2): another epoch may resolve the same bytes differently. The steps:
+            - **For replicas, done (2026-11-26; `53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19; `docs/VERIFICATION-SCENARIOS.md`, "observed horizons on replicas"):** Core serves the resolved horizon in Core-signed data, and replicas keep it with the canonical operation and fold with it, since they don't hold the map. "Decisions are made per epoch" (§8.12.2). The steps were: another epoch may resolve the same bytes differently. The steps:
               1. **surveyed (12:23Z):**
                  - `ChangeEntry` (`Sources/LisaSyncProtocol/ChangeEntry.swift:7`) has `position`, `partitions` and `change`, which is `.operation(SignedOperation, Decision)` or `.record(DerivedRecord)`.
                  - Change pages and full-snapshot chunks both carry it (`ChangePage.swift:74`, `SnapshotChunk.swift:52`), so one field covers both paths.
@@ -388,7 +396,11 @@ No live action or external submission has been requested or performed in this ru
               2. add an optional `observedHorizon` to `ChangeEntry`'s operation change, encoded only when present, so other entries' bytes don't change. The page's signature covers it;
               3. add a replica column, and use it in the replica's fold exactly as `CoreTaskFold.view` does;
               4. test it end to end: a legacy edit at Core, a replica pulling the page, and the same `TaskView` on both. Repeat it with a snapshot install.
-          - **Then:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`.
+          - **Now, the exact next action:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`. Plan §8.12.2's route table (re-read 2026-11-26T01:45Z):
+            - **`POST /v1/tasks`:** one create-task child, the task ID derived from the parent; 201 `TaskDTO`, recorded atomically.
+            - **`PATCH /v1/tasks/{id}`:** the revision check (409 "the task changed since it was read"), then every correction field validated together (400, nothing committed), then the field children, then the status child. A refused status (409 "the task cannot move from …") leaves the field children committed, with the error recorded.
+            - **Replays:** the same key and fingerprint get the recorded response with `Lisa-Replayed: true`; a different fingerprint gets 422 `requestIDReused`.
+            - **Later slices:** terminal replies and the reply dependency index (M3-6d).
         - **Surveyed facts for step 3 (2026-11-25T12:00Z):**
           - **R1's idempotency:** `APIRouter.idempotent` (`Sources/LisaAPI/APIRouter.swift:108-150`) keys `caller.scope:requestID`, with the fingerprint SHA-256 over `METHOD path\n`, the sorted `key=value\n` query lines and the body.
           - **The seam:** the plan links LisaLegacyRequests from LisaAPI (§7.2.1), so the router calls the converter there for converted routes. `DTOMapping` is internal to LisaAPI, so the router passes renderers (a `LisaTask` to its JSON, an error to R1's body) into the conversion, which runs them inside the transaction.
