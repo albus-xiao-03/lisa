@@ -384,6 +384,13 @@ extension CoreLedger {
         if case .blob(let body) = row[3], let expiry = row[4].integer, time < expiry {
             return .replay(status: status, body: [UInt8](body))
         }
+        // The administrator's refusal answers for the dataset's life, whatever the body's expiry (D-76).
+        if let guarded = try session.query(
+            "SELECT status, body FROM core_legacy_refusal_guards WHERE scope = ? AND request_id = ? AND fingerprint = ?",
+            [.text(scope), .text(requestID), .text(fingerprint)]
+        ).first, case .blob(let body) = guarded[1] {
+            return .replay(status: Int(try CoreColumns.integer(guarded[0])), body: [UInt8](body))
+        }
         return .bodyExpired(status: status)
     }
 }
