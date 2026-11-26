@@ -19,7 +19,7 @@ public struct Migration: Hashable, Sendable {
 public enum Migrations {
     public static let all: [Migration] = [
         version1, version2, version3, version4, version5, version6, version7, version8, version9, version10,
-        version11,
+        version11, version12,
     ]
 
     /// The newest schema version this build understands.
@@ -480,6 +480,36 @@ public enum Migrations {
             ALTER TABLE core_operations ADD COLUMN observed_position INTEGER
               CHECK ((observed_position IS NULL) = (observed_epoch IS NULL)
                 AND (observed_position IS NULL OR observed_position >= 0))
+            """,
+        ])
+
+    /// R2's administrative holds of v1 requests (plan §8.12.2; docs/DECISIONS.md D-75). A waiting parent keeps the
+    /// original request bytes until it completes. Every hold Core ever issued keeps its decision key and the key's
+    /// base32 text under unique indexes, so a typed token is looked up over all holds, waiting or decided. A hold's
+    /// decision record fills its last columns when `resolve` decides it.
+    static let version12 = Migration(
+        version: 12, summary: "R2 administrative holds of v1 requests",
+        statements: [
+            "ALTER TABLE core_legacy_parents ADD COLUMN request_body BLOB",
+            """
+            CREATE TABLE core_legacy_holds (
+              decision_key BLOB PRIMARY KEY CHECK (length(decision_key) = 32),
+              token TEXT NOT NULL UNIQUE CHECK (length(token) = 52),
+              scope TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              child_index INTEGER NOT NULL CHECK (child_index >= 0),
+              child_id BLOB NOT NULL CHECK (length(child_id) = 16),
+              hold_generation INTEGER NOT NULL CHECK (hold_generation >= 1),
+              held_at INTEGER NOT NULL,
+              decision_id BLOB CHECK (decision_id IS NULL OR length(decision_id) = 16),
+              action TEXT CHECK (action IS NULL OR action IN ('apply', 'refuse')),
+              actor TEXT,
+              decided_at INTEGER,
+              outcome TEXT,
+              UNIQUE (scope, request_id, hold_generation),
+              CHECK ((decision_id IS NULL) = (action IS NULL) AND (action IS NULL) = (actor IS NULL)
+                AND (action IS NULL) = (decided_at IS NULL) AND (action IS NULL) = (outcome IS NULL))
+            ) STRICT
             """,
         ])
 }
