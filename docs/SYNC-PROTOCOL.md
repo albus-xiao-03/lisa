@@ -480,6 +480,11 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **An absent key:** `(epoch, "preferences", p − 1)`, every commit before the child at position p.
   - **Kept and served** as above, so a replica folds the child as Core does.
 - **`PATCH /v1/preferences`** (D-74): children `change:<index>` in request order, chained per key. The set's IDs and digest follow from the discriminators alone, and a child is encoded only when its conversion takes it in. Refused and unreached children are never taken in.
+- **Administrative holds** (D-75; schema v12): in owner scope, a preferences change to an administrative key holds the request once it passes R1's checks.
+  - **Dispositions:** the held child is `held_for_administrative_review` and every later one `pending_behind_review`. Neither is taken in.
+  - **The parent** waits (`awaiting_administrative_review`) with the original request bytes, and the caller gets R1's unrecorded 503.
+  - **Each hold** keeps its generation and its decision key, `SHA-256("lisa-legacy-decision-v1" ‖ 0x00 ‖ dataset ‖ 0x00 ‖ scope ‖ 0x00 ‖ requestID ‖ 0x00 ‖ childID ‖ 0x00 ‖ holdGeneration)`. The dataset and child are raw 16 bytes, the scope and request ID UTF-8, and the generation decimal ASCII.
+  - **The token** is `LR-` and the key's base32 (RFC 4648, upper case, unpadded), shown at 8 characters, or longer in steps of 4 until unique among all holds.
 - **Parents** (`CoreLedger.legacyConvert`, schema v9): one per `(scope, requestID)`, Core-only.
   - **The transaction:** the lookup again (`replay`, `bodyExpired`, `mismatch`, `awaitingReview`, or `unknown`), the route's conversion with the children taken in through the ledger, and, for an answer R1 records (2xx, 400, 403, 404, 409, 413), the parent with its children's dispositions and the answer, the body kept for 30 days by default.
   - **Nothing is kept** of a conversion that throws or answers otherwise.
