@@ -195,6 +195,30 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Evidence:** `.tmp/r2/20261124-r2-5462/owner/x1-attempt1-20261126T0034Z-v2.md` (the verbatim report, the analysis and the proposed fix; not applied, since the owner said this was not a resume).
   - **Next, on resume:** the fix, a Linux type-check of the Apple-importing files against stand-ins, then a new X1 request naming the fixed commit (`R2-CHECKPOINT.md` §6).
 
+### M1-8b X1 attempt 2: the fix, and the Linux type-check of the whole `LisaProof` target (2026-11-26; `docs/DECISIONS.md` D-70)
+
+- **Reproduced on Linux:**
+  - **Minimal copy:** the expression, in a main-actor class, fails on Swift 6.4.2 and 6.4.3 with the same "failed to produce diagnostic" at the `?` (`x1/repro-v1/`).
+  - **Variants (6.4.2):** fourteen locate the cause. An untyped closure as a branch of `? :` isn't inferred `@Sendable` from the declared type. Without a capture list, Swift reports "cannot convert value of type '(Int?) -> Task<(), Never>' to specified type '(@Sendable (Int?) -> Void)?'". With `[weak self]`, it fails to produce that diagnostic. An explicit `@Sendable`, explicit types or an `if` assignment each compile.
+- **The fix** (`f03cf24`): the probe closure is written `@Sendable` with typed parameters and assigned in an `if`.
+- **The hedge** (`0528fc3`–`795b4f3`): the three `Binding(get:set:)` closures became key-path bindings through subscripts on `ProofModel`. They compile whether or not the SDK declares those closures `@Sendable`, which can't be confirmed offline.
+- **The type-check** (`x1/typecheck-v1/`, `run-v1.sh`):
+  - **What it compiles:** all 69 files as the one module `LisaProof`, in Swift 6 mode, `-parse-as-library`.
+  - **Real modules:** `LisaCrypto`, `LisaSyncProtocol`, `LisaTrust` and `LisaHTTP`, built from HEAD (`x1/scratch-v1`), and the toolchain's Observation with its macro.
+  - **Stand-ins:** for Network, Security, dnssd, CryptoKit (re-exporting swift-crypto), SwiftUI, UIKit, CoreImage with `CIFilterBuiltins`, CoreGraphics and Darwin (`stubs-src/`).
+  - **Passes:**
+    - iOS-like: UIKit present.
+    - macOS-like: no UIKit, and `ProofDeviceFacts.swift` copied with `os(macOS)` true.
+    - A baseline: HEAD's unfixed controller.
+- **Results**, final sources, Swift 6.4.2 and 6.4.3 (`run-20261126T012602Z-6.4.2`, `run-20261126T012627Z-6.4.3`):
+  - iOS-like and macOS-like passes: 0 errors, 0 warnings.
+  - The baseline: exactly one error, X1 attempt 1's, at line 130:17.
+  - `swift format lint` on the changed files: clean.
+  - The first run's two warnings came from the dnssd stand-in, which lacked C's `@discardableResult`; v2 adds it.
+- **Negative controls** (`negative-controls-v2.sh`, `negative-20261126T012458Z/`): six of six caught. A misspelled member in a SwiftUI body and a wrong key-path key type are caught. So are a wrong `NWConnection` label, a var mutated inside a `@Sendable` handler, and a main-actor call outside `MainActor.assumeIsolated`. So is a `[weak …]` closure in `? :`, which fails to produce a diagnostic. v1's run of the last control named a missing file and is void.
+- **Not shown:** an Apple build. The stand-ins carry Claude's knowledge of the SDK: whether Network's classes are Sendable and its handlers `@Sendable` (both assumed), and the Security blocks (not assumed). Xcode's Swift may be older than 6.4. Evidence: `x1/typecheck-v1/RESULT.md`.
+- **Result:** ready for X1 attempt 2 (owner-run) at `795b4f3` or later.
+
 ### M1-9 The owner-verification harness core and S-24 at M1 (plan §10.8; R2-DEV-02)
 
 - **Code** (`Harness/`, linked by no product, `Package.resolved` unchanged):
