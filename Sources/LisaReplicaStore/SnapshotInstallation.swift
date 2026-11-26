@@ -145,8 +145,9 @@ extension ReplicaStore {
                     """
                     INSERT OR IGNORE INTO staged_canonical_operations
                       (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision,
-                       origin_device, origin_incarnation, origin_sequence)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       origin_device, origin_incarnation, origin_sequence, observed_epoch, observed_partition,
+                       observed_position)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         ReplicaColumns.id(envelope.operationID), .text(envelope.entityType),
@@ -156,7 +157,7 @@ extension ReplicaStore {
                         ReplicaColumns.optionalID(envelope.origin.deviceTriple?.device),
                         ReplicaColumns.optionalID(envelope.origin.deviceTriple?.incarnation),
                         ReplicaColumns.optionalInteger(envelope.origin.deviceTriple?.sequence),
-                    ])
+                    ] + CanonicalTables.horizonColumns(entry.observedHorizon))
                 try session.query(
                     """
                     INSERT INTO staged_canonical_rows (entity_type, entity_id, version) VALUES (?, ?, ?)
@@ -445,7 +446,12 @@ extension ReplicaStore {
               decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict')),
               origin_device BLOB CHECK (origin_device IS NULL OR length(origin_device) = 16),
               origin_incarnation BLOB CHECK (origin_incarnation IS NULL OR length(origin_incarnation) = 16),
-              origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1)
+              origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1),
+              observed_epoch BLOB CHECK (observed_epoch IS NULL OR length(observed_epoch) = 16),
+              observed_partition TEXT,
+              observed_position INTEGER CHECK (observed_position IS NULL OR observed_position >= 0),
+              CHECK ((observed_epoch IS NULL) = (observed_position IS NULL)
+                AND (observed_epoch IS NULL) = (observed_partition IS NULL))
             ) STRICT;
             CREATE INDEX canonical_operations_by_item_\(suffix) ON staged_canonical_operations (entity_type, entity_id);
             CREATE INDEX canonical_operations_by_origin_\(suffix)
