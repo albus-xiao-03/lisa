@@ -2,6 +2,8 @@
 // reason, commit position and current receipt; the lookups the duplicate rules need; and their security events.
 
 import Foundation
+import LisaDomain
+import LisaPorts
 import LisaSQLite
 import LisaSyncProtocol
 
@@ -119,6 +121,32 @@ enum CoreOperationRecords {
         try session.query(
             "UPDATE core_operations SET observed_epoch = ?, observed_position = ? WHERE operation_id = ?",
             [row[0], row[1], CoreColumns.id(envelope.operationID)])
+    }
+
+    /// Resolves a legacy preference child's observation when Core decides it (D-74): R1's record of the key as Core
+    /// found it, the record R1's `set`, `confirm` and delete act on. A record observes the horizon its revision reflects;
+    /// a revision the map doesn't hold resolves to nothing, as in `resolveObservedRevision`. An absent record observes
+    /// every commit before the child: all that is left of the key then is deletes, replaced writes and model
+    /// suggestions, which an R1 write replaces too.
+    static func resolveFoundRecord(
+        of envelope: OperationEnvelope, key: String, position: Int64, records: any RecordWriting,
+        in session: SQLiteSession
+    ) throws {
+        let horizon: [SQLiteValue]
+        if let found = try records.find(Preference.self, RecordQuery.all.filter("key", equals: key)).first {
+            guard
+                let row = try session.query(
+                    "SELECT epoch_id, position FROM core_projection_revisions WHERE entity_id = ? AND revision = ?",
+                    [CoreColumns.id(envelope.entityID), .integer(found.revision.value)]
+                ).first
+            else { return }
+            horizon = [row[0], row[1]]
+        } else {
+            horizon = [CoreColumns.id(try CoreLedger.epoch(in: session)), .integer(position - 1)]
+        }
+        try session.query(
+            "UPDATE core_operations SET observed_epoch = ?, observed_position = ? WHERE operation_id = ?",
+            horizon + [CoreColumns.id(envelope.operationID)])
     }
 
     static func setReceipt(_ operationID: Identifier128, _ receipt: SignedCoreReceipt, in session: SQLiteSession)
