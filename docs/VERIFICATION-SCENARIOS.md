@@ -1459,3 +1459,29 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **M3 harness v39:** v15's tests with that expectation replaced, and an empty `note.replaceObserved` accepted. `note.add` with empty text is still refused. 7/7 (`m3/harness-v39-test-20261126T021157Z.log`).
   - **Package v22** (`m2/make-regressions-v22.py`, with v15 replaced by v39; runner `m2/run-regressions-v23.sh`): all 26 targets pass, and v35 and v47 pass too (`m2/regressions-run-20261126T021223Z/summary.txt`). 21.6 GB were free.
 - **Result: PASS** for `PATCH /v1/tasks/{id}`, and with it M3-6a's v1 task routes. Next, M3-6b (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, first step: the preference operations, the key's entity and its register merge (plan §8.2.3, §8.3.1; `docs/DECISIONS.md` D-73)
+
+- **Code:**
+  - `95d3e55`: `PreferenceOperationPayload` and `PreferenceWireValue` in LisaSyncProtocol;
+  - `15d6f1d`: `PreferenceEntity` in LisaTrust;
+  - `fc1c17f`: `PreferenceMergeState` and `PreferenceView` in LisaMerge.
+- **Full build and R1 suite:** `m3/suite-after-preference-model-20261126T022139Z/`: 0 warnings, 0 errors, 376/66. Lint is clean on the three files.
+- **Harness:** `m3/harness-v41/`, 7/7 on its first build (`m3/harness-v41-test-20261126T022120Z.log`). v40 was corrected before its first build and is kept, never built:
+  - an overloaded `.number` inside `#require`;
+  - an optional matched with `if case`;
+  - a text larger than the decoder's own limit, which would have tested the decoder instead of the value budget.
+- **Cases:**
+  - **Canonical forms and round trips:** a text, the numbers 0.8 (`"0.8"`) and 15 (`"15.0"`), a flag, a list, a delete and a confirm. An infinite or NaN number has no wire form.
+  - **Strict decoding:** an empty key, a control character, and 257 bytes are refused, while 256 bytes and spaces are accepted. Refused too: `"1.50"`, `"nan"` and `"inf"`; an unknown kind; a non-string list item; 257 list items; an extra field; a missing value; an unknown type; and a 60,000-character text over the value budget.
+  - **Entity IDs:** three keys, against Python's hashlib.
+  - **The merge:**
+    - a set replaces what it observed;
+    - a delete clears what it observed;
+    - a set after the delete re-creates the key;
+    - a set the delete didn't observe survives as a conflict, still shown;
+    - a model value beside an owner value is a suggestion;
+    - a model value alone is unconfirmed until a confirmation observes it.
+  - **Convergence:** all 720 orders of six operations (sets, a delete, a model set, a confirmation, committed and pending) give one state and one view.
+- **Regressions:** regression package v23 (`m2/make-regressions-v23.py`, v22 plus harness v41; runner `m2/run-regressions-v24.sh`) passes all 27 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T022204Z/summary.txt`). 21.3 GB were free.
+- **Result: PASS** for the model. Next, Core's fold and projection for preferences (`R2-CHECKPOINT.md` §11).
