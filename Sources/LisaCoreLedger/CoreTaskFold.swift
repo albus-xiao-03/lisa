@@ -40,7 +40,7 @@ enum CoreTaskFold {
             // A legacy child "observed at projection revision N" observes the horizon Core resolved N to when it
             // decided the child (`CoreOperationRecords.resolveObservedRevision`).
             var observed = envelope.observed.map(ObservedCoverage.init) ?? .nothing
-            if let horizon = try resolvedHorizon(epoch: row[3], position: row[4]) {
+            if let horizon = try resolvedHorizon(epoch: row[3], position: row[4], partition: partition) {
                 observed = ObservedCoverage(horizon: horizon, pieces: [])
             }
             state.apply(payload, id: envelope.operationID, observed: observed, commit: commit)
@@ -57,7 +57,9 @@ enum CoreTaskFold {
     /// The horizon Core resolved a legacy child's projection revision to (`core_operations.observed_epoch` and
     /// `observed_position`), or `nil` when the operation carries none. The fold uses it in place of the envelope's
     /// observed set, and change pages and snapshots serve it to replicas, which fold with it the same way (D-69).
-    static func resolvedHorizon(epoch: SQLiteValue, position: SQLiteValue) throws -> ObservedHorizon? {
+    static func resolvedHorizon(
+        epoch: SQLiteValue, position: SQLiteValue, partition: String = CoreTaskFold.partition
+    ) throws -> ObservedHorizon? {
         guard let position = position.integer else { return nil }
         return try ObservedHorizon(epochID: try CoreColumns.identifier(epoch), partition: partition, position: position)
     }
