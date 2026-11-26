@@ -28,6 +28,14 @@ extension APIRouter {
         }
     }
 
+    /// §8.12.2's answer while a request waits for an administrative decision: R1's 503, never recorded.
+    static var awaitingReview: APIFailure {
+        APIFailure(
+            body: APIErrorBody(
+                code: .unavailable, message: "This change is waiting for review on the administrative terminal.",
+                retryAfterSeconds: 300))
+    }
+
     static var requestIDReused: APIFailure {
         APIFailure(
             body: APIErrorBody(
@@ -65,7 +73,7 @@ extension APIRouter {
         var changes: [DomainChange] = []
         let (lookup, conversion) = try converter.ledger.legacyConvert(
             scope: caller.scope, requestID: requestID, fingerprint: fingerprint, route: Self.name(of: route),
-            retentionDays: configuration.idempotencyRetentionDays
+            retentionDays: configuration.idempotencyRetentionDays, requestBody: request.body.map { [UInt8]($0) }
         ) { tx in
             switch route {
             case .createTask:
@@ -90,15 +98,12 @@ extension APIRouter {
         case .bodyExpired:
             return try terminalReply(route, context: context)
         case .awaitingReview:
-            throw APIFailure(
-                body: APIErrorBody(
-                    code: .unavailable, message: "This change is waiting for review on the administrative terminal.",
-                    retryAfterSeconds: 300))
+            throw Self.awaitingReview
         }
         guard let conversion else {
             throw APIFailure(body: APIErrorBody(code: .internalError, message: "the conversion returned no answer"))
         }
-        if conversion.isRecordable, !changes.isEmpty {
+        if conversion.isRecordable || conversion.awaitsReview, !changes.isEmpty {
             do {
                 try application.propagate(changes)
             } catch {
@@ -174,7 +179,8 @@ extension APIRouter {
 
     /// `PATCH /v1/preferences` under R1's semantics (D-74): the body size, its decoding and the 1–50 changes inside the
     /// parent, so their answers replay; then each change in order. R1's answer is 200 with every preference, or the
-    /// first refusal, rendered from a template that names the change's position, with the earlier changes kept.
+    /// first refusal, rendered from a template that names the change's position, with the earlier changes kept. In
+    /// owner scope an administrative key holds the request: the 503, not recorded, with the earlier changes kept (D-75).
     func convertUpdatePreferences(
         _ request: APIRequest, principal: Principal, context: LegacyRequestContext, tx: LegacyTransaction,
         changes: inout [DomainChange]
@@ -202,6 +208,12 @@ extension APIRouter {
         }
         let effect = try LegacyPreferenceRoutes.update(requested, by: principal, context: context, in: tx)
         changes = effect.changes
+        if effect.heldIndex != nil {
+            let response = Self.error(Self.awaitingReview.body)
+            return LegacyConversion(
+                status: response.status, body: [UInt8](response.body), children: effect.children,
+                setDigest: effect.setDigest)
+        }
         if let refused = effect.refusal {
             let response = Self.error(Self.template(refused))
             return LegacyConversion(
