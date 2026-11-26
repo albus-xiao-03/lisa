@@ -31,8 +31,8 @@ extension CoreLedger {
             let placeholders = Array(repeating: "?", count: names.count).joined(separator: ", ")
             let rows = try session.query(
                 """
-                SELECT c.position, c.decision, c.partitions, o.body, o.signature FROM core_change_log c
-                JOIN core_operations o ON o.operation_id = c.operation_id
+                SELECT c.position, c.decision, c.partitions, o.body, o.signature, o.observed_epoch, o.observed_position
+                FROM core_change_log c JOIN core_operations o ON o.operation_id = c.operation_id
                 WHERE c.position <= ? AND c.decision != 'rejected' AND c.partitions IN (\(placeholders))
                 ORDER BY c.position
                 """, [.integer(cut)] + names.map { .text($0) })
@@ -44,7 +44,8 @@ extension CoreLedger {
                     position: try CoreColumns.integer(row[0]), partitions: [try CoreColumns.text(row[2])],
                     operation: try SignedOperation(
                         body: try CoreColumns.bytes(row[3]), signature: try CoreColumns.bytes(row[4])),
-                    decision: decision)
+                    decision: decision,
+                    observedHorizon: try CoreTaskFold.resolvedHorizon(epoch: row[5], position: row[6]))
             }
             return (epoch, cut, entries)
         }
