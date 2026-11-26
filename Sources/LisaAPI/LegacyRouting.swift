@@ -19,10 +19,11 @@ extension APIRouter {
         return APIRouter(application: application, configuration: configuration, status: status, logger: logger)
     }
 
-    /// The routes converted so far: `POST /v1/tasks` and `PATCH /v1/tasks/{id}` (M3-6a).
+    /// The routes converted so far: `POST /v1/tasks` and `PATCH /v1/tasks/{id}` (M3-6a), `PATCH /v1/preferences`
+    /// (M3-6b).
     static func isConverted(_ route: APIRoute) -> Bool {
         switch route {
-        case .createTask, .updateTask: true
+        case .createTask, .updateTask, .updatePreferences: true
         default: false
         }
     }
@@ -72,6 +73,9 @@ extension APIRouter {
             case .updateTask(let id):
                 return try convertUpdateTask(
                     id, request, principal: principal, context: context, tx: tx, changes: &changes)
+            case .updatePreferences:
+                return try convertUpdatePreferences(
+                    request, principal: principal, context: context, tx: tx, changes: &changes)
             default:
                 throw APIFailure(body: APIErrorBody(code: .internalError, message: "the route isn't converted"))
             }
@@ -168,6 +172,74 @@ extension APIRouter {
             status: answer.status, body: [UInt8](answer.body), children: effect.children, setDigest: effect.setDigest)
     }
 
+    /// `PATCH /v1/preferences` under R1's semantics (D-74): the body size, its decoding and the 1–50 changes inside the
+    /// parent, so their answers replay; then each change in order. R1's answer is 200 with every preference, or the
+    /// first refusal, rendered from a template that names the change's position, with the earlier changes kept.
+    func convertUpdatePreferences(
+        _ request: APIRequest, principal: Principal, context: LegacyRequestContext, tx: LegacyTransaction,
+        changes: inout [DomainChange]
+    ) throws -> LegacyConversion {
+        let requested: [LegacyPreferenceRoutes.Change]
+        do {
+            try Self.checkBodySize(request)
+            let body = try decode(PreferencesPatchRequest.self, request)
+            guard !body.changes.isEmpty, body.changes.count <= 50 else {
+                throw APIFailure.invalid("send between 1 and 50 changes", field: "changes")
+            }
+            requested = body.changes.map { change in
+                let action: LegacyPreferenceRoutes.Action
+                if let value = change.value {
+                    action = .set(DTOMapping.preferenceValue(value), expectedRevision: change.expectedRevision)
+                } else if change.confirm == true {
+                    action = .confirm
+                } else {
+                    action = .delete
+                }
+                return LegacyPreferenceRoutes.Change(key: change.key, action: action)
+            }
+        } catch {
+            return Self.refusal(error)
+        }
+        let effect = try LegacyPreferenceRoutes.update(requested, by: principal, context: context, in: tx)
+        changes = effect.changes
+        if let refused = effect.refusal {
+            let response = Self.error(Self.template(refused))
+            return LegacyConversion(
+                status: response.status, body: [UInt8](response.body), children: effect.children,
+                setDigest: effect.setDigest)
+        }
+        let answer = try json(effect.preferences.map(DTOMapping.preference))
+        return LegacyConversion(
+            status: answer.status, body: [UInt8](answer.body), children: effect.children, setDigest: effect.setDigest)
+    }
+
+    /// R1's refusal of a preference change, with R1's code, from a fixed template that names the change's position and
+    /// never the caller's key or value (§8.12.2 "Error bodies never echo caller input").
+    static func template(_ refused: LegacyPreferenceRoutes.Refused) -> APIErrorBody {
+        let change = "changes[\(refused.index)]"
+        switch refused.refusal {
+        case .unsupportedKey:
+            return APIErrorBody(
+                code: .invalidRequest, message: "\(change).key is not a supported preference", field: "\(change).key")
+        case .invalidValue(let reason):
+            // R1's reasons are its own text; only an unknown weekday's names the caller's token.
+            let shown = reason.hasPrefix("unknown weekday") ? "has an unknown weekday" : reason
+            return APIErrorBody(code: .invalidRequest, message: "\(change).value \(shown)", field: "\(change).value")
+        case .ownerOnly:
+            return APIErrorBody(code: .forbidden, message: "\(change) can be changed only by the owner on the host")
+        case .deletedByOwnerOnly:
+            return APIErrorBody(code: .forbidden, message: "\(change) can be deleted only by the owner on the host")
+        case .notPermitted:
+            return APIErrorBody(code: .forbidden, message: "\(change) can't be changed by this caller")
+        case .notFound:
+            return APIErrorBody(code: .notFound, message: "\(change) names a preference that does not exist")
+        case .changed(let currentRevision):
+            return APIErrorBody(
+                code: .conflict, message: "\(change) changed since it was read; reload it and try again",
+                currentRevision: currentRevision)
+        }
+    }
+
     /// The answer to a retry whose recorded body has expired (§8.12.2 "Live answers"), from current state, never from
     /// the expired bytes. M3-6d adds the `lisaCode` field these answers also carry.
     func terminalReply(_ route: APIRoute, context: LegacyRequestContext) throws -> APIResponse {
@@ -191,6 +263,13 @@ extension APIRouter {
             current.headers["Lisa-Replayed"] = "true"
             current.headers["Lisa-Reply"] = "current"
             return current
+        case .updatePreferences:
+            // §8.12.2's terminal reply for the owner's settings: the 409, never a list rebuilt from current state.
+            throw APIFailure(
+                body: APIErrorBody(
+                    code: .conflict,
+                    message:
+                        "This change was applied; its reply is no longer available. Reload to see current values."))
         default:
             throw APIFailure(body: APIErrorBody(code: .internalError, message: "the route isn't converted"))
         }
