@@ -389,8 +389,8 @@ public final class CoreLedger: Sendable {
                 guard head > position else { return nil }
                 let rows = try session.query(
                     """
-                    SELECT c.position, c.decision, o.body, o.signature FROM core_change_log c
-                    JOIN core_operations o ON o.operation_id = c.operation_id
+                    SELECT c.position, c.decision, o.body, o.signature, o.observed_epoch, o.observed_position
+                    FROM core_change_log c JOIN core_operations o ON o.operation_id = c.operation_id
                     WHERE c.position > ? AND c.partitions = ? ORDER BY c.position LIMIT ?
                     """, [.integer(position), .text(partition), .integer(Int64(limit + 1))])
                 let taken = rows.prefix(limit)
@@ -403,7 +403,9 @@ public final class CoreLedger: Sendable {
                         position: try CoreColumns.integer(row[0]), partitions: [partition],
                         operation: try SignedOperation(
                             body: try CoreColumns.bytes(row[2]), signature: try CoreColumns.bytes(row[3])),
-                        decision: decision)
+                        decision: decision,
+                        observedHorizon: decision == .rejected
+                            ? nil : try CoreTaskFold.resolvedHorizon(epoch: row[4], position: row[5]))
                 }
                 return try ChangePage(
                     datasetID: datasetID, epochID: epoch, partitions: [partition], fromPosition: position,
