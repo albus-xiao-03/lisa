@@ -19,7 +19,7 @@ public struct Migration: Hashable, Sendable {
 public enum Migrations {
     public static let all: [Migration] = [
         version1, version2, version3, version4, version5, version6, version7, version8, version9, version10,
-        version11, version12,
+        version11, version12, version13,
     ]
 
     /// The newest schema version this build understands.
@@ -511,5 +511,24 @@ public enum Migrations {
                 AND (action IS NULL) = (decided_at IS NULL) AND (action IS NULL) = (outcome IS NULL))
             ) STRICT
             """,
+        ])
+
+    /// R2's refusal guards (plan §8.12.2, §8.14.8; docs/DECISIONS.md D-76): a held v1 request the administrator refused
+    /// keeps R1's 403 under its caller scope, request ID and original fingerprint for the dataset's life, content-free
+    /// and apart from reply-body expiry, so the same request is never run again.
+    static let version13 = Migration(
+        version: 13, summary: "R2 refusal guards of v1 requests",
+        statements: [
+            """
+            CREATE TABLE core_legacy_refusal_guards (
+              scope TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              fingerprint TEXT NOT NULL,
+              status INTEGER NOT NULL,
+              body BLOB NOT NULL,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (scope, request_id)
+            ) STRICT
+            """
         ])
 }
