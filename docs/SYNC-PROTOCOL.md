@@ -485,6 +485,11 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - **The parent** waits (`awaiting_administrative_review`) with the original request bytes, and the caller gets R1's unrecorded 503.
   - **Each hold** keeps its generation and its decision key, `SHA-256("lisa-legacy-decision-v1" ‖ 0x00 ‖ dataset ‖ 0x00 ‖ scope ‖ 0x00 ‖ requestID ‖ 0x00 ‖ childID ‖ 0x00 ‖ holdGeneration)`. The dataset and child are raw 16 bytes, the scope and request ID UTF-8, and the generation decimal ASCII.
   - **The token** is `LR-` and the key's base32 (RFC 4648, upper case, unpadded), shown at 8 characters, or longer in steps of 4 until unique among all holds.
+- **Administrative decisions** (D-76; schema v13): `legacyResolve` matches a typed token by prefix over every hold.
+  - **Replay:** a decided hold replays its outcome, and moves nothing.
+  - **Refusal:** a token that isn't a waiting hold's latest generation moves nothing.
+  - **The decision record:** each decision is recorded on its hold.
+  - **Refuse:** the held child is `refused` and the rest `not_reached`. R1's 403 is the request's answer, and it is kept as a content-free refusal guard for the dataset's life. The lookup answers from the guard after the body expires.
 - **Parents** (`CoreLedger.legacyConvert`, schema v9): one per `(scope, requestID)`, Core-only.
   - **The transaction:** the lookup again (`replay`, `bodyExpired`, `mismatch`, `awaitingReview`, or `unknown`), the route's conversion with the children taken in through the ledger, and, for an answer R1 records (2xx, 400, 403, 404, 409, 413), the parent with its children's dispositions and the answer, the body kept for 30 days by default.
   - **Nothing is kept** of a conversion that throws or answers otherwise.
