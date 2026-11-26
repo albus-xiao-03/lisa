@@ -305,8 +305,8 @@ public final class ReplicaStore: Sendable {
                 createdAt: .max)
             _ = try envelope.canonicalBody()
             try checkPayload(
-                operationType: command.operationType, entityType: command.item.entityType, payload: command.payload,
-                observed: command.observed)
+                operationType: command.operationType, entityType: command.item.entityType,
+                entityID: command.item.entityID, payload: command.payload, observed: command.observed)
         } catch let error as OperationEnvelopeError {
             throw .invalidCommand(error)
         } catch {
@@ -318,8 +318,16 @@ public final class ReplicaStore: Sendable {
     /// (plan §8.3.3), and a task operation must name a task.
     /// A resolution carries its value exactly when it is a single resolution or a group's last page.
     static func checkPayload(
-        operationType: String, entityType: String, payload: CanonicalValue, observed: ObservedSet?
+        operationType: String, entityType: String, entityID: Identifier128, payload: CanonicalValue,
+        observed: ObservedSet?
     ) throws(OperationEnvelopeError) {
+        // A preference operation names a preference, and the entity its key derives (D-73).
+        if PreferenceOperationPayload.operationTypes.contains(operationType) {
+            let decoded = try PreferenceOperationPayload(operationType: operationType, payload: payload)
+            guard entityType == PreferenceEntity.entityType else { throw .invalidField("entity.type") }
+            guard entityID == PreferenceEntity.id(forKey: decoded.key) else { throw .invalidField("entity.id") }
+            return
+        }
         guard ItemOperationPayload.operationTypes.contains(operationType) else { return }
         let decoded = try ItemOperationPayload(operationType: operationType, payload: payload)
         if operationType.hasPrefix("task."), entityType != "task" { throw .invalidField("entity.type") }
@@ -352,8 +360,8 @@ public final class ReplicaStore: Sendable {
         }
         do {
             try Self.checkPayload(
-                operationType: envelope.operationType, entityType: envelope.entityType, payload: envelope.payload,
-                observed: envelope.observed)
+                operationType: envelope.operationType, entityType: envelope.entityType, entityID: envelope.entityID,
+                payload: envelope.payload, observed: envelope.observed)
         } catch {
             throw .unverified(.malformed(error))
         }
