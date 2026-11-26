@@ -2,10 +2,11 @@
 // child per change in request order, `change:<index>`, chained per key. Each change is decided in order under R1's
 // rules against R1's records as the earlier changes left them: R1's checks, then the child taken in through the ledger,
 // projected into R1's record as one R1 service call, and R1's audit event. The first refusal stops the request: the
-// earlier children stay applied, the refused one is `refused` and every later one `not_reached`. This part converts
-// the keys an ordinary operation may change, in either scope, and R1's refusals; an administrative key in owner scope,
-// which waits for the administrative terminal, and a restricted sibling R1 would apply come with M3-6b's next part and
-// fail the conversion until then.
+// earlier children stay applied, the refused one is `refused` and every later one `not_reached`. In owner scope an
+// administrative key that passes R1's checks holds the request instead (D-75): that child is
+// `held_for_administrative_review` and every later one `pending_behind_review`, until the administrative terminal
+// decides. A restricted sibling R1 would apply, such as a device's confirm of an administrative key, comes with M3-6b's
+// step 3c and fails the conversion until then.
 
 import Foundation
 import LisaCoreLedger
@@ -16,9 +17,7 @@ import LisaSyncProtocol
 import LisaTrust
 
 public enum LegacyPreferenceRouteError: Error, Hashable, Sendable {
-    /// Owner scope reached an administrative key, which waits for the administrative terminal (M3-6b's next part).
-    case awaitsAdministrativeReview(index: Int)
-    /// A change R1 would apply to a key that doesn't replicate: a restricted sibling (M3-6b's next part).
+    /// A change R1 would apply to a key that doesn't replicate: a restricted sibling (M3-6b's step 3c).
     case restrictedSibling(index: Int)
     /// R1's record of the change's key isn't Core's projection, so what the child observes isn't known.
     case recordNotProjected(index: Int)
@@ -66,13 +65,15 @@ public enum LegacyPreferenceRoutes {
     }
 
     /// What a converted request did: R1's records after it, by key; every child with its disposition; the set digest;
-    /// R1's domain changes; and the refusal that stopped it, with the refused change's index.
+    /// R1's domain changes; the refusal that stopped it, with the refused change's index; or the index of the change
+    /// that holds it for an administrative decision.
     public struct Effect: Sendable {
         public let preferences: [Preference]
         public let children: [LegacyChildDisposition]
         public let setDigest: Digest256
         public let changes: [DomainChange]
         public let refusal: Refused?
+        public let heldIndex: Int?
     }
 
     public struct Refused: Hashable, Sendable {
@@ -93,6 +94,7 @@ public enum LegacyPreferenceRoutes {
         var children: [LegacyChildDisposition] = []
         var changes: [DomainChange] = []
         var refused: Refused?
+        var held: Int?
         for (index, change) in requested.enumerated() {
             let key = PreferenceKey(change.key)
             if let refusal = try check(change, key: key, by: principal, in: tx) {
@@ -101,10 +103,12 @@ public enum LegacyPreferenceRoutes {
                 break
             }
             guard PreferenceRules.isPermitted(key) else {
-                if principal.mayChangeConsequentialSettings, PreferenceRules.isAdministrative(key) {
-                    throw LegacyPreferenceRouteError.awaitsAdministrativeReview(index: index)
+                guard principal.mayChangeConsequentialSettings, PreferenceRules.isAdministrative(key) else {
+                    throw LegacyPreferenceRouteError.restrictedSibling(index: index)
                 }
-                throw LegacyPreferenceRouteError.restrictedSibling(index: index)
+                held = index
+                children.append(disposition(index, plan, .heldForAdministrativeReview))
+                break
             }
             let entity = plan.changes[index].entityID
             guard try tx.preferenceRecordIsProjected(change.key, entity: entity) else {
@@ -125,9 +129,14 @@ public enum LegacyPreferenceRoutes {
                 children.append(disposition(index, plan, .notReached))
             }
         }
+        if let held {
+            for index in (held + 1)..<requested.count {
+                children.append(disposition(index, plan, .pendingBehindReview))
+            }
+        }
         return Effect(
             preferences: try tx.records.find(Preference.self, RecordQuery.all.sorted(by: "key")), children: children,
-            setDigest: plan.setDigest, changes: changes, refusal: refused)
+            setDigest: plan.setDigest, changes: changes, refusal: refused, heldIndex: held)
     }
 
     /// R1's checks of one change, in R1's order (`PreferenceService.set` and `confirm`, `DeletionService.delete`),
