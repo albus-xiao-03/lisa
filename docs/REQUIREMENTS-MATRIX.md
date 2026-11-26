@@ -130,7 +130,7 @@ Run `20261124-r2-5462`, from M0 (2026-11-24). The R1 rows above keep the statuse
 | R2-L24–L27 | M8 | Not run | — |
 | R2-L30, L31; R2-D10, D11 (portable) | M9 | Not run | — |
 | R2-D05, VPN and off-VPN over IPv4 and IPv6, SELinux | M4, target host | Not run: the owner's target-host cases | — |
-| R2-A01 at X1 (`OV-APPLE-X1-01`–`03`, E-2); the X1 cells of R2-A03 and A04 (N-1); E-1's probe | X1 | **X1 `FAIL` at the build** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `Apps/Proof/Nearby/ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". The builds (R2-A01 at X1) failed. The nearby cells and the probe weren't reached. All stay open until a fixed build is run again | VERIFICATION-SCENARIOS M1-8; `R2-CHECKPOINT.md` §6 |
+| R2-A01 at X1 (`OV-APPLE-X1-01`–`03`, E-2); the X1 cells of R2-A03 and A04 (N-1); E-1's probe | X1 | **X1 `FAIL` at the build** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `Apps/Proof/Nearby/ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". The builds (R2-A01 at X1) failed. The nearby cells and the probe weren't reached. **Attempt 2 requested (2026-11-26)** at `795b4f3`: the fix, with the whole target type-checked on Linux against framework stand-ins (D-70). All stay open until the owner's results | VERIFICATION-SCENARIOS M1-8, M1-8b; `R2-CHECKPOINT.md` §6 |
 | R2-A01–A16 (their other sessions) | X2–X7 | `NOT_RUN_ENVIRONMENT` (owner; the sessions follow their milestones) | — |
 
 ### Unavailable
