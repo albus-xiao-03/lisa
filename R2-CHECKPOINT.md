@@ -188,7 +188,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 **Process deviation, recorded (temporary files):** harness v47's test file was edited in place once, before its first build (a `World` value moved into each test). The rule asks for a new version. Every later fix went into a new version.
 
-**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact.
+**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact. Likewise, M3 harness v34's header and `m2/make-regressions-v19.py`'s docstring say "01:4xZ", but they were written at about 01:35Z and 01:37Z on 2026-11-26.
 
 **Found and fixed in M2-20:** the replica's duplicate rules looked only at its journal. A relayed copy of an operation known from canonical state became a pending overlay, and a changed body or a reused triple raised no security event. Canonical operations now keep their origin triple, and the rules consult canonical state too (`docs/VERIFICATION-SCENARIOS.md` M2-20).
 
@@ -396,7 +396,7 @@ No live action or external submission has been requested or performed in this ru
               2. add an optional `observedHorizon` to `ChangeEntry`'s operation change, encoded only when present, so other entries' bytes don't change. The page's signature covers it;
               3. add a replica column, and use it in the replica's fold exactly as `CoreTaskFold.view` does;
               4. test it end to end: a legacy edit at Core, a replica pulling the page, and the same `TaskView` on both. Repeat it with a snapshot install.
-          - **Now, the exact next action:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`. Plan §8.12.2's route table (re-read 2026-11-26T01:45Z):
+          - **Now, the exact next action:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`. Plan §8.12.2's route table (re-read 2026-11-26, about 01:39Z):
             - **`POST /v1/tasks`:** one create-task child, the task ID derived from the parent; 201 `TaskDTO`, recorded atomically.
             - **`PATCH /v1/tasks/{id}`:** the revision check (409 "the task changed since it was read"), then every correction field validated together (400, nothing committed), then the field children, then the status child. A refused status (409 "the task cannot move from …") leaves the field children committed, with the error recorded.
             - **Replays:** the same key and fingerprint get the recorded response with `Lisa-Replayed: true`; a different fingerprint gets 422 `requestIDReused`.
