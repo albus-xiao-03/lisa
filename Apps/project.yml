@@ -4,7 +4,7 @@
 # placeholders; put your own Team ID in Config/Signing.local.xcconfig, which git ignores (docs/SETUP-APPLE.md).
 name: Lisa
 options:
-  bundleIdPrefix: org.example.lisa
+  bundleIdPrefix: dev.albusxiao.lisa
   deploymentTarget:
     iOS: "18.0"
     macOS: "15.0"
@@ -44,7 +44,7 @@ targets:
         product: LisaPresentation
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.companion
+        PRODUCT_BUNDLE_IDENTIFIER: dev.albusxiao.lisa.companion
         PRODUCT_NAME: Lisa
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_FILE: Config/Companion-Info.plist
@@ -87,7 +87,7 @@ targets:
         product: LisaDomain
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.mac
+        PRODUCT_BUNDLE_IDENTIFIER: dev.albusxiao.lisa.mac
         PRODUCT_NAME: Lisa
         INFOPLIST_FILE: Config/Mac-Info.plist
         ENABLE_HARDENED_RUNTIME: YES
@@ -122,7 +122,7 @@ targets:
         product: LisaHTTP
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.proof
+        PRODUCT_BUNDLE_IDENTIFIER: dev.albusxiao.lisa.proof
         PRODUCT_NAME: LisaProof
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
@@ -146,7 +146,7 @@ targets:
       - target: LisaProof
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.owner-ui-tests.ios
+        PRODUCT_BUNDLE_IDENTIFIER: dev.albusxiao.lisa.owner-ui-tests.ios
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: LisaProof
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -160,7 +160,7 @@ targets:
       - target: LisaProof
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: org.example.lisa.owner-ui-tests.macos
+        PRODUCT_BUNDLE_IDENTIFIER: dev.albusxiao.lisa.owner-ui-tests.macos
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: LisaProof
 schemes:
