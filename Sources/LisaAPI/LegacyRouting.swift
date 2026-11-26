@@ -19,10 +19,12 @@ extension APIRouter {
         return APIRouter(application: application, configuration: configuration, status: status, logger: logger)
     }
 
-    /// The routes converted so far: `POST /v1/tasks` (M3-6a).
+    /// The routes converted so far: `POST /v1/tasks` and `PATCH /v1/tasks/{id}` (M3-6a).
     static func isConverted(_ route: APIRoute) -> Bool {
-        if case .createTask = route { return true }
-        return false
+        switch route {
+        case .createTask, .updateTask: true
+        default: false
+        }
     }
 
     static var requestIDReused: APIFailure {
@@ -67,6 +69,9 @@ extension APIRouter {
             switch route {
             case .createTask:
                 return try convertCreateTask(request, principal: principal, context: context, tx: tx, changes: &changes)
+            case .updateTask(let id):
+                return try convertUpdateTask(
+                    id, request, principal: principal, context: context, tx: tx, changes: &changes)
             default:
                 throw APIFailure(body: APIErrorBody(code: .internalError, message: "the route isn't converted"))
             }
@@ -79,7 +84,7 @@ extension APIRouter {
         case .mismatch:
             throw Self.requestIDReused
         case .bodyExpired:
-            throw try terminalReply(route, context: context)
+            return try terminalReply(route, context: context)
         case .awaitingReview:
             throw APIFailure(
                 body: APIErrorBody(
@@ -122,21 +127,72 @@ extension APIRouter {
             status: answer.status, body: [UInt8](answer.body), children: effect.children, setDigest: effect.setDigest)
     }
 
+    /// `PATCH /v1/tasks/{id}` under R1's semantics (D-72): the body size, its decoding, the record, the revision check,
+    /// the correction's deadline and `TaskService`'s checks inside the parent, so their answers replay; then the field
+    /// children and the status. R1's answer is 200 with the `TaskDTO`, or the status's refusal with the correction kept.
+    func convertUpdateTask(
+        _ id: String, _ request: APIRequest, principal: Principal, context: LegacyRequestContext,
+        tx: LegacyTransaction, changes: inout [DomainChange]
+    ) throws -> LegacyConversion {
+        let taskID = TaskID(id)
+        let body: TaskPatchRequest
+        var correction: TaskCorrection
+        do {
+            try Self.checkBodySize(request)
+            body = try decode(TaskPatchRequest.self, request)
+            guard let current = try tx.records.get(LisaTask.self, id: taskID) else {
+                throw APIFailure.notFound("the task")
+            }
+            guard current.revision.value == body.expectedRevision else {
+                throw APIFailure.conflict("the task changed since it was read", currentRevision: current.revision.value)
+            }
+            correction = try taskCorrection(body)
+            if correction != TaskCorrection() {
+                correction = try LegacyTaskRoutes.checkedCorrection(correction, by: principal)
+            }
+        } catch {
+            return Self.refusal(error)
+        }
+        let effect = try LegacyTaskRoutes.update(
+            taskID, correction: correction, status: body.status.flatMap { TaskStatus(rawValue: $0.rawValue) },
+            expectedRevision: body.expectedRevision, by: principal, context: context, in: tx)
+        changes = effect.changes
+        if let refusal = effect.statusRefusal {
+            let response = Self.error(ErrorMapping.body(for: refusal))
+            return LegacyConversion(
+                status: response.status, body: [UInt8](response.body), children: effect.children,
+                setDigest: effect.setDigest)
+        }
+        let answer = try json(DTOMapping.task(effect.task))
+        return LegacyConversion(
+            status: answer.status, body: [UInt8](answer.body), children: effect.children, setDigest: effect.setDigest)
+    }
+
     /// The answer to a retry whose recorded body has expired (§8.12.2 "Live answers"), from current state, never from
     /// the expired bytes. M3-6d adds the `lisaCode` field these answers also carry.
-    func terminalReply(_ route: APIRoute, context: LegacyRequestContext) throws -> APIFailure {
+    func terminalReply(_ route: APIRoute, context: LegacyRequestContext) throws -> APIResponse {
         switch route {
         case .createTask:
             guard try application.record(LisaTask.self, id: context.createdTaskID) != nil else {
-                return APIFailure(
+                throw APIFailure(
                     body: APIErrorBody(
                         code: .notFound, message: "The task this request created was deleted afterwards."))
             }
-            return APIFailure(
+            throw APIFailure(
                 body: APIErrorBody(
                     code: .conflict, message: "This task was created earlier; its reply is no longer available."))
+        case .updateTask(let id):
+            guard let task = try application.record(LisaTask.self, id: TaskID(id)) else {
+                throw APIFailure(
+                    body: APIErrorBody(
+                        code: .notFound, message: "This change was applied; the task was deleted afterwards."))
+            }
+            var current = try json(DTOMapping.task(task))
+            current.headers["Lisa-Replayed"] = "true"
+            current.headers["Lisa-Reply"] = "current"
+            return current
         default:
-            return APIFailure(body: APIErrorBody(code: .internalError, message: "the route isn't converted"))
+            throw APIFailure(body: APIErrorBody(code: .internalError, message: "the route isn't converted"))
         }
     }
 }
