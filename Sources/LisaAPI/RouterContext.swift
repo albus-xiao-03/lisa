@@ -4,6 +4,7 @@
 import Foundation
 import LisaAPIContract
 import LisaDomain
+import LisaLegacyRequests
 
 /// How a request reached the router.
 public enum RequestOrigin: Hashable, Sendable {
@@ -53,12 +54,15 @@ public struct RouterConfiguration: Sendable {
     /// The model configuration reported in health; `nil` reports none. It never holds an endpoint address, a key
     /// reference or a credential.
     public var model: ModelStatusDTO?
+    /// R2's converter of v1 mutations (plan §8.12.2): with it, a converted route's request becomes a legacy parent and
+    /// its Core-signed children instead of R1's own write and request record. `nil` keeps R1's handlers everywhere.
+    public var legacyConverter: LegacyConverter?
 
     public init(
         applicationVersion: String, schemaVersion: Int, idempotencyRetentionDays: Int = 30,
         requestsPerMinute: Int = 300,
         ownerCredentialVerifier: (@Sendable (String) -> Bool)? = nil, localNotificationsLive: Bool = false,
-        model: ModelStatusDTO? = nil
+        model: ModelStatusDTO? = nil, legacyConverter: LegacyConverter? = nil
     ) {
         self.applicationVersion = applicationVersion
         self.schemaVersion = schemaVersion
@@ -67,6 +71,7 @@ public struct RouterConfiguration: Sendable {
         self.ownerCredentialVerifier = ownerCredentialVerifier
         self.localNotificationsLive = localNotificationsLive
         self.model = model
+        self.legacyConverter = legacyConverter
     }
 }
 
