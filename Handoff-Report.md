@@ -1,7 +1,7 @@
 <!-- Handoff report to the owner: Lisa R2 at the move to a new development environment (run 20261124-r2-5462). -->
 # Lisa R2 — Handoff report to the owner
 
-**Prepared:** 2026-11-26T18:28Z by Claude, at your request, in the Docker sandbox `lisa.lab` (run `20261124-r2-5462`). The future agent's companion is `Handoff.md`. The full record is `R2-CHECKPOINT.md`.
+**Prepared:** 2026-11-26 by Claude, at your request, in the Docker sandbox `lisa.lab` (run `20261124-r2-5462`). The first version was written at 18:28Z. This one, at about 18:44Z, follows the decisions you gave after it. The future agent's companion is `Handoff.md`, now self-contained. The full record is `R2-CHECKPOINT.md`.
 
 ## 1. Summary
 
@@ -13,14 +13,13 @@
   - M1 is complete at its boundary, with X1 in your hands.
   - M3 is in progress: M3-0 to M3-5 and M3-6a are done, and M3-6b is mostly done.
   - M4–M9 haven't started.
-- **Do these before you remove `lisa.lab`** (§2):
-  1. **Fetch the sandbox's commits.** Your host is 106 commits behind, plus this handoff's three. X1 attempt 2's fix is among them.
-  2. **Copy the run directory, or at least `m0/`.** It isn't in Git.
+- **Before you remove `lisa.lab`** (§2), fetch the sandbox's commits. Your host is 106 commits behind, plus this handoff's. X1 attempt 2's fix is among them.
+- **Your decisions of 2026-11-26, now recorded:**
+  - **The run directory isn't copied,** so `Handoff.md` carries everything the next agent needs: how to rebuild the frozen R1 artifacts, the Apple type-check, the quota tools and the regression harnesses.
+  - **The permissions carry over** from `lisa.lab`, except the build-output removal override (§8).
+  - **You will commit your preferred test results** before the next agent starts (§6).
 - **Runnable owner tests now:** X1 attempt 2, and a one-second harness fixture run (§5–§7).
-- **Your decisions** (§9):
-  - whether to build a guard v3;
-  - the new environment's permissions;
-  - X1's results.
+- **Still yours to decide** (§9): a guard v3, and storage space.
 
 ## 2. Before you remove the old environment
 
@@ -35,11 +34,10 @@
      ```
 
      Then push to GitHub if you want them there. Claude never pushes (`CONSTRICTION.md`). The sandbox's Git daemon serves only while the sandbox runs.
-2. **Copy the run directory `.tmp/r2/`.** Git ignores it, and it exists only in the sandbox. It is 23 GB, or about 15 GB without regenerable build output.
-   - **Keep `m0/` complete, 4.9 GB with its builds.** It holds the frozen R1 builds, the frozen client harness and datasets. M3's S-01 and M9's S-02 and S-13 run them, and their hashes are recorded evidence, so a rebuild can't replace them.
-   - **Also useful:** `x1/` (395 MB, the Apple stand-in type-check that runs before each of your builds), `usage/`, `guard/`, `export/`, `owner/`, `notes/`, the pause notes, `m3/harness-v50` and `m2/make-regressions-v30.py` with its package.
-   - **Restore it at the same relative path,** `<repository>/.tmp/r2/`.
-   - **How:** with your sandbox tooling, for example a `tar` of `.tmp/r2` copied out. Or ask Claude here to build the redacted evidence bundle: `export/make_bundle.py`, with extra `--include` patterns for the parts above. To serve it, publish a port once with `sbx port publish lisa.lab 8765:8765`, have Claude run `export/serve-bundle.sh`, then run `curl -fO http://localhost:8765/<bundle>.tar.gz` and fetch its `.SHA256SUMS`. The bundle masks account identifiers and e-mail addresses, and refuses to package if a credential canary survives.
+2. **The run directory `.tmp/r2/` stays behind,** as you decided. Its tools, harnesses and evidence are lost with the sandbox. The tracked records keep every result they state.
+   - **The next agent rebuilds** what it needs from `Handoff.md` §7.
+   - **The frozen R1 builds will have new hashes.** The binaries embed their build paths. The source identity must match exactly: the manifest hash `5e0524fc…99b46679` over R1's 872 files at `491c90a`.
+   - **Optional:** if you want any of this run's evidence for your own records, ask Claude here for the redacted bundle before you remove the sandbox (`export/make_bundle.py`, served through a port you publish with `sbx port publish lisa.lab 8765:8765`). The next agent doesn't need it.
 3. **Housekeeping,** if the sandbox stays up for a while:
    - Stop the guard (`guardctl-v2 stop --reason "environment retired"`).
    - Restore `~/.claude/settings.json` from `.tmp/r2/20261124-r2-5462/usage/settings.json.orig-20261124T0750Z`. That puts back the status line and `StopFailure` hook the quota tools changed.
@@ -114,7 +112,13 @@ The requirements' per-ID statuses are recorded at the M3 boundary (`docs/REQUIRE
 3. **N-1,** the nine nearby cells for each design. A design is adopted only if it passes all nine (three pairs × shared Wi-Fi, Internet disconnected, no access point). M6 waits for this. If both designs fail, nothing is adopted and a redesign comes back to you.
 4. **E-1,** the nine fetch cases on each device, with the outcomes listed in §7 step 9. M7's retrieval design waits for this.
 
-**In the new environment,** before writing anything, the agent runs its own acceptance checks: Swift 6.4.2, a debug build with 0 warnings, the R1 suite at 376/66, and the lockfile unchanged. You only need to provide the toolchain, or authorize installing it.
+**In the new environment,** before writing anything, the agent runs its own acceptance checks: Swift 6.4.2, a debug build with 0 warnings, the R1 suite at 376/66, and the lockfile unchanged. Your permissions let it install the toolchain with the signature-verified recipe.
+
+**Attaching the results** (you said you will commit them before the next agent starts):
+- **Commit them on `feature/distributive`,** after the handoff commits, in a folder of your choosing, for example `owner-results/X1-attempt2/`. The agent looks for your commits after the handoff (`Handoff.md` §8).
+- **Most useful:** the redacted export (`<run-id>-redacted.json`), the output of `xcodebuild -version`, and the build logs if a build failed.
+- **A one-line note** of which design passed on which cells, and anything you saw that the export can't show.
+- **Check before committing:** the redacted export is made for sharing, but build logs may hold your Mac user name and local paths. Commit them only if you're comfortable, or send just the error lines.
 
 ## 7. Step by step: X1 attempt 2
 
@@ -163,15 +167,25 @@ The full sheet is `Harness/docs/SETUP-APPLE.md`. You can stop after step 5 and s
     - run `swift run lisa-verify export <run-id> --redacted ~/Desktop/<run-id>-redacted.json`;
     - share the redacted file, and say which design passed on which cells.
 
-## 8. What the next agent will ask for in the new environment
+## 8. The new environment: permissions and what to provide
 
-`CONSTRICTION.md` lets the agent change the environment only with your explicit, task-specific permission. Expect these requests:
-- **The repository and the run directory,** from §2.
-- **The toolchain:** Swift 6.4.2, from the signature-verified recipe in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §11 and §13.2 or your own install. Also the system packages listed in `Handoff.md` §5, Python 3 and git.
-- **Storage** of several GB for builds and regressions.
-- **A container engine,** needed from M4. The rootful Docker authorization covered `lisa.lab` only.
-- **Quota monitoring:** reading the plan-usage metadata, the status-line tap and the `StopFailure` hook in `~/.claude/settings.json`, and whether to re-arm a guard. The old tools carry the old paths and bindings, so they need new versions.
-- **Your explicit go-ahead to resume.**
+**Your decision (2026-11-26):** the permissions are the same as in `lisa.lab`, except the regenerable-build-output removal override. Recorded in `Handoff.md` §3 and `R2-CHECKPOINT.md` §7.
+- **Carries over:**
+  - setting up the toolchain with the signature-verified recipe, and installing the necessary development prerequisites;
+  - a private container engine for development and testing (P-02, P-03, the account-free P-09a);
+  - post-freeze dependency changes with their records;
+  - quota monitoring: the plan-usage reading, the status-line tap and the `StopFailure` hook in `~/.claude/settings.json`;
+  - the replica's ballast release (D-61).
+- **Doesn't carry over:** removing regenerable build output. Plan §10.2 holds again, so the agent removes nothing to free space. It builds incrementally into a few shared scratch paths and asks you when space runs low. Plan on at least 25–30 GB free.
+- **Unchanged:** P-07 (R1 test changes need your approval), P-08 (conditional), and everything you keep: the host, accounts, devices, the Apple Developer account and live actions.
+
+**What to provide:**
+- the fetched repository;
+- an environment where these permissions apply (Debian 13 x86_64 matches the old one most closely);
+- enough storage;
+- your explicit go-ahead to resume.
+
+Without a guard (§9), resumes after quota pauses are yours to start.
 
 ## 9. Decisions waiting for you
 
@@ -179,7 +193,7 @@ The full sheet is `Harness/docs/SETUP-APPLE.md`. You can stop after step 5 and s
    - **The problem:** this run's resume is manual because Claude Code moved the session to a background job, the daemon's `bg-spare` process with a new session ID. Guard v2 can't verify that kind of fork, so it rejected the pause.
    - **The proposal** (`R2-CHECKPOINT.md` §5): accept a daemon-spawned spare as a lineage fork, on evidence of its process chain back to a lease holder and its continuing transcript.
    - **Your choice:** approve it, or keep resumes manual. Until you decide, nothing weakens the guard's check.
-2. **The new environment's permissions** (§8).
+2. **Storage:** with no removal permission, you may need to add space as the run grows (§8).
 3. **P-08,** only if N-1 selects Design B: the exact swift-certificates pin.
 4. **Still open from earlier** (`R2-CHECKPOINT.md` §5 and §11): reopening the replica at 0 bytes free.
 5. **The platform record:** the plan still describes the Fedora host. As before, the new environment will be recorded in a dated environment amendment, not in the plan, unless you say otherwise.
@@ -209,7 +223,7 @@ The full sheet is `Harness/docs/SETUP-APPLE.md`. You can stop after step 5 and s
   - **R1's old file:** `PAUSE-CHECKPOINT.md` was already removed in R1 (`88d301c`).
   - **The only tracked pause record is `R2-CHECKPOINT.md`,** the required persistent log (R2-DEV-03, O-7). It is kept, as you asked.
 - **Removed:** nothing.
-- **Not removed:** the pause notes under `.tmp/`. `CONSTRICTION.md` ("Temporary Files") forbids Claude to remove any temporary file there and allows no permission exception. They stay behind with the old sandbox unless you copy the run directory. To discard them, delete them yourself, or change `CONSTRICTION.md`.
+- **Not removed:** the pause notes under `.tmp/`. `CONSTRICTION.md` ("Temporary Files") forbids Claude to remove any temporary file there and allows no permission exception. They stay behind with the old sandbox, which you won't copy. To discard them sooner, delete them yourself, or change `CONSTRICTION.md`.
 - **Kept, because they aren't intermediate:**
   - `DEVELOPMENT-ENVIRONMENT-REPORT.md`: the old platform's record, with your decisions in §13 and §14;
   - `IMPLEMENTATION-REPORT.md`: R1's report;
