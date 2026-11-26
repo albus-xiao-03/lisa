@@ -47,15 +47,18 @@ extension APIRouter {
     }
 
     func createTask(_ request: APIRequest, _ caller: Caller) throws -> APIResponse {
-        let body = try decode(TaskCreateRequest.self, request)
-        let task = try application.createTask(
-            TaskDraft(
-                title: body.title, notes: body.notes ?? "",
-                priority: body.priority.flatMap { TaskPriority(rawValue: $0.rawValue) } ?? .normal,
-                deadline: try Self.deadline(body.deadline, field: "deadline"), estimatedMinutes: body.estimatedMinutes,
-                splittable: body.splittable ?? false),
-            by: try principal(caller))
+        let task = try application.createTask(try taskDraft(request), by: try principal(caller))
         return try json(DTOMapping.task(task), status: 201)
+    }
+
+    /// `POST /v1/tasks`'s body as R1's draft, its deadline checked; R1's path and the legacy conversion share it.
+    func taskDraft(_ request: APIRequest) throws -> TaskDraft {
+        let body = try decode(TaskCreateRequest.self, request)
+        return TaskDraft(
+            title: body.title, notes: body.notes ?? "",
+            priority: body.priority.flatMap { TaskPriority(rawValue: $0.rawValue) } ?? .normal,
+            deadline: try Self.deadline(body.deadline, field: "deadline"), estimatedMinutes: body.estimatedMinutes,
+            splittable: body.splittable ?? false)
     }
 
     func updateTask(_ id: String, _ request: APIRequest, _ caller: Caller) throws -> APIResponse {
