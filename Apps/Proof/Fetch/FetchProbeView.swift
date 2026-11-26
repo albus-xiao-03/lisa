@@ -15,19 +15,12 @@ struct FetchProbeView: View {
                     Text(probeCase.setup).font(.caption)
                     ForEach(probeCase.subcases) { subcase in
                         let key = probeCase.id + "/" + subcase.id
-                        TextField(
-                            subcase.label,
-                            text: Binding(get: { model.fetchInputs[key] ?? "" }, set: { model.fetchInputs[key] = $0 }))
+                        TextField(subcase.label, text: $model[fetchInput: key])
                         Button("Run \(subcase.id)") { Task { await model.runFetch(probeCase, subcase) } }
                         if let summary = model.fetchSummaries[key] { Text(summary).font(.caption.monospaced()) }
                     }
                     if let observation = probeCase.ownerObservation {
-                        Picker(
-                            observation,
-                            selection: Binding(
-                                get: { model.ownerObservations[probeCase.id] ?? .notRunEnvironment },
-                                set: { model.ownerObservations[probeCase.id] = $0 })
-                        ) {
+                        Picker(observation, selection: $model[ownerObservation: probeCase.id]) {
                             Text("not observed").tag(ProofStatus.notRunEnvironment)
                             Text("confirmed").tag(ProofStatus.pass)
                             Text("contradicted").tag(ProofStatus.fail)
