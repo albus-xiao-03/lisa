@@ -139,12 +139,13 @@ let package = Package(
             name: "LisaSyncEngine", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaReplicaStore", "LisaCrypto"]),
         // R2 legacy requests (plan §7.2.1, §8.12.2): the one conversion of an R1 request into its parent and its complete
         // set of Core-signed children. It starts with the children's derivation; Core's parent records, R1's route
-        // semantics and the router's hook follow in M3-6.
+        // semantics and the router's hook follow in M3-6. LisaAPIContract gives it R1's request and answer bytes for
+        // routes decided after a hold (D-75).
         .target(
             name: "LisaLegacyRequests",
             dependencies: [
                 "LisaSyncProtocol", "LisaTrust", "LisaCoreLedger", "LisaDomain", "LisaOwnerData", "LisaPorts",
-                "LisaTime",
+                "LisaTime", "LisaAPIContract",
             ]),
         // R2 production CoreTransport (plan §7.2.1, §8.6.5): the v2 messages over LisaClient's transport.
         .target(
