@@ -1110,3 +1110,31 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - an edit after in-progress.
 
   A replica pulling Core's pages folds the reopen through its served horizon, with the same view as Core's.
+
+## D-73 — Preferences as one register per key: the entity, the payloads and the merge (R2 M3-6b, run 20261124-r2-5462; plan §8.2.3, §8.3.1, §8.12.2)
+
+- **The entity:** a preference is a register per key, not an owner item.
+  - **Its entity ID** is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)` (`PreferenceEntity`, LisaTrust). So every device, Core and every epoch name a key the same way.
+  - **R1's record IDs play no part.** They are random, and a delete followed by a set changes them.
+  - **Placement:** entity type `preference`, partition `preferences`.
+- **The payloads** (`PreferenceOperationPayload`, `docs/SYNC-PROTOCOL.md` §8):
+  - **The three types:** `preference.set {key, value}`, `preference.delete {key}` and `preference.confirm {key}`.
+  - **Values:** typed `text`, `number`, `flag` or `list`.
+    - A number travels as its shortest decimal text that reads back as the same finite value, and that text is its only accepted form, because canonical JSON carries integers only.
+    - A list holds at most 256 strings, and the payload fits the type's value budget.
+  - **A key** is 1–256 UTF-8 bytes without control characters. R1 accepts any key text and refuses unsupported keys itself (400). So a request's unsupported key is still a well-formed child, which Core refuses under R1's rule.
+- **The merge** (`PreferenceMergeState`): one multi-value register of `value?`.
+  - **Sets and deletes:** a set writes its value and a delete writes none, each replacing exactly the versions it observed. A delete therefore clears what it saw, and a later set re-creates the key, as R1's delete then set does. §8.3.1's dominating tombstone is for owner items, which a key isn't.
+  - **Authority:** a model value never replaces an owner value and is kept as a suggestion.
+  - **Confirmations:** a confirmation confirms the model-authority candidates it observed.
+  - **The view:** the key is absent only when every survivor is a delete. Otherwise the shown value is the first surviving value in display order. Two or more survivors, a delete among them or not, are a conflict.
+- **Next steps (M3-6b):**
+  - Core's intake and fold for preferences, with the check that the entity ID matches the key;
+  - the projection into R1's `Preference` record, with R1's audit events;
+  - the replica's fold;
+  - the conversion of `PATCH /v1/preferences`: `change:<index>` children, R1's stop at the first refusal, administrative holds, `legacy review` and `resolve`, and restricted siblings.
+- **Shown by** M3 harness v41 (v40 was corrected before its first build and is kept, never built):
+  - the canonical forms and round trips;
+  - every decoding rule;
+  - the entity IDs against Python's hashlib;
+  - the merge cases, and one state and one view over all 720 orders of a representative set.
