@@ -117,15 +117,26 @@ public struct LegacyTransaction {
     }
 
     /// Projects a task's merged state into R1's record once, as one R1 service call: with `forceRevision`, the record
-    /// is written, and its revision raised, even when no field changed, as R1's `TaskService.correct` does.
-    public func project(_ entity: Identifier128, forceRevision: Bool) throws {
+    /// is written, and its revision raised, even when no field changed, as R1's `TaskService.correct` does. With
+    /// `markingDeadlineCorrected`, the deadline is marked owner-corrected whatever its value, as R1 marks it (D-72).
+    public func project(_ entity: Identifier128, forceRevision: Bool, markingDeadlineCorrected: Bool = false) throws {
         let view = try CoreTaskFold.view(entity, in: session)
         let created = try CoreOperationRecords.creationTime(of: entity, in: session).map {
             Date(timeIntervalSince1970: Double($0) / 1_000)
         }
         let revision = try TaskProjection.project(
             view, entityID: entity, createdAt: created, commitTime: Date(timeIntervalSince1970: Double(time) / 1_000),
-            into: records, force: forceRevision)
+            into: records, force: forceRevision, markDeadlineCorrected: markingDeadlineCorrected)
+        guard
+            let position = try session.query("SELECT last_position FROM core_dataset WHERE singleton = 1").first?.first?
+                .integer
+        else { throw CoreLedgerError.corrupt("the dataset row") }
+        try TaskProjection.recordRevision(revision, of: entity, at: position, in: session)
+    }
+
+    /// Records that R1's revision `revision` of `entity`, written by the conversion itself rather than the projection
+    /// (an R1-only status of an open task, D-72), reflects every commit so far, so a later edit observed at it maps.
+    public func recordProjectionRevision(_ revision: Int64, of entity: Identifier128) throws {
         guard
             let position = try session.query("SELECT last_position FROM core_dataset WHERE singleton = 1").first?.first?
                 .integer
