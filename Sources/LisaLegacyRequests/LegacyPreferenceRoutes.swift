@@ -9,6 +9,7 @@
 // step 3c and fails the conversion until then.
 
 import Foundation
+import LisaAPIContract
 import LisaCoreLedger
 import LisaDomain
 import LisaOwnerData
@@ -21,6 +22,8 @@ public enum LegacyPreferenceRouteError: Error, Hashable, Sendable {
     case restrictedSibling(index: Int)
     /// R1's record of the change's key isn't Core's projection, so what the child observes isn't known.
     case recordNotProjected(index: Int)
+    /// A held request's kept bytes no longer read as a preferences request.
+    case unreadableRequest
     /// A child the ledger didn't decide as applied.
     case childNotApplied(index: Int)
 }
@@ -137,6 +140,41 @@ public enum LegacyPreferenceRoutes {
         return Effect(
             preferences: try tx.records.find(Preference.self, RecordQuery.all.sorted(by: "key")), children: children,
             setDigest: plan.setDigest, changes: changes, refusal: refused, heldIndex: held)
+    }
+
+    /// R1's 403 when the administrative terminal refuses a held change (§8.12.2).
+    public static let refusedByAdministrator = APIErrorBody(
+        code: .forbidden, message: "This setting can be changed only on the administrative terminal.")
+
+    /// The administrative terminal's decision on a held preferences request (D-76). `refuse` ends it as R1 ends a
+    /// refused change: the held child `refused`, every later one `not_reached`, and R1's 403 the request's answer, kept
+    /// as a refusal guard. `apply` puts an administrative key's value into the ledger, which is restricted to Core, so it
+    /// waits for restricted siblings (M3-6b step 3c) and moves nothing until then.
+    public static func decide(_ hold: LegacyHoldContext, action: LegacyDecisionAction) throws -> LegacyDecision {
+        guard case .success(let requested) = requested(Data(hold.requestBody)) else {
+            throw LegacyPreferenceRouteError.unreadableRequest
+        }
+        switch action {
+        case .apply:
+            throw LegacyPreferenceRouteError.restrictedSibling(index: hold.childIndex)
+        case .refuse:
+            let children = (hold.childIndex..<requested.count).map { index in
+                LegacyChildDisposition(
+                    index: index,
+                    childID: LegacyChildIdentity.childID(
+                        dataset: hold.datasetID, scope: hold.scope, requestID: hold.requestID,
+                        discriminator: discriminator(index)),
+                    discriminator: discriminator(index), disposition: index == hold.childIndex ? .refused : .notReached)
+            }
+            let later = requested.count - hold.childIndex - 1
+            let outcome =
+                "Refused change \(hold.childIndex + 1) of \(requested.count) of request \(hold.requestID); "
+                + (later == 0 ? "no later change." : "\(later) later change\(later == 1 ? "" : "s") not applied.")
+            let error = refusedByAdministrator
+            return LegacyDecision(
+                children: children, status: error.code.httpStatus, body: [UInt8](try APIJSON.encoder().encode(error)),
+                outcome: outcome, isRefusal: true)
+        }
     }
 
     /// R1's checks of one change, in R1's order (`PreferenceService.set` and `confirm`, `DeletionService.delete`),
