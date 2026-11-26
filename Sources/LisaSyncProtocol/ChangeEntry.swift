@@ -25,9 +25,10 @@ public struct ChangeEntry: Hashable, Sendable {
     /// Strictly ascending (Unicode scalar order), at least one.
     public let partitions: [String]
     public let change: Change
-    /// Only on a committed legacy child, one whose observed set carries a projection revision: every piece of the item
-    /// with commit position ≤ the horizon's, as Core resolved the revision when it decided the child. Encoded only when
-    /// present, so every other entry's bytes are unchanged.
+    /// Only on a committed legacy child whose observation Core resolves when it decides it: one whose observed set
+    /// carries a projection revision (D-69), or any preference child, which observes R1's record as Core found it
+    /// (D-74). It covers every piece of the item with commit position ≤ the horizon's. Encoded only when present, so
+    /// every other entry's bytes are unchanged.
     public let observedHorizon: ObservedHorizon?
 
     public init(position: Int64, partitions: [String], change: Change, observedHorizon: ObservedHorizon? = nil)
@@ -41,13 +42,20 @@ public struct ChangeEntry: Hashable, Sendable {
         else { throw .invalidField("entry.partitions") }
         if observedHorizon != nil {
             guard case .operation(let operation, let decision) = change, decision != .rejected,
-                (try? OperationEnvelope.decode(body: operation.body))?.observed?.projectionRevision != nil
+                let envelope = try? OperationEnvelope.decode(body: operation.body),
+                envelope.observed?.projectionRevision != nil || Self.resolvesAtDecision(envelope)
             else { throw .invalidField("entry.observedHorizon") }
         }
         self.position = position
         self.partitions = partitions
         self.change = change
         self.observedHorizon = observedHorizon
+    }
+
+    /// A legacy preference child, whose observation Core always resolves at its decision (D-74).
+    static func resolvesAtDecision(_ envelope: OperationEnvelope) -> Bool {
+        guard case .coreLegacyTranslation = envelope.origin else { return false }
+        return PreferenceOperationPayload.operationTypes.contains(envelope.operationType)
     }
 
     public init(
