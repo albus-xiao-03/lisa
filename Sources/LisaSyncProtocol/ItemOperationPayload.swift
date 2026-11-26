@@ -62,10 +62,13 @@ public enum ItemOperationPayload: Hashable, Sendable {
         case .taskEdit(let value):
             _ = try TaskFieldValue(validating: value)
         case .taskReopen(let reopens):
-            guard !reopens.isEmpty, reopens.count <= Self.maximumReopens, EnvelopeFields.isStrictlyAscending(reopens)
+            // An empty list reopens what the observed set covers, as a v1 reopen observed at a projection revision
+            // does (D-72).
+            guard reopens.count <= Self.maximumReopens, EnvelopeFields.isStrictlyAscending(reopens)
             else { throw .invalidField("payload.reopens") }
         case .noteAdd(let text), .noteReplaceObserved(let text):
-            guard !text.isEmpty else { throw .invalidField("payload.text") }
+            // A replacement may be empty: it clears the notes it observed, as R1's `notes: ""` does (D-72).
+            if case .noteAdd = payload, text.isEmpty { throw .invalidField("payload.text") }
             let limit = Self.textLimits[payload.operationType] ?? 0
             let bytes = CanonicalEncoder.encodedLength(ofString: text) - 2
             guard bytes <= limit else { throw .encoding(.tooLarge(bytes: bytes, limit: limit)) }
