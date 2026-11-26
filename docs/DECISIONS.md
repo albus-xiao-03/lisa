@@ -1004,7 +1004,11 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Beside it:** a piece committed after P(N) without changing the record, for example a device's same-value edit, stays beside the child, as §8.3.2 keeps "a later arrival".
   - **The harness** (M3 harness v33) shows it with a stale revision: the newer title stays.
 - **A revision the map doesn't hold** resolves to nothing. The child observes nothing and conflicts rather than superseding pieces it may not have seen. Records whose revisions predate Core, such as R1 data at cutover, need their mapping recorded when they are imported (M3-6d and M5, open).
-- **Open, next:** replicas don't hold the map. Core serves the resolved horizon in Core-signed data (the change-page entry and the full snapshot's operation records), and replicas fold with it. Until then a replica folds a legacy edit as observing nothing. Core's own projection, which is what R1's clients read, is already right.
+- **Replicas (done 2026-11-26, M3-6a):**
+  - **Why Core serves it:** replicas don't hold the map.
+  - **What Core sends:** the resolved horizon, in its signed data. `ChangeEntry.observedHorizon` appears on a committed legacy child's entry only, in change pages and snapshot chunks (`53e2a5a`–`ccce9e1`).
+  - **What a replica does:** it keeps the horizon with the canonical operation (`canonical_operations.observed_*`, staged through installations) and folds with it as Core does (`6e84d1b`–`89fcb1a`).
+  - **Evidence:** M3 harness v34 shows the same views at Core and on a replica, by pages, by a snapshot, and by pages after a snapshot.
 
 ## D-70 — Apple app code is type-checked on Linux against framework stand-ins before each owner build (R2, run 20261124-r2-5462; after X1 attempt 1; plan §10.6, §17 "Scale")
 
