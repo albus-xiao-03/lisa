@@ -159,14 +159,16 @@ public final class TaskService: Sendable {
         }
     }
 
-    static func requireOwnerOrDevice(_ principal: Principal) throws {
+    // R1's rules, public so that R2's legacy conversion of the task routes applies exactly these (plan §8.12.2).
+
+    public static func requireOwnerOrDevice(_ principal: Principal) throws {
         switch principal {
         case .localOwner, .pairedDevice, .demonstration: return
         case .runtime, .model: throw DomainError.notPermitted("tasks are changed only by the owner")
         }
     }
 
-    static func validTitle(_ title: String) throws -> String {
+    public static func validTitle(_ title: String) throws -> String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.count <= maxTitleCharacters else {
             throw DomainError.invalidValue(field: "title", reason: "must be 1 to \(maxTitleCharacters) characters")
@@ -174,19 +176,19 @@ public final class TaskService: Sendable {
         return trimmed
     }
 
-    static func validateMinutes(_ minutes: Int?) throws {
+    public static func validateMinutes(_ minutes: Int?) throws {
         if let minutes, !(1...1440).contains(minutes) {
             throw DomainError.invalidValue(field: "estimatedMinutes", reason: "must be between 1 and 1440")
         }
     }
 
-    static func check(_ expected: Revision, _ actual: Revision, _ id: String) throws {
+    public static func check(_ expected: Revision, _ actual: Revision, _ id: String) throws {
         guard expected == actual else {
             throw StoreError.conflict(collection: LisaTask.collectionName, id: id, expected: expected, actual: actual)
         }
     }
 
-    static func audit(_ action: String, _ task: LisaTask, _ principal: Principal, _ now: Date) -> AuditEvent {
+    public static func audit(_ action: String, _ task: LisaTask, _ principal: Principal, _ now: Date) -> AuditEvent {
         AuditEvent(
             action: action, actor: principal, at: now, affected: [task.id.rawValue], outcome: .succeeded,
             detail: "status=\(task.status.rawValue) revision=\(task.revision)")
