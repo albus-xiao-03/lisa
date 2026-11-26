@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T18:29Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T18:44Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -40,6 +40,10 @@
   - **The documents:** `Handoff.md`, for the next agent: the state, the rules, the quota and auto-resume policy, the environment setup and the resume steps. `Handoff-Report.md`, for the owner: the state, the runnable owner tests and the decisions waiting.
   - **At the handoff,** the host lacked this sandbox's 106 commits and the handoff's own. The run directory `.tmp/r2/20261124-r2-5462/` exists only in `lisa.lab` (`Handoff-Report.md` §2).
   - **The pause still held** when checked at 18:00Z: no writer, and no pending pause in the guard.
+  - **The owner's decisions after the first handoff (2026-11-26):**
+    - The run directory isn't copied, so `Handoff.md` was made self-contained. Its §7 rebuilds the frozen R1 artifacts, the Apple type-check, the quota tools and the regression harnesses.
+    - The new environment's permissions are the same as here, except the build-output removal override (§7).
+    - The owner commits the preferred owner test results before the next agent starts (`Handoff.md` §8).
 - **Paused (the seventh pause, quota), 2026-11-26T03:29Z,** at `54c4699` with a clean tree, after M3-6b's steps 2 to 3b-ii's first part (§9).
   - **The reading:** 80% at 03:28:47Z (reading `866b0f5c68f4`), with the reset at 05:29:59Z.
   - **Not resumed automatically:** this session runs as a background job outside the guard's bound lineage (§5), so the guard rejects its pause. **The owner resumes it manually after 05:30Z.**
@@ -289,6 +293,10 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **Build output (owner, 2026-11-25):** regenerable build output may be removed, inside the run directory too, now and later. Each report states the override, the deleted files and the recovery steps.
 - **The replica's ballast (owner, 2026-11-25):** it may be released to open the replica at launch (D-61), with the same reporting.
 - **Kept by the owner:** the host, accounts, image publication, production deployment, real-data cutover, the Apple Developer account, every live provider action and every device session.
+- **The new environment (owner, 2026-11-26):** "The new environment permission will be the same as the current permission, except the regenerable file removing overriding."
+  - **Everything above carries over,** except the build-output removal of 2026-11-25. With it gone, plan §10.2's no-removal rule holds again for build output.
+  - **The replica's ballast release (D-61)** is implemented behaviour, and it stays.
+  - The list is in `Handoff.md` §3.
 
 ## 8. Last buildable checkpoint
 
