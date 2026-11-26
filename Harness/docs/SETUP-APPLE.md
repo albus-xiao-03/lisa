@@ -6,7 +6,7 @@ X1 runs the proof-only app **Lisa Proof** (scheme `LisaProof`, `Apps/Proof`) on 
 - **E-1:** whether each device can fetch a public URL safely with Core unavailable.
 - **E-2:** whether the portable modules build for each Apple platform.
 
-Lisa Proof never ships, uses only synthetic identities, and shows a permanent PROOF ONLY banner. Nothing in it has been built or run by Claude; X1 is its first Apple build.
+Lisa Proof never ships, uses only synthetic identities, and shows a permanent PROOF ONLY banner. Claude has no Apple SDK: it type-checks the whole target on Linux against stand-ins for the Apple frameworks (`docs/DECISIONS.md` D-70), but has never built or run it. X1 is its first Apple build. Attempt 1 (2026-11-26) stopped at a compiler failure that the fix in `f03cf24` removes.
 
 ## 1. Prerequisites
 
@@ -23,6 +23,10 @@ xcodebuild -scheme LisaProof -destination 'platform=macOS' LISA_PROOF_COMMIT=$(g
 xcodebuild -scheme LisaProof -destination 'platform=iOS,id=<iPhone UDID>' LISA_PROOF_COMMIT=$(git rev-parse HEAD) build 2>&1 | tee ~/LisaVerify/x1-build-iphone.log
 xcodebuild -scheme LisaProof -destination 'platform=iOS,id=<iPad UDID>' LISA_PROOF_COMMIT=$(git rev-parse HEAD) build 2>&1 | tee ~/LisaVerify/x1-build-ipad.log
 ```
+
+**If a build fails,** send:
+- the output of `xcodebuild -version`;
+- every error, with file and line: the `x1-build-*.log` above, or Xcode's Issue navigator (Report navigator › the build › "All Messages"). Every error, not only the first, so one fix covers them all.
 
 Install and launch the app on each device from Xcode (Product › Run), or with `xcrun devicectl device install app`. Then check the signed products:
 
