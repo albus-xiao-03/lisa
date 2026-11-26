@@ -1536,3 +1536,36 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Its changes from v24:** harness v45 is added, and v43 is replaced by v46. v46 is v43's tests with a permitted key, `planning.bufferMinutes`, where two devices set `delivery.emailEnabled`, which Core now refuses.
   - **Generator v25** is kept, never run. It would have written its runner over the existing `run-regressions-v25.sh`.
 - **Result: PASS** for the first part. Next, M3-6b step 3b (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, third step, second part: administrative holds (plan §8.12.2; R2-TRUST-05; `docs/DECISIONS.md` D-75)
+
+- **Code** (`9b09007` → `e920b58`, then `40ec2d7` → `1621ecb`):
+  - **`LegacyDecisionToken`** (LisaTrust): the decision key and the `LR-` token.
+  - **Schema v12:** the waiting parent's request bytes, and `core_legacy_holds`.
+  - **The frame** keeps a conversion that reached a hold, with hold generation 1. `legacyHolds()` lists every hold, each token at its unique length, and `legacyRequestBody` returns the kept bytes.
+  - **The preference route:** in owner scope, an administrative key that passes R1's checks holds the request.
+  - **The router:** the unrecorded 503, rendered as R1 renders one.
+  - **`LegacyPreferenceAnswers`:** R1's request and answer bytes, shared by the router and the coming `resolve`.
+- **Full build and R1 suite:**
+  - at `e920b58`: `m3/suite-after-holds-20261126T030554Z/`, 0 warnings, 0 errors, 376/66;
+  - after the follow-up: `m3/suite-after-preference-answers-20261126T031143Z/`, 0 warnings, 0 errors, 376/66.
+
+  Lint is clean on the changed files, apart from R1's own `Package.swift` line.
+- **Harnesses:** each passes on its first build.
+  - **`m3/harness-v47/`, 12/12** (`m3/harness-v47-test-20261126T030516Z.log`). It holds v45's tests, with v45's case of an administrative key failing the conversion replaced by the hold, plus the hold's rules.
+  - **`m3/harness-v48/`, 12/12** (`m3/harness-v48-test-20261126T031128Z.log`). It is v47 with the hold's first 503 compared with its retry's.
+- **Cases:**
+  - **An owner-scope request** with an ordinary key, then `delivery.emailEnabled`, an ordinary key and `delivery.callsEnabled`:
+    - R1's 503 `unavailable`, `retryAfterSeconds: 300`, with the review message;
+    - dispositions `applied`, `held_for_administrative_review`, `pending_behind_review`, `pending_behind_review`;
+    - only the first change in R1's records and in the served partition;
+    - one hold: index 1, generation 1, waiting, its decision key and an 11-character token as derived;
+    - the original bytes kept.
+  - **A retry with the same bytes** gets the same 503, headers and body alike, `Retry-After: 300` included, and changes nothing. Other bytes under the request ID get 422.
+  - **The decision key and token** against Python's `hashlib` and `base64.b32encode`, for generations 1 and 2, with the typed forms: lower case accepted, too short, outside the alphabet, the wrong prefix.
+  - **An invalid administrative value** (`delivery.approvedPhoneNumber` set to "12") is R1's 400 at once on both hosts, with R2's template. The earlier change is kept and nothing holds.
+  - **Every case of harness v45** passes unchanged.
+- **Regressions:**
+  - **Package v27** (`m2/make-regressions-v27.py`, v26 with harness v45 replaced by v47; runner `m2/run-regressions-v28.sh`) passes all 29 targets, v35 and v47 too (`m2/regressions-run-20261126T030608Z/summary.txt`).
+  - **Package v28** (v27 with v47 replaced by v48; runner `m2/run-regressions-v29.sh`) passes all 29 targets, v35 and v47 too (`m2/regressions-run-20261126T031158Z/summary.txt`). 20.0 GB were free.
+- **Result: PASS** for holds. Next, `resolve` (`R2-CHECKPOINT.md` §11).
