@@ -45,7 +45,8 @@ extension CoreLedger {
                     operation: try SignedOperation(
                         body: try CoreColumns.bytes(row[3]), signature: try CoreColumns.bytes(row[4])),
                     decision: decision,
-                    observedHorizon: try CoreTaskFold.resolvedHorizon(epoch: row[5], position: row[6]))
+                    observedHorizon: try CoreTaskFold.resolvedHorizon(
+                        epoch: row[5], position: row[6], partition: try CoreColumns.text(row[2])))
             }
             return (epoch, cut, entries)
         }
