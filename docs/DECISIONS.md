@@ -1237,3 +1237,36 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Used by** the router now. The administrative terminal's `resolve` will continue a held request from its kept bytes with the same code, so a request decided after a hold gets the bytes it would have got at once.
 - **Next** (M3-6b step 3b-ii): `resolve` with its replay, stale-token and decision rules; the content-free refusal guard (§8.14.8); `lisa core legacy review` and `resolve`. Restricted siblings are step 3c.
 - **Shown by** M3 harness v47, 12/12 on its first build. It holds v45's tests, with v45's case of an administrative key failing the conversion replaced by the hold. Harness v48 adds the two 503s compared, `Retry-After` included, 12/12. Regression packages v27 and v28 pass (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step, second part).
+
+## D-76 — Administrative decisions: `resolve`'s lookup and replay rules, the refusal with R1's 403 and its guard, and why `apply` waits for restricted siblings (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2, §8.14.8)
+
+- **The frame,** `CoreLedger.legacyResolve(token:action:actor:retentionDays:_:)`, runs in one write transaction:
+  1. **The typed token** is `LR-` and 8–52 base32 characters (D-75). Anything else: "<token> isn't a decision token."
+  2. **Matching** is by prefix over every hold Core issued, waiting or decided.
+     - No match: "LR-… doesn't name a waiting change."
+     - Two or more: refused, naming each match's scope, request ID and its token 4 characters longer.
+  3. **A decided hold replays:**
+     - the same action returns its recorded outcome;
+     - the other action gets "Already decided: applied|refused by LR-… at <ISO 8601 time>; nothing changed."
+  4. **A waiting hold** must be its parent's latest generation, with the parent waiting. Otherwise: "LR-… doesn't name a waiting change." Naming the change that does wait, as §8.12.2's message does, comes with the CLI's review listing.
+  5. **The route decides,** and the frame writes:
+     - the children it moved;
+     - the decision record on the hold: a random 128-bit decision ID, the action, the actor, the time and the outcome text;
+     - a hold at generation + 1 for a child the decision leaves held;
+     - on completion, the parent's answer: the state `complete`, the status, body and expiry, and the request bytes cleared.
+- **Refuse** (`LegacyPreferenceRoutes.decide`):
+  - **Dispositions:** the held child is `refused`, and every later one `not_reached`.
+  - **The answer:** R1's 403 shape, `forbidden`, "This setting can be changed only on the administrative terminal.", recorded as the request's answer.
+  - **The outcome text:** "Refused change i of n of request R; k later changes not applied."
+- **The refusal guard** (§8.14.8; `core_legacy_refusal_guards`, schema v13):
+  - **Holds** the scope, the request ID, the original fingerprint, the 403's status and bytes, and the time.
+  - **Content-free,** and kept for the dataset's life.
+  - **The lookup** consults it once the parent's body has expired. So the same request is answered with the 403 and never run again.
+- **`apply` waits for restricted siblings** (M3-6b step 3c).
+  - Applying an administrative key takes its value into the ledger, and D-74 restricts administrative keys to Core.
+  - Until step 3c keeps such children off replicas, with a Core-only partition and redacted receipts, `apply` fails with the restricted-sibling error and moves nothing.
+- **Not yet:**
+  - "with the authority of that decision" recorded with the applied child;
+  - R1's domain changes after an apply;
+  - `lisa core legacy review` and `resolve` in the CLI.
+- **Shown by** M3 harness v49, 14/14 on its first build: v48's tests unchanged, plus a refusal with its replays and guard, and tokens that move nothing. Regression package v29 passes (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step, third part).
