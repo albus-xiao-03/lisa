@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T03:00Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T03:15Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -25,9 +25,10 @@
 - **M3-6b begun (2026-11-26):**
   - the preference operations, the key's entity and its register merge (D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7);
   - preferences at Core and on a replica (`f404e2c`–`44cb3ed`; harness v43, 5/5);
-  - step 3a: R1's `PATCH /v1/preferences` through the converter, and Core's refusal of a device's change to an administrative key (D-74; `aa0ec19`–`8313d30`; harness v45, 10/10).
+  - step 3a: R1's `PATCH /v1/preferences` through the converter, and Core's refusal of a device's change to an administrative key (D-74; `aa0ec19`–`8313d30`; harness v45, 10/10);
+  - step 3b-i: administrative holds, with decision keys and tokens (D-75; `9b09007`–`1621ecb`; harnesses v47 and v48, 12/12).
 
-  Next: step 3b, administrative holds and restricted siblings (§11).
+  Next: step 3b-ii, `resolve` (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -86,6 +87,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - M3-6b's preference model: `95d3e55` → `fc1c17f` (LisaSyncProtocol, LisaTrust, LisaMerge, one file each), then D-73, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6b's preferences at Core and on a replica: `f404e2c` → `44cb3ed` (LisaMerge one file, LisaCoreLedger five, LisaReplicaStore two), then `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6b's converted `PATCH /v1/preferences` (step 3a): `aa0ec19` → `8313d30` (LisaOwnerData one file, `Package.swift`, LisaCoreLedger three, LisaSyncProtocol one, LisaLegacyRequests two, LisaAPI one), then D-74, `docs/SYNC-PROTOCOL.md`, `docs/REQUIREMENTS-MATRIX.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's administrative holds (step 3b-i): `9b09007` → `e920b58` (LisaTrust, LisaStore, LisaCoreLedger, LisaLegacyRequests and LisaAPI, one file each), then `40ec2d7` → `1621ecb` (`Package.swift`, LisaLegacyRequests one file, LisaAPI one), then D-75, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -265,7 +267,14 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`8313d30`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6b step 3a's converted `PATCH /v1/preferences`, D-74):
+**`1621ecb`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6b step 3b-i's holds with the shared answers, D-75):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-answers-20261126T031143Z/`). Lint is clean on the changed files, apart from R1's own `Package.swift` line.
+- **Harness:** M3 harness v48 passes 12/12.
+- **Regressions:** regression package v28 (`m2/run-regressions-v29.sh`, run `m2/regressions-run-20261126T031158Z/`) passes all 29 targets, and v35 and v47 pass too.
+- **Before it, `e920b58`**, holds alone: the suite at `m3/suite-after-holds-20261126T030554Z/`, harness v47 12/12 and regression package v27, all passing.
+- **The spans:** `9b09007` to `e920b58`, then `40ec2d7` to `1621ecb`. The commits are ordered so that each one builds, but the build was checked only at each span's end.
+
+Before it, **`8313d30`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6b step 3a's converted `PATCH /v1/preferences`, D-74):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-conversion-20261126T025433Z/`). It was built from the working tree, which held the span's final content uncommitted. Lint is clean on the nine changed files, apart from R1's own `Package.swift` line.
 - **Harness:** M3 harness v45 passes 10/10.
 - **Regressions:** regression package v26 (`m2/run-regressions-v27.sh`, run `m2/regressions-run-20261126T025545Z/`) passes all 29 targets, and v35 and v47 pass too.
@@ -495,24 +504,30 @@ No live action or external submission has been requested or performed in this ru
           - **Restricted keys** take the narrower reading of §8.17's "permitted": every administrative key, not only the model settings, plus unsupported keys.
           - **A blind change also observes something:** every converted preference child observes R1's record as Core found it.
           - **Core refuses a device's operation** on an administrative or unsupported key, or with an invalid value (R2-TRUST-05). Step 2 had accepted them.
-        - **Now, the exact next action, step 3b:** holds and restricted siblings, for which the conversion now fails with a 500 and keeps nothing.
-          - **Holds** (§8.12.2 "Administrative children wait"):
-            - An owner-scope request that reaches an administrative key holds there, after R1's own checks. The held child is `held_for_administrative_review` and the later children `pending_behind_review`.
-            - The parent is `awaiting_administrative_review` with hold generation 1, and the caller gets the unrecorded 503.
-            - `legacyConvert` must commit such a conversion although its 503 isn't recordable.
-          - **The decision key:** `SHA-256("lisa-legacy-decision-v1" ‖ 0x00 ‖ dataset ‖ 0x00 ‖ scope ‖ 0x00 ‖ requestID ‖ 0x00 ‖ childID ‖ 0x00 ‖ holdGeneration)`, stored under a unique index for every hold ever issued.
-            - **The token** is `LR-` plus the first 40 bits in base32.
-            - **To decide as D-75:** the encodings (raw 16-byte IDs, UTF-8 text, the generation's form) and the base32 alphabet and case.
-            - **Lookup:** a prefix of at least 40 bits, over all holds, waiting or decided. Two or more matches are refused, naming each.
-          - **`lisa core legacy review` and `resolve <token> apply|refuse`:** a new `lisa core` group in LisaCLI.
-            - **First:** read how M3-5d keeps Core's signing key and how a CLI process opens the ledger.
-            - **Resolve's three cases:** replay of a decided token; stale or ambiguous tokens refused; the decision.
-            - **The decision:** apply goes on in order up to the next administrative key, which holds again at generation + 1. Refuse records R1's 403 ("This setting can be changed only on the administrative terminal."), leaves the rest `not_reached`, and writes §8.14.8's content-free refusal guard.
-          - **Restricted siblings** (possibly step 3c):
-            - Children on restricted keys are taken in at Core but never served.
-            - Only a Core-signed redacted receipt `{childID, index, disposition, commitPosition, opaqueCommitment}` replicates, with the 32-byte salt kept at Core.
-            - Their partition or record kind needs a decision.
-          - **Tests:** S-03's replay-safe decisions (changes 3 and 5 of 7 administrative; a lost reply; a restart; the stale, mistyped and ambiguous tokens; refuse and apply), and §8.12.2's restricted-sibling case (`model.endpoint` between two permitted keys, the relayed bytes searched for the canary).
+        - **Step 3b-i done** (2026-11-26; D-75; `9b09007`–`e920b58`, then `40ec2d7`–`1621ecb`):
+          - Holds in owner scope: the waiting parent, schema v12, decision keys and `LR-` tokens, `legacyHolds()`, and the unrecorded 503 with `Retry-After`.
+          - R1's request and answer bytes now live in `LegacyPreferenceAnswers`, for the router and `resolve` alike.
+          - Evidence: harness v47 12/12, then v48; the suite; regressions v27 and v28.
+        - **Now, the exact next action, step 3b-ii:** `resolve`, the refusal guard, then the CLI.
+          - **The frame,** `CoreLedger.legacyResolve(token:action:actor:decide:)` in one write transaction:
+            1. **Parse:** `LegacyDecisionToken.typedPrefix`. Anything else is refused as not a decision token.
+            2. **Match** every hold whose `token` starts with the prefix, waiting or decided. None: "LR-… doesn't name a waiting change." Two or more: refused, naming each match's scope, request ID and a longer token.
+            3. **A decided match replays:** the same action returns the recorded outcome. Another action gets "Already decided: <action> by LR-… at <time>; nothing changed."
+            4. **A waiting match** must be its parent's latest generation, with the parent `awaiting_administrative_review`. Otherwise it is refused, naming the waiting change and its token.
+            5. **Decide:** the route's closure gets a `LegacyTransaction` and the hold's context: scope, request ID, fingerprint, the kept body, the held index and the generation.
+            6. **What the frame writes:** the dispositions it returns (`UPDATE core_legacy_children`); the decision record on the hold row (a random decision ID, action, actor, time, outcome text); a new hold at generation + 1 if it reaches one; and on completion the parent `complete`, with status, body, expiry and `completed_at`, and `request_body` cleared.
+          - **The route's side,** `LegacyPreferenceRoutes.resolve`:
+            - It re-reads the kept body through `requested`. The children are a pure function of the request, so the plan is rebuilt with the same IDs.
+            - **apply:** R1's state-dependent checks run again for the held change: the revision for a set, the record for a confirm or delete. A refusal now is R1's 409 or 404 template. Then the change is taken in, projected and audited, and the suffix is decided by the same loop as `update`, factored out of it, up to the next administrative key or the end.
+            - **refuse:** the held child is `refused`, the rest `not_reached`. The answer is R1's 403 shape, `forbidden`: "This setting can be changed only on the administrative terminal."
+          - **The refusal guard** (§8.14.8), schema v13: `core_legacy_refusal_guards(scope, request_id, fingerprint, status, body, created_at)`. It is content-free and never expires. The lookup consults it before a parent's body expiry, so the 403 replays for the dataset's life.
+          - **"With the authority of that decision":** record the decision ID with the applied child, on Core's legacy child row or the hold's record. A receipt field would change the receipt format, so it is open until decided (D-76).
+          - **Then the CLI:** `lisa core legacy review` and `resolve`. First read how a CLI process opens Core's ledger with its signing key: `LisaHost` doesn't open one yet, and M3-5d's key custody isn't wired to the host.
+          - **Tests (S-03):** changes 3 and 5 of 7 administrative; resolve `LR-a` apply, with its reply lost and the command run again after a reopen of the store; `LR-a refuse` answering "Already decided"; a mistyped token; `LR-b apply` to the end, with the recorded full list; then the refuse run, with R1's 403 recorded, 6 and 7 `not_reached`, and the guard replaying after the body's expiry.
+        - **Then, step 3c:** restricted siblings.
+          - Children on restricted keys are taken in at Core but never served.
+          - Only a Core-signed redacted receipt `{childID, index, disposition, commitPosition, opaqueCommitment}` replicates, with the 32-byte salt kept at Core. Its partition or record kind needs a decision.
+          - The test: `model.endpoint` with a canary URL between two permitted keys, and the relayed bytes searched for the canary.
         - **Step 3 as designed** (2026-11-26, about 02:31Z), for the record:
           - **R1's semantics** (read 2026-11-26, about 02:31Z):
             - `SettingsHandlers.updatePreferences`: 1–50 changes, or 400 "send between 1 and 50 changes". Each change in order is a `set` (a value), a `confirm` (`confirm: true`) or a delete (neither). The first error stops the request, and the success body is the full preference list.
