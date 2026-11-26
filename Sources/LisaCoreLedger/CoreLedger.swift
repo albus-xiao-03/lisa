@@ -248,6 +248,11 @@ public final class CoreLedger: Sendable {
         _ envelope: OperationEnvelope, digest: Digest256, epoch: Identifier128, time: Int64, session: SQLiteSession,
         records: any RecordWriting, project: Bool = true
     ) throws -> SignedCoreReceipt {
+        if envelope.entityType == PreferenceEntity.entityType {
+            return try applyPreference(
+                envelope, digest: digest, epoch: epoch, time: time, session: session, records: records,
+                project: project)
+        }
         let payload = try ItemOperationPayload(operationType: envelope.operationType, payload: envelope.payload)
         var isCreation = false
         if case .taskCreate = payload { isCreation = true }
@@ -290,6 +295,40 @@ public final class CoreLedger: Sendable {
         try Self.logChange(
             position, envelope.operationID, decision: conflict ? .acceptedWithConflict : .accepted, epoch: epoch,
             partition: CoreTaskFold.partition, in: session)
+        let receipt = try sign(
+            try CoreReceipt(
+                datasetID: datasetID, epochID: epoch, operationID: envelope.operationID, digest: digest,
+                outcome: conflict ? .acceptedWithConflict : .accepted, position: position))
+        try CoreOperationRecords.setReceipt(envelope.operationID, receipt, in: session)
+        try CoreCausalTables.decide(envelope.operationID, .applied, in: session)
+        return receipt
+    }
+
+    /// Applies a ready preference operation (D-73). A key needs no creation: the merge, the projection into R1's record,
+    /// the change log in `preferences`, and the final receipt.
+    private func applyPreference(
+        _ envelope: OperationEnvelope, digest: Digest256, epoch: Identifier128, time: Int64, session: SQLiteSession,
+        records: any RecordWriting, project: Bool
+    ) throws -> SignedCoreReceipt {
+        let position = try Self.nextPosition(in: session)
+        try CoreOperationRecords.decide(
+            envelope.operationID, state: "accepted", reason: nil, position: position, in: session)
+        try CoreOperationRecords.resolveObservedRevision(of: envelope, in: session)
+        let folded = try CorePreferenceFold.view(envelope.entityID, in: session)
+        let conflict = folded?.view.isConflict ?? false
+        if conflict {
+            try CoreOperationRecords.decide(
+                envelope.operationID, state: "accepted_with_conflict", reason: nil, position: position, in: session)
+        }
+        if project, let folded {
+            let revision = try PreferenceProjection.project(
+                folded.view, key: folded.key, commitTime: Date(timeIntervalSince1970: Double(time) / 1_000),
+                into: records)
+            try TaskProjection.recordRevision(revision, of: envelope.entityID, at: position, in: session)
+        }
+        try Self.logChange(
+            position, envelope.operationID, decision: conflict ? .acceptedWithConflict : .accepted, epoch: epoch,
+            partition: CorePreferenceFold.partition, in: session)
         let receipt = try sign(
             try CoreReceipt(
                 datasetID: datasetID, epochID: epoch, operationID: envelope.operationID, digest: digest,
@@ -405,7 +444,8 @@ public final class CoreLedger: Sendable {
                             body: try CoreColumns.bytes(row[2]), signature: try CoreColumns.bytes(row[3])),
                         decision: decision,
                         observedHorizon: decision == .rejected
-                            ? nil : try CoreTaskFold.resolvedHorizon(epoch: row[4], position: row[5]))
+                            ? nil
+                            : try CoreTaskFold.resolvedHorizon(epoch: row[4], position: row[5], partition: partition))
                 }
                 return try ChangePage(
                     datasetID: datasetID, epochID: epoch, partitions: [partition], fromPosition: position,
@@ -426,19 +466,35 @@ public final class CoreLedger: Sendable {
         try read { session, _ in try CoreTaskFold.view(entityID, in: session) }
     }
 
+    /// The canonical merge view of a preference key at Core (D-73).
+    public func preferenceView(key: String) throws(CoreLedgerError) -> PreferenceView? {
+        try read { session, _ in try CorePreferenceFold.view(PreferenceEntity.id(forKey: key), in: session)?.view }
+    }
+
     public func securityEvents() throws(CoreLedgerError) -> [CoreSecurityEvent] {
         try read { session, _ in try CoreOperationRecords.securityEvents(in: session) }
     }
 
     // MARK: - Helpers
 
-    /// M3-1 applies the item operations of the task family to tasks.
+    /// The task family on tasks (M3-1) and the preference operations on preferences (D-73).
     static func isSupported(_ envelope: OperationEnvelope) -> Bool {
-        envelope.entityType == "task" && ItemOperationPayload.operationTypes.contains(envelope.operationType)
+        (envelope.entityType == "task" && ItemOperationPayload.operationTypes.contains(envelope.operationType))
+            || (envelope.entityType == PreferenceEntity.entityType
+                && PreferenceOperationPayload.operationTypes.contains(envelope.operationType))
     }
 
-    /// The payload's schema and the rules the replica checks too (§8.2.3, §8.3.2).
+    /// The payload's schema and the rules the replica checks too (§8.2.3, §8.3.2). A preference operation names the
+    /// entity its key derives (D-73).
     static func checkPayload(_ envelope: OperationEnvelope) throws(OperationEnvelopeError) {
+        if PreferenceOperationPayload.operationTypes.contains(envelope.operationType) {
+            let decoded = try PreferenceOperationPayload(
+                operationType: envelope.operationType, payload: envelope.payload)
+            guard envelope.entityID == PreferenceEntity.id(forKey: decoded.key) else {
+                throw .invalidField("entity.id")
+            }
+            return
+        }
         let decoded = try ItemOperationPayload(operationType: envelope.operationType, payload: envelope.payload)
         if case .conflictResolve(_, let value) = decoded {
             if let group = envelope.observed?.group {
