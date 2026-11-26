@@ -1589,3 +1589,11 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Tokens that move nothing:** one with a character changed ("doesn't name a waiting change"), one too short and one without `LR-` ("isn't a decision token"). `apply` throws and leaves the hold waiting and the 503 in place. The lower-case form of the token then decides it.
 - **Regressions:** regression package v29 (`m2/make-regressions-v29.py`, v28 with harness v48 replaced by v49; runner `m2/run-regressions-v30.sh`) passes all 29 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T031958Z/summary.txt`). 19.6 GB were free.
 - **Result: PASS** for the refusal. Next, the Core-only partition with `apply` (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, third step: the review description of a hold (plan §8.12.2; `docs/DECISIONS.md` D-76)
+
+- **Code** (`54c4699`): `LegacyPreferenceRoutes.review` shows a hold at the administrative terminal: its token, the held change's position, the request, the generation, and the key with the requested value. It is `nil` when the kept bytes don't read as a preferences request.
+- **Full build and R1 suite:** `m3/suite-after-review-20261126T032513Z/`, 0 warnings, 0 errors, 376/66. Lint is clean on the changed file.
+- **Harness:** `m3/harness-v50/`, 15/15 on its first build (`m3/harness-v50-test-20261126T032458Z.log`). It holds v49's tests unchanged, plus one case. A hold on `delivery.approvedEmailAddresses` reads "<token>: change 2 of 2 of owner request prefs-1001, generation 1: set delivery.approvedEmailAddresses to owner@example.com", and bytes that aren't such a request give `nil`.
+- **Regressions:** regression package v30 (`m2/make-regressions-v30.py`, v29 with harness v49 replaced by v50; runner `m2/run-regressions-v31.sh`) passes all 29 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T032524Z/summary.txt`). 19.3 GB were free.
+- **Result: PASS.**
