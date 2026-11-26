@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T00:42Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T01:35Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -20,12 +20,20 @@
 
   Serving the resolved horizon to replicas is next (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
-- **Not resumed (environment event, §5):**
+- **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
   - The VM then stopped at about 17:26Z and booted again at 17:32Z. The guard didn't survive the restart.
   - Nothing was lost.
-  - The pause is still pending and the guard isn't running. Resuming waits for the owner's approval.
 - **X1, recorded 2026-11-26** (the owner said this was not a resume): **`FAIL` at the first Xcode build of `LisaProof`.** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130` (§6). Recorded by session `d53fb9c3-…` under lease `interactive:312`, which didn't consume the pause.
+- **Resumed (the seventh resume, manual, 2026-11-26T01:04Z),** after the owner approved resuming:
+  - It runs in the interactive session `d53fb9c3-…`, pid 312, which holds the lease `interactive:312` and consumed `P-20261125T122450Z-9de75e`.
+  - The guard was restarted as pid 17963.
+  - First, X1 attempt 2:
+    - the failure reproduced on Linux;
+    - the fix (`f03cf24`) and a key-path binding hedge (`0528fc3`–`795b4f3`);
+    - the whole `LisaProof` target type-checked on Linux against framework stand-ins (D-70);
+    - X1 requested again (§6).
+  - Next: M3-6a's replica side (§11).
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
@@ -59,7 +67,11 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 - **Commits since the 09:45Z pause:** the nearby frame header and hello form `c096983`–`c69586c`; D-54 `27769d1`; `Apps/Config` and `Apps/Proof` `bc11c09`–`559f4bb` (69 files, then `Apps/project.yml`); `docs/SYNC-PROTOCOL.md` `3079aa3`; the harness `8e58552`–`d0a9e53` (`LisaVerifyKit`, `LisaVerifyCases`, `LisaVerifyServers`, `lisa-verify`, `Harness/` documents and configuration example, `Apps/OwnerVerification`, test plan X1, the `LisaProof` scheme, each span ending in `Package.swift` or its last file); `docs/SETUP-APPLE.md` §9; `docs/REQUIREMENTS-MATRIX.md` `260a582`; then `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Commits since the M1 boundary:** D-55 `ce68f1a`; the WAL guard `c9fed41` (`LisaSQLite`, four files); `28ef7c8`; `LisaMerge` (eight files, then `Package.swift` `72797e1`); `CausalRelease` `386a738`; `6ccfa10`; `docs/CONFLICTS.md` `5b6e0e7`; `d31a943` (this file at the second pause).
 - **Commits since the resume at 20:33Z:** the observed set's canonical form `ef9f546`; `LisaReplicaStore`'s first span `5ddd7d2` → `3ee84a0` (28 files); D-56 `528f236`; `Package.swift` `818fe3c`; `docs/VERIFICATION-SCENARIOS.md` M2-3 `742675f`; `4bb6f35` (this file); the reader monitor and capture path `5d9a9c6` → `0aac9d1` (`LisaSQLite` six files, `LisaReplicaStore` three); M2-4 `3455908`; `40ea1b7` (this file); the item payload schemas `57c50b0` → `75326ea` (LisaSyncProtocol, five files), `TaskMergeState` `f093e69` → `8e0e73b` (LisaMerge, three), the store's payload checks `4e0c1e3`; `docs/SYNC-PROTOCOL.md` `43b5369`; `docs/CONFLICTS.md` `fae2ba7`; M2-5 `446c87e`; `6d9f637` (this file); the effective view and persisted causal release `83791b1` → `09cf01a`; M2-6 `76c54e4`; `6af003f` (this file); `LisaLocalSearch` `8b5cb7e` → `cd37d4f` (with D-57 `703e64f`); M2-7 `358406a`; `fb68439` (this file); resolution groups and the advisory note limit `9c88032` → `3fb9b7f`; `docs/SYNC-PROTOCOL.md` `c606ac5`; M2-8 `9b10d32`; `9bfd698` (this file); the monotonic clock `6279859` → `437ca91` (LisaTime, four files); M2-9 and `4fd1ab5` (this file); change pages and partition cursors `839e52e` → `8afac3b` (LisaSyncProtocol three files, LisaTrust two, LisaReplicaStore six); `docs/SYNC-PROTOCOL.md` §8a `e141742`; M2-10 `1f71f1b`; `e3b41ef` (this file); the staged snapshot installation `23a56b9` → `ab0f695`; `docs/SYNC-PROTOCOL.md` §8b `4678165`; M2-11 `f7e1d75`; `eaba8d5` (this file); the reserve checks on non-capture writes `e06c79f` → `177763a`; M2-12 `18c0517`; `c070e9e` (this file); calendar buckets `e1309be` → `e838a98` (LisaSyncProtocol four files, LisaReplicaStore six); `docs/SYNC-PROTOCOL.md` §8a `a84c29e`; M2-13 `f481535`; `0bbb15f` (this file); repairs by generation `07bd0b9` → `799a16f`; `docs/SYNC-PROTOCOL.md` `209059f`; M2-14 `7b3514f`; `391b042` (this file); the planning zone `38410d9` → `c5b5cb1`; `docs/SYNC-PROTOCOL.md` `a040b78`; M2-15 `eb77d92`; `9b9a74d` (this file); derived records in full snapshots `e563114`; M2-16 `409a083`; `642e955` (this file); the M2-17 record `7cf49b4`; revocations `4290ee5` → `9286c07` (LisaReplicaStore, seven files), `docs/SYNC-PROTOCOL.md` §8c `67e0720`, M2-18 `5c84013`; peer custody `7a5405a` → `79e44f1` (LisaSyncProtocol one file, LisaTrust two, LisaReplicaStore three), `docs/SYNC-PROTOCOL.md` `94358e8`, M2-19 `a19d7dc`; the duplicate rules against canonical state (LisaReplicaStore, five files, ending `cdced83`), `docs/SYNC-PROTOCOL.md` §8 and M2-20; then this file.
-- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`). None is committed; none is removed or overwritten.
+- **Commits on 2026-11-26:**
+  - the X1 record: `b86d272`, `ee98b23`, `8ba308e`;
+  - X1 attempt 2: the fix `f03cf24`, then the key-path bindings `0528fc3` → `795b4f3` (`ProofModel`, then the two views);
+  - then D-70, `docs/VERIFICATION-SCENARIOS.md` M1-8b, `Harness/docs/SETUP-APPLE.md`, `docs/REQUIREMENTS-MATRIX.md` and this file.
+- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
 
@@ -110,7 +122,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Rootless engine evidence for G2: UID/GID mapping, secret access | `NOT_RUN_ENVIRONMENT` (Claude; this engine is rootful). Genuine rootless amd64 evidence is still required |
 | arm64 | `NOT_RUN_ENVIRONMENT` (Claude; no arm64 environment); R1's historical results only |
 | SELinux, VPN and off-VPN reachability over IPv4 and IPv6, D05 | The owner's, on the target host; pending M4 |
-| X1: `Apps/Proof`, N-1, E-1, E-2 | **`FAIL`** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". Every X1 case waits for a fixed build (§6) |
+| X1: `Apps/Proof`, N-1, E-1, E-2 | **`FAIL`** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". **Attempt 2 requested** at `795b4f3` (§6). Every X1 case waits for the owner's results |
 | Apple builds and devices (X2–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
@@ -134,6 +146,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
   - HEAD was `dc86f0a` before the X1 record.
   - A fresh reading (`791f946832fc`) showed 0% used, next reset 05:30:00Z.
   - The lease `interactive:312` was taken without `--consume-pauses` for the X1 record and released afterwards.
+  - The owner then approved resuming. The seventh resume started at 01:04Z (§9).
 - **Weakness found:** the guard tells no one while its readings keep failing. It disarms only after 48 failed readings, about 11 hours with its backoff. Proposed to the owner: a visible notice after three consecutive failed readings.
 
 **Process deviation, recorded (2026-11-26, about 00:35Z, Git):** while finding where X1 results are recorded, this session ran `git ls-files` once, piped into `grep`. It is read-only and changed nothing, but it is outside plan §3's allowed set. Searches use `grep -r` over the tree instead.
@@ -210,6 +223,19 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
   3. Commit, and request X1 again, naming the new commit.
 
   The Xcode version and any other errors in the build log would help.
+
+**X1 attempt 2 is requested (2026-11-26T01:35Z)** at commit `795b4f3` or later.
+- **Unchanged:** the entry point, sheet and cases, as above.
+- **What changed:**
+  - The fix for line 130 (`f03cf24`).
+  - The proof views' three `Binding(get:set:)` closures became key-path bindings (`0528fc3`–`795b4f3`). They compile whichever way the SDK annotates those closures.
+- **What was checked:** the whole target type-checks on Linux (Swift 6.4.2 and 6.4.3) against framework stand-ins.
+  - The iOS-like and macOS-like passes: 0 errors, 0 warnings.
+  - The baseline with the old file: exactly attempt 1's error.
+  - Six negative controls: all caught.
+  - Details: `docs/VERIFICATION-SCENARIOS.md` M1-8b.
+- **Still unknown:** the real SDK may differ from a stand-in, and Xcode's Swift may be older than 6.4.
+- **If the build fails again,** send the output of `xcodebuild -version` and every error with its file and line (the sheet's §2 now says how), so one fix covers them all.
 
 ## 7. Permissions in force
 
@@ -298,15 +324,23 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
   - **Work:** M3-5d's signing-key and device key rotation, then M3-6a up to Core's observed horizons, from 10% to about 85%. The context was compacted once, at about 12:10Z.
   - **The cost:** 61 points in 45 minutes with the long context before the compaction (11:24Z–12:09Z), and about 8 points for the whole observed-horizon step after it (12:12Z–12:22Z: code, build, suite, two harness versions, regression v18 and the records).
   - **The pause:** at about 12:26Z for quota, with the exact next action in §11. It is recorded with `guardctl-v2 pause`; the pause note and the final reading are named in the guard's `pause_recorded` event. The launch wrapper releases writer.lock when this session exits.
+- **The seventh resume (2026-11-26T01:04Z, manual):**
+  - **Why manual:** the sixth pause wasn't resumed by the guard (§5: failed readings from 16:23Z, then the VM restart). The owner asked for a report, then approved resuming.
+  - **The steps:**
+    - a fresh reading at 01:04:19Z: `12ad2fa98961`, 4% used, next reset 05:30:00Z;
+    - the lease `interactive:312` (holder pid 17960) with `--consume-pauses`, which consumed `P-20261125T122450Z-9de75e`;
+    - the guard restarted (pid 17963) with no pending pause;
+    - the watchdog at 85% (`watchdog_v1.py --threshold 85 --max-hours 5`, a background task).
+  - **Why this session:** the resume runs here, in the owner's interactive session, not as a forked resume of `38d24e96-…`. Its first work, X1 attempt 2, had been analyzed in this session.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
 
-No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only. It involves no account, provider or real action, so the action ledger records none. Its first attempt failed at the build (reported 2026-11-26), before any device ran.
+No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only. It involves no account, provider or real action, so the action ledger records none. Its first attempt failed at the build (reported 2026-11-26), before any device ran. Attempt 2 is requested at `795b4f3`.
 
 ## 11. Next steps
 
-**Proposed first step, once the owner approves resuming:** the X1 build fix and a Linux type-check of `Apps/Proof`'s Apple-importing files, then a new X1 request (§6). Then M3-6a's replica side, below.
+**Done first on resuming (2026-11-26T01:04Z–01:35Z):** the X1 build fix, the whole-target Linux type-check (D-70) and X1 attempt 2's request (§6). **Now:** M3-6a's replica side, below.
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
    1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; the receipt's vector and the replica's verifying receipt path followed in M3-3). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
