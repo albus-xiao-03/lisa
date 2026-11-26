@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T02:15Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T02:17Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -449,7 +449,23 @@ No live action or external submission has been requested or performed in this ru
             - **The plan for it:** let `LegacyTransaction.intake` defer the projection, then add an explicit `project(entity:forceRevision:)` step. The converter takes the field children in, projects once (forcing the step when R1 would), then takes the status child in, which projects itself.
           - **Mapping:** R2's `TaskFieldValue` has title, priority, deadline, estimate, splittable and confirmation; notes are their own operation family.
       - **Gap noted (2026-11-26):** `PATCH /v1/ideas/{id}` shares the task PATCH's shape in §8.12.2, but R2 has no idea payloads, merge or projection yet. `OperationCatalog` names only `idea.create`, `idea.edit` and `idea.lifecycle`. It belongs with captures (M3-6c), which create ideas.
-      - **M3-6b, the next slice:**
+      - **M3-6b, the next slice. The design for its first step** (2026-11-26T02:17Z, for D-73):
+        - **The entity:** a preference is a register per key, not an owner item.
+          - Its ID is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)`, so every device, Core and epoch agree, and R1's random record IDs don't matter.
+          - Partition `preferences`.
+        - **Payloads:**
+          - `preference.set {key, value}`. The value is `{"kind":"text","text"}`, `{"kind":"number","number":"<decimal>"}`, `{"kind":"flag","flag"}` or `{"kind":"list","list":[…]}`. A number is a decimal string, because canonical JSON is integer-only; it is finite and in its shortest round-trip form.
+          - `preference.delete {key}` and `preference.confirm {key}`.
+          - A key is a token of 1–128 bytes. Whether a key and value are supported is checked at Core, with R1's rules.
+        - **The merge:** `MultiValueRegister<value?>`, where a delete writes no value and replaces what it observed.
+          - So a later set re-creates the key, as R1's delete-then-set does. §8.3.1's dominating tombstone is for owner items, which a key isn't.
+          - A confirmation marks the model-authority candidates it observed as confirmed.
+          - The key is absent only when every survivor is a delete. Otherwise the projection shows the first surviving value in display order.
+        - **Then:**
+          - Core's fold, and the projection into R1's `Preference` record. The projection-revision map already works per entity.
+          - The replica's fold.
+          - The conversion: `change:<index>` children, R1's stop at the first refusal, holds, `review` and `resolve`, restricted siblings.
+      - **M3-6b's whole scope:**
         - **The scope:** the preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review` and `resolve` (S-03).
         - **The model it needs first:** preference operations (set, confirm and delete per key) with a per-key merge and the projection into R1's preference records; restricted siblings with redacted receipts (§8.12.2); error templates without caller text.
         - **R1's semantics to keep** (`PreferenceService`, `SettingsHandlers.updatePreferences`):
