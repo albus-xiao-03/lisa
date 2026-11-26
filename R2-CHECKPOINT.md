@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T02:23Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T02:31Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -22,7 +22,11 @@
   - R1's `PATCH /v1/tasks/{id}` through the converter (D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15, against R1's own path). It adds two protocol rules: a reopen that names nothing, and an empty notes replacement. R1's in progress and blocked are R1-only states of an open task.
 
   M3-6a's task routes are done.
-- **M3-6b begun (2026-11-26):** the preference operations, the key's entity and its register merge (D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7). Next: Core's fold and projection for preferences (§11).
+- **M3-6b begun (2026-11-26):**
+  - the preference operations, the key's entity and its register merge (D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7);
+  - preferences at Core and on a replica (`f404e2c`–`44cb3ed`; harness v43, 5/5).
+
+  Next: the conversion of `PATCH /v1/preferences` (§11).
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -79,6 +83,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - M3-6a's converted `POST /v1/tasks`: `f4879b6` → `12bd3fb` (LisaCoreLedger, LisaOwnerData, `Package.swift`, LisaLegacyRequests, LisaAPI four), then D-71, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6a's converted `PATCH /v1/tasks/{id}`: `ae0c52d` → `6cc8073` (LisaSyncProtocol one file, LisaMerge three, LisaCoreLedger two, LisaLegacyRequests one, LisaAPI two), then D-72, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6b's preference model: `95d3e55` → `fc1c17f` (LisaSyncProtocol, LisaTrust, LisaMerge, one file each), then D-73, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's preferences at Core and on a replica: `f404e2c` → `44cb3ed` (LisaMerge one file, LisaCoreLedger five, LisaReplicaStore two), then `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -256,7 +261,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`fc1c17f`** (`Sources/LisaMerge/PreferenceMergeState.swift`, M3-6b's preference model, D-73):
+**`44cb3ed`** (`Sources/LisaReplicaStore/ReplicaPreferences.swift`, M3-6b's preferences at Core and on a replica, D-73):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-ledger-20261126T022947Z/`). Lint is clean on the eight changed files.
+- **Harness:** M3 harness v43 passes 5/5.
+- **Regressions:** regression package v24 (`m2/run-regressions-v25.sh`, run `m2/regressions-run-20261126T023013Z/`) passes all 31 targets, and v35 and v47 pass too.
+- **The span:** `f404e2c` to `44cb3ed`. The build was checked at its end, not at each commit.
+
+Before it, **`fc1c17f`** (`Sources/LisaMerge/PreferenceMergeState.swift`, M3-6b's preference model, D-73):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-model-20261126T022139Z/`).
 - **Harness:** M3 harness v41 passes 7/7.
 - **Regressions:** regression package v23 (`m2/run-regressions-v24.sh`, run `m2/regressions-run-20261126T022204Z/`) passes all 27 targets, and v35 and v47 pass too.
@@ -469,7 +480,22 @@ No live action or external submission has been requested or performed in this ru
           - A confirmation marks the model-authority candidates it observed as confirmed.
           - The key is absent only when every survivor is a delete. Otherwise the projection shows the first surviving value in display order.
         - **Step 1 done** (2026-11-26; D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7): the payloads, the entity and the merge as designed.
-        - **Now, the exact next action, step 2:** Core and the replica for preferences.
+        - **Step 2 done** (2026-11-26; `f404e2c`–`44cb3ed`; harness v43, 5/5). The questions about restricted keys move to step 3.
+        - **Now, the exact next action, step 3:** the conversion of `PATCH /v1/preferences`.
+          - **R1's semantics** (read 2026-11-26, about 02:31Z):
+            - `SettingsHandlers.updatePreferences`: 1–50 changes, or 400 "send between 1 and 50 changes". Each change in order is a `set` (a value), a `confirm` (`confirm: true`) or a delete (neither). The first error stops the request, and the success body is the full preference list.
+            - `PreferenceService.set`: model and runtime principals are refused; a paired device gets 403 for a consequential key; then `validate`. A record is found by key. `expectedRevision` is checked only when it exists, else inserted. It writes value, `explicit`, confirmed and `updatedAt`, always as one revision step, then the `preference.set` audit (detail `consequential` or `ordinary`).
+            - `confirm`: only the owner or a paired device; 404 for an absent key; then `confirmed`, `updatedAt` and one revision step, with the `preference.confirmed` audit.
+            - Delete (`DeletionService`): 404 for an absent key; 403 for a consequential key unless the owner. The plan adds that a device gets 403 for any delete.
+          - **The design to record as D-74:**
+            - **Administrative keys:** R2-TRUST-05's administrative keys are R1's consequential keys (`PreferenceKey.consequential`).
+            - **Children:** `change:<index>` (set, confirm or delete), each observed at the change's `expectedRevision` if it has one.
+            - **Projection:** `LegacyTransaction` gets a per-entity preference projection with `force`, as R1's set and confirm always write, plus R1's audits.
+            - **Errors** come from templates that name positions (§8.12.2), e.g. "changes[3].key is not a supported preference".
+            - **Owner scope:** an administrative key holds the request (hold generations, decision tokens, `legacy review` and `resolve`, the 503).
+            - **Device scope:** an administrative key is refused at once (403), and the later children are `not_reached`.
+            - **Restricted siblings:** `model.endpoint`, `model.dataSharing` and unsupported keys are never replicated; only redacted receipts replicate.
+          - **The split:** 3a covers device scope and owner scope without administrative keys, with a differential harness against R1. 3b covers holds, tokens, the CLI and restricted siblings (S-03).
           - **Supported operations:** `CoreLedger.isSupported` and `checkPayload` accept `preference.*` on entity type `preference`. `checkPayload` decodes `PreferenceOperationPayload` and requires `entityID == PreferenceEntity.id(forKey:)`.
           - **`apply`:** it branches by entity type into a `CorePreferenceFold`, modeled on `CoreTaskFold` with resolved horizons. `PreferenceView.isConflict` gives `accepted_with_conflict`. The change log uses partition `preferences`.
           - **The projection** (`PreferenceProjection`) writes R1's `Preference` record: insert, update or delete by key, with origin `explicit` for owner authority and `confirmed` from the view.
