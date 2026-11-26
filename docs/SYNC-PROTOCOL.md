@@ -176,6 +176,22 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
   - `task.complete`, `task.cancel`, `item.delete`: `{}`
 - **Merged state** (`LisaMerge.TaskMergeState`, `docs/CONFLICTS.md`): one register per field, note pieces, one observed-remove set per tag, terminal actions and the tombstone.
 
+### Preference payloads (plan §8.2.3; `docs/DECISIONS.md` D-73)
+
+A preference is a register per key: entity type `preference`, partition `preferences`. The entity ID is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)`. Vectors from Python's hashlib:
+- `brief.time` → `9a1618a9b65b1a60368ae340a3ed4727`;
+- `model.endpoint` → `2a70184edc7d5c8486c4b5d12a20daf8`;
+- `planning.windows` → `3c042116161cfd01f1c7cbcf443132c5`.
+
+| Type | Payload | Rules |
+|---|---|---|
+| `preference.set` | `{"key": <key>, "value": <value>}` | `<value>` is `{"kind":"text","text"}`, `{"kind":"number","number"}`, `{"kind":"flag","flag"}` or `{"kind":"list","list":[strings]}`. A number is the shortest decimal text that reads back as the same finite value, in that one form (`0.8` → `"0.8"`, `15` → `"15.0"`). A list holds at most 256 strings |
+| `preference.delete`, `preference.confirm` | `{"key": <key>}` | — |
+
+- **A key** is 1–256 UTF-8 bytes without control characters. Whether a key and its value are supported is R1's rule, checked at Core.
+- **The size:** the payload fits the type's value budget (§8.3.3).
+- **The merge:** a set and a delete each replace the versions they observed, a delete writing no value. So a delete clears what it saw, and a later set re-creates the key. A confirmation confirms the model-authority values it observed.
+
 ## 8a. Change pages (plan §8.4.2)
 
 A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "entries", "epochID", "fromPosition", "partitions", "toPosition"}` (`ChangePage`). Core signs it raw, over `lisa-r2-change-page-v1\n` ‖ body (`ChangePageSigning`), and relays forward the exact bytes (`SignedChangePage`).
