@@ -9,6 +9,7 @@ import Foundation
 import LisaCrypto
 import LisaDomain
 import LisaMerge
+import LisaOwnerData
 import LisaPorts
 import LisaSQLite
 import LisaStore
@@ -208,6 +209,12 @@ public final class CoreLedger: Sendable {
                     envelope, digest: digest, reason: "malformed", hint: "the payload doesn't follow its schema",
                     epoch: epoch, session: session))
         }
+        if let refusal = Self.preferenceRefusal(envelope) {
+            return .receipted(
+                try reject(
+                    envelope, digest: digest, reason: refusal.reason, hint: refusal.hint, epoch: epoch,
+                    session: session))
+        }
         let origin = envelope.origin.deviceTriple?.device ?? Self.coreOrigin
         switch try CoreCausalTables.intake(
             envelope.operationID, origin: origin, dependencies: envelope.dependencies, in: session)
@@ -313,7 +320,14 @@ public final class CoreLedger: Sendable {
         let position = try Self.nextPosition(in: session)
         try CoreOperationRecords.decide(
             envelope.operationID, state: "accepted", reason: nil, position: position, in: session)
-        try CoreOperationRecords.resolveObservedRevision(of: envelope, in: session)
+        if case .coreLegacyTranslation = envelope.origin {
+            let payload = try PreferenceOperationPayload(
+                operationType: envelope.operationType, payload: envelope.payload)
+            try CoreOperationRecords.resolveFoundRecord(
+                of: envelope, key: payload.key, position: position, records: records, in: session)
+        } else {
+            try CoreOperationRecords.resolveObservedRevision(of: envelope, in: session)
+        }
         let folded = try CorePreferenceFold.view(envelope.entityID, in: session)
         let conflict = folded?.view.isConflict ?? false
         if conflict {
@@ -504,6 +518,29 @@ public final class CoreLedger: Sendable {
                 throw .invalidField("payload.value")
             }
         }
+    }
+
+    /// R2-TRUST-05 and R1's rules for a device's preference operation (D-74): a key that isn't supported, an
+    /// administrative key, which only the administrative terminal changes, or a value R1 refuses. Neither the reason nor
+    /// the hint names the key or the value. Core's legacy children follow R1's own checks in their conversion.
+    static func preferenceRefusal(_ envelope: OperationEnvelope) -> (reason: String, hint: String)? {
+        guard envelope.origin.deviceTriple != nil,
+            let payload = try? PreferenceOperationPayload(
+                operationType: envelope.operationType, payload: envelope.payload)
+        else { return nil }
+        let key = PreferenceKey(payload.key)
+        guard PreferenceRules.supported.contains(key) else {
+            return ("unsupported_key", "the key isn't a supported preference")
+        }
+        guard !PreferenceRules.isAdministrative(key) else {
+            return ("administrative_key", "this setting changes only at the administrative terminal")
+        }
+        if case .set(_, let wire) = payload {
+            guard let value = PreferenceValue(wire: wire), (try? PreferenceRules.validate(key, value)) != nil else {
+                return ("invalid_value", "the value isn't valid for this preference")
+            }
+        }
+        return nil
     }
 
     static func epoch(in session: SQLiteSession) throws -> Identifier128 {
