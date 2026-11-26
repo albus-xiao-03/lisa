@@ -1485,3 +1485,28 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Convergence:** all 720 orders of six operations (sets, a delete, a model set, a confirmation, committed and pending) give one state and one view.
 - **Regressions:** regression package v23 (`m2/make-regressions-v23.py`, v22 plus harness v41; runner `m2/run-regressions-v24.sh`) passes all 27 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T022204Z/summary.txt`). 21.3 GB were free.
 - **Result: PASS** for the model. Next, Core's fold and projection for preferences (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, second step: preferences at Core and on a replica (plan §8.3.1, §8.4.1–§8.4.2; `docs/DECISIONS.md` D-73)
+
+- **Code** (`f404e2c` → `44cb3ed`):
+  - **The view** names its shown value's authority.
+  - **The served horizon** takes the entry's partition, for page and snapshot entries.
+  - **`CorePreferenceFold`:** Core's per-key fold, with resolved horizons.
+  - **`PreferenceProjection`:** the projection into R1's `Preference` record.
+    - The value maps through `PreferenceValue`.
+    - The origin is `explicit` for an owner's value and `inferred` for a model's.
+    - `confirmed` follows the view.
+    - A key without a value has its record removed.
+    - A `force` mode is there for R1's always-writing calls.
+  - **`CoreLedger`:** preference operations are supported. Their schema and key-derived entity are checked, and they are merged, projected and logged in partition `preferences`. Read through `preferenceView(key:)`.
+  - **The replica:** the same checks on saves and arrivals (`checkPayload` now takes the entity ID), and `ReplicaStore.preferenceView(key:)` folded as Core folds.
+- **Full build and R1 suite:** `m3/suite-after-preference-ledger-20261126T022947Z/`: 0 warnings, 0 errors, 376/66. Lint is clean on the eight files.
+- **Harness:** `m3/harness-v43/`, 5/5 on its first build (`m3/harness-v43-test-20261126T022921Z.log`). v42 expected no `tasks` page where Core serves an empty one; it is kept, never built.
+- **Cases:**
+  - **A device's set** is accepted and projected into R1's record: the value, `explicit`, confirmed, revision 1. A set that observed it updates the same record to revision 2.
+  - **A delete that observed the set** removes R1's record and leaves the key absent. A set that observed the delete re-creates it with a new record ID, as R1's delete then set does.
+  - **Two sets that didn't observe each other:** the second is `accepted_with_conflict`, and R1's record shows the first value in display order.
+  - **A set whose entity isn't its key's** is rejected as `malformed`, and no record is written.
+  - **A replica** pulling Core's `preferences` partition, two entries a page, holds the same views as Core, the conflict included. The `tasks` partition holds no preference entry.
+- **Regressions:** regression package v24 (`m2/make-regressions-v24.py`, v23 plus harness v43; runner `m2/run-regressions-v25.sh`) passes all 31 targets, v35 and v47 among them (`m2/regressions-run-20261126T023013Z/summary.txt`). 21 GB were free.
+- **Result: PASS** for Core and the replica. Next, the conversion of `PATCH /v1/preferences` (`R2-CHECKPOINT.md` §11).
