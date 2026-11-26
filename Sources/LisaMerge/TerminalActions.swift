@@ -1,7 +1,8 @@
 // An item's status as a set of terminal actions with explicit reopen references (plan §8.3.1): completion and
 // cancellation are recorded separately from other edits; concurrent completion and cancellation are both kept
 // ("completed and cancelled", for review); a reopen names the terminal actions it reopens, and one it didn't see stays
-// in effect.
+// in effect. A reopen that names none reopens those its observed coverage covers, by ID or by commit position under
+// its horizon (a v1 reopen observed at a projection revision, docs/DECISIONS.md D-72).
 
 import LisaSyncProtocol
 
@@ -23,12 +24,22 @@ public struct TerminalActions: Hashable, Sendable {
     }
 
     private var actions: [Identifier128: Kind] = [:]
+    private var commits: [Identifier128: CommitPosition] = [:]
     private var reopened: Set<Identifier128> = []
+    /// Reopens that name nothing, each with the coverage it reopens.
+    private var coveringReopens: [Identifier128: ObservedCoverage] = [:]
 
     public init() {}
 
-    public mutating func record(_ kind: Kind, id: Identifier128) {
+    /// A terminal action, with Core's commit position when known.
+    public mutating func record(_ kind: Kind, id: Identifier128, commit: CommitPosition? = nil) {
         if actions[id] == nil { actions[id] = kind }
+        if commits[id] == nil, let commit { commits[id] = commit }
+    }
+
+    /// Records Core's commit position for a terminal action applied while pending.
+    public mutating func markCommitted(_ id: Identifier128, at commit: CommitPosition) {
+        if actions[id] != nil, commits[id] == nil { commits[id] = commit }
     }
 
     /// A reopen of exactly the terminal actions it names.
@@ -36,8 +47,19 @@ public struct TerminalActions: Hashable, Sendable {
         reopened.formUnion(targets)
     }
 
+    /// A reopen that names nothing: it reopens exactly the terminal actions `observed` covers. One it didn't see,
+    /// committed after its horizon or still pending, stays in effect.
+    public mutating func reopen(id: Identifier128, covering observed: ObservedCoverage) {
+        coveringReopens[id] = observed
+    }
+
     /// The terminal actions still in effect.
-    public var inEffect: [Identifier128: Kind] { actions.filter { !reopened.contains($0.key) } }
+    public var inEffect: [Identifier128: Kind] {
+        actions.filter { action in
+            !reopened.contains(action.key)
+                && !coveringReopens.values.contains { $0.covers(action.key, committedAt: commits[action.key]) }
+        }
+    }
 
     public var status: Status {
         let kinds = Set(inEffect.values)
