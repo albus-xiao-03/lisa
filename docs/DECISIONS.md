@@ -1029,3 +1029,36 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Line 130:** an untyped closure as a branch of `? :` isn't inferred `@Sendable` from the declared type. With `[weak self]`, the compiler fails to report the conversion error. The fix writes the closure explicitly `@Sendable` and assigns it in an `if` (`f03cf24`).
   - **Uncertain annotation:** whether `Binding(get:set:)`'s closures are `@Sendable` in the iOS 18 SDK. The proof views now bind through key-path subscripts on `ProofModel` (`0528fc3`–`795b4f3`).
 - **Next uses:** X2's probe app (after M3) and the production apps before X3 (M5), the same way.
+
+## D-71 — R1's task routes through the one legacy converter: the router hook, the module wiring, and notes at creation (R2 M3, run 20261124-r2-5462; plan §8.12.2, §7.2.1)
+
+- **Where the semantics live:** `LisaLegacyRequests.LegacyTaskRoutes`.
+  - **What it holds:** each converted route's R1 semantics: R1's checks in R1's order with R1's errors, the children, one projection, and R1's audit event. Queue imports (§8.14.4) can later use the same converter. LisaCoreLedger keeps the frame (`legacyConvert`).
+  - **Module wiring:**
+    - LisaLegacyRequests now depends on LisaCoreLedger, LisaDomain, LisaOwnerData, LisaPorts and LisaTime.
+    - R1's `TaskService` rules are public and unchanged.
+    - LisaAPI depends on LisaCoreLedger and LisaLegacyRequests.
+    - All of these are Core-only.
+- **The router hook:** `RouterConfiguration.legacyConverter` is nil by default, and `APIRouter.converting(with:)` returns the same router with a converter. With one, a converted route (so far `POST /v1/tasks`) goes through `converted`:
+  1. **R1's own ledger first:** a key that a not-yet-converted route recorded keeps R1's answer.
+  2. **Then `legacyConvert`:** its closure runs R1's body checks inside the parent, so 400 and 413 answers replay (D-35), then R1's checks, then the children. R1's DTO rendering stays in LisaAPI and runs inside the transaction.
+  3. **The other routes check the parents too,** so each caller keeps one key space across both stores (R1's 422).
+- **Not yet enabled in LisaHost:** R1's host composes R1's router unchanged until every v1 mutation route is converted (M3-6b–e). Mixed mode is safe, but it is a transition state.
+- **Notes at creation:** R2's `task.create` payload has no notes, and §8.12.2's table lists only `create:task`.
+  - A v1 create with notes therefore adds a `field:notes` child (`note.add`) after `create:task`, chained to it.
+  - Both are taken in without projecting, then projected once, so R1's record is created at revision 1 with its notes, as R1 creates it.
+- **After the commit:** R1's domain changes (planning, reminders) are propagated after the conversion commits.
+  - A failure there is logged, and the answer stands. The host's cycle replans and syncs reminders.
+  - A durable follow-up record is later work.
+- **Terminal replies for `POST /v1/tasks`,** built from current state when the body has expired:
+  - 409 "This task was created earlier; its reply is no longer available.";
+  - or 404 "The task this request created was deleted afterwards.".
+
+  The `lisaCode` field comes with M3-6d.
+- **A concurrent duplicate** waits for the first conversion's transaction and then replays it, where R1 answers 503 "the same request is still being processed". The parent lookup inside the write transaction prevents a second conversion.
+- **Shown by M3 harness v36** (v35 failed to compile and is kept). The same requests on R1's router and on the converting router give:
+  - the same 201 `TaskDTO` but for the derived ID;
+  - the same audit event;
+  - the same replays, 422 and recorded 400s.
+
+  The children are Core-signed and replicate. Keys are shared with unconverted routes, and a device creates under its own scope.
