@@ -1372,3 +1372,31 @@ Run directories exist only in this sandbox. Tracked records like this file reach
 - **Not yet:** replicas fold a legacy edit as observing nothing until Core serves the resolved horizon (D-69, "Open, next").
 - **Regressions:** regression package v18 (`m2/make-regressions-v18.py`, v31 replaced by v33; runner `m2/run-regressions-v19.sh`, run `m2/regressions-run-20261125T122040Z/`) passes all 25 targets, and v35 and v47 pass too. 23.3 GB were free at its end.
 - **Result: PASS** for Core's resolution. Next, serving the resolved horizon to replicas (`R2-CHECKPOINT.md` §11).
+
+### M3-6a, observed horizons on replicas: Core serves the resolved horizon, replicas fold with it (plan §8.3.2, §8.12.2; `docs/DECISIONS.md` D-69)
+
+- **Code:**
+  - **The protocol:** `ChangeEntry.observedHorizon` (`53e2a5a`), `{"epochID", "partition", "position"}`, is encoded only when present, so every other entry keeps its bytes. It is refused on a derived record, on a rejection, and on any operation whose body isn't a legacy child carrying a projection revision.
+  - **Core:** `CoreTaskFold.resolvedHorizon` is the one reading of `observed_epoch` and `observed_position` (`a2ae075`). Both entry builders serve it: change pages (`6867e7c`) and snapshot chunks (`ccce9e1`).
+  - **The replica:**
+    - `canonical_operations` and the staged installation table keep `observed_epoch`, `observed_partition` and `observed_position`, all or none (`6e84d1b`, `a59ce54`).
+    - Pages and chunks store them (`6f091c9`, `a59ce54`).
+    - The task fold uses the stored horizon in place of the observed set, as `CoreTaskFold.view` does (`89fcb1a`).
+  - **Docs:** `docs/SYNC-PROTOCOL.md` §8, §8a and §8j now describe the projection revision and the served horizon.
+- **Full build and R1 suite:** `m3/suite-after-replica-horizon-20261126T013338Z/`: the debug build with tests has 0 warnings and 0 errors, and 376/66 pass. Lint is clean on the eight files.
+- **Harness:** `m3/harness-v34/`, v33's 15 tests copied unchanged plus 5. All 20 pass in 6 suites on its first build (`m3/harness-v34-test-20261126T013653Z.log`).
+- **Cases:**
+  - **The entry:** Core's page entry for an edit observed at revision 1 carries the horizon of the page's epoch, `tasks`, and the creation's position, which is P(1). The creation's entry carries none.
+  - **Pages:** a replica pulling Core's pages three entries at a time has every view equal to Core's, in three cases:
+    - supersession: one title;
+    - a stale revision: the newer title beside it;
+    - an unmapped revision: a conflict.
+  - **A snapshot:** the same views after a full snapshot in chunks of two. The staged table keeps the horizon through the swap.
+  - **Pages after a snapshot:** a later legacy edit arrives by page and folds with its horizon.
+  - **The rules:**
+    - A horizon on the creation's entry (no projection revision) is refused with `invalidField("entry.observedHorizon")`, and so is a horizon on a rejection.
+    - `accepted_with_conflict` accepts one.
+    - The entry round-trips through its canonical form. Its JSON holds `"observedHorizon":{"epochID":…`.
+    - An entry without one has no such key and round-trips as before.
+- **Regressions:** regression package v19 (`m2/make-regressions-v19.py`, with harness v33 replaced by v34; runner `m2/run-regressions-v20.sh`) passes all 25 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T013734Z/summary.txt`). 22.6 GB were free. The background command around the runner reported exit 1 only because its final `cat` matched a stray `.txt` path; the runner itself exited 0.
+- **Result: PASS.** A replica's view of a legacy edit equals Core's. Next, R1's router hook for `POST /v1/tasks` and `PATCH /v1/tasks/{id}` (`R2-CHECKPOINT.md` §11).
