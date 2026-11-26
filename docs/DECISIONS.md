@@ -1062,3 +1062,51 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - the same replays, 422 and recorded 400s.
 
   The children are Core-signed and replicate. Keys are shared with unconverted routes, and a device creates under its own scope.
+
+## D-72 — R1's `PATCH /v1/tasks/{id}` through the converter: field children, the status, R1-only states, and two protocol rules (R2 M3, run 20261124-r2-5462; plan §8.12.2, §8.2.3, §8.3.1–§8.3.2)
+
+- **The conversion** (`LegacyTaskRoutes.update`, `convertUpdateTask`) runs inside the parent, in R1's order:
+  1. the body size (413);
+  2. its decoding (400);
+  3. the record (404 "the task");
+  4. the revision check (409 "the task changed since it was read", with `currentRevision`);
+  5. the correction, its deadline parsed (400);
+  6. `TaskService.correct`'s checks: the principal (403), the minutes (400), the title (400).
+
+  Nothing is committed before these checks, so each answer is recorded and replayed.
+- **The field children:** one per field the request carries, not per changed value, so the set is a pure function of the request.
+  - **The children, in this order:** `field:title`, `field:notes`, `field:priority`, `field:deadline` (also for `clearDeadline`), `field:estimatedMinutes`, `field:confirmation`. Each is observed at the request's `expectedRevision` N.
+  - **One projection:** they are taken in without projecting, then projected once with `forceRevision`. R1's `correct` always writes, so this is one R1 revision step even when no value changes.
+  - **The deadline** is marked owner-corrected whenever the request sets or clears it, as R1 marks it.
+  - **Then** R1's `task.corrected` audit event and `.taskChanged(material:)`.
+- **The status:**
+  - **Children by target:** `completed` gets a `status` child `task.complete`, `cancelled` gets `task.cancel`, and `open` gets `task.reopen` naming nothing, observed at N. The child depends on the target alone.
+  - **In progress and blocked** have no R2 operation. They are R1's own states of an open task: R2's merge doesn't hold them, and the projection keeps them (`TaskProjection.status`).
+    - **Who writes them:** the converter, with R1's `LisaTask.transition` on R1's record in the same transaction. It also writes an active task's return to open, after its reopen child.
+    - **The revision map:** each such write records its revision there (`recordProjectionRevision`), so a later edit observed at it supersedes as R1's does. Harness v38 found this.
+  - **R1's rules decide:** `TaskService.transition`'s principal check and `LisaTask.transition` decide against the corrected record.
+    - A refusal answers R1's 409 with the correction committed and the status child `refused`, as R1 keeps its correction.
+    - A target equal to the record's status makes no R1 call: no audit, no revision. Its child, if any, is taken in and changes nothing.
+  - **After a transition:** R1's `task.<status>` audit event and its domain change.
+- **Two protocol rules** (`docs/SYNC-PROTOCOL.md` §8):
+  - **Empty notes:** `note.replaceObserved` may carry empty text. It then removes the notes it observes and adds none (R1's `notes: ""`).
+  - **A reopen naming nothing:** `task.reopen` may name no action. It then reopens the terminal actions its observed coverage covers.
+    - One committed after the horizon, or still pending, stays in effect. `TerminalActions` keeps commit positions, and `markCommitted` covers them.
+    - A device's reopen that names actions is unchanged.
+    - The v1 reopen names nothing because a child's body may not depend on current state. Core resolves its revision to a horizon at decision (D-69), and replicas fold with the served horizon.
+- **Terminal replies for PATCH:** an expired body answers 200 with the current `TaskDTO` (`Lisa-Replayed: true`, `Lisa-Reply: current`), or 404 "This change was applied; the task was deleted afterwards.". `lisaCode` comes with M3-6d.
+- **Known limits:**
+  - A task the ledger doesn't hold, such as an R1 record from before the conversion, can't be corrected through the converter until migration records its origin (M9).
+  - Notes longer than a note piece's budget need blobs (§8.3.3).
+  - The ID mapping (`R1Identity`) needs UUID record IDs, which R1 generates.
+- **Shown by M3 harness v38** (v37 was corrected before its first build and never built). Each PATCH, against R1's own path on a second host, gives R1's status, headers and body, but for the task's ID, at every step:
+  - a correction of every field;
+  - clearing the notes and the deadline;
+  - a same-value correction, which takes a revision and marks the deadline;
+  - a stale revision, an unknown task and invalid values, each recorded and replayed;
+  - every status R1 allows, in turn;
+  - a refused status after a correction, with the correction kept and the status child refused;
+  - the same status, which changes nothing;
+  - an edit after in-progress.
+
+  A replica pulling Core's pages folds the reopen through its served horizon, with the same view as Core's.
