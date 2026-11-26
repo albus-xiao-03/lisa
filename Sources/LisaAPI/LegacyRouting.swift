@@ -30,10 +30,7 @@ extension APIRouter {
 
     /// §8.12.2's answer while a request waits for an administrative decision: R1's 503, never recorded.
     static var awaitingReview: APIFailure {
-        APIFailure(
-            body: APIErrorBody(
-                code: .unavailable, message: "This change is waiting for review on the administrative terminal.",
-                retryAfterSeconds: 300))
+        APIFailure(body: LegacyPreferenceRoutes.awaitingReview)
     }
 
     static var requestIDReused: APIFailure {
@@ -111,6 +108,8 @@ extension APIRouter {
                 logger.error("follow-up after a conversion failed", ["error": .private(String(describing: error))])
             }
         }
+        // A held request's earlier changes are committed; its 503 is rendered as R1 renders one, with `Retry-After`.
+        if conversion.awaitsReview { throw Self.awaitingReview }
         return APIResponse(
             status: conversion.status, headers: Self.headers(contentType: "application/json"),
             body: Data(conversion.body))
@@ -185,71 +184,21 @@ extension APIRouter {
         _ request: APIRequest, principal: Principal, context: LegacyRequestContext, tx: LegacyTransaction,
         changes: inout [DomainChange]
     ) throws -> LegacyConversion {
-        let requested: [LegacyPreferenceRoutes.Change]
         do {
             try Self.checkBodySize(request)
-            let body = try decode(PreferencesPatchRequest.self, request)
-            guard !body.changes.isEmpty, body.changes.count <= 50 else {
-                throw APIFailure.invalid("send between 1 and 50 changes", field: "changes")
-            }
-            requested = body.changes.map { change in
-                let action: LegacyPreferenceRoutes.Action
-                if let value = change.value {
-                    action = .set(DTOMapping.preferenceValue(value), expectedRevision: change.expectedRevision)
-                } else if change.confirm == true {
-                    action = .confirm
-                } else {
-                    action = .delete
-                }
-                return LegacyPreferenceRoutes.Change(key: change.key, action: action)
-            }
         } catch {
             return Self.refusal(error)
         }
+        let requested: [LegacyPreferenceRoutes.Change]
+        switch LegacyPreferenceRoutes.requested(request.body) {
+        case .success(let parsed): requested = parsed
+        case .failure(let refusal): return Self.refusal(APIFailure(body: refusal))
+        }
         let effect = try LegacyPreferenceRoutes.update(requested, by: principal, context: context, in: tx)
         changes = effect.changes
-        if effect.heldIndex != nil {
-            let response = Self.error(Self.awaitingReview.body)
-            return LegacyConversion(
-                status: response.status, body: [UInt8](response.body), children: effect.children,
-                setDigest: effect.setDigest)
-        }
-        if let refused = effect.refusal {
-            let response = Self.error(Self.template(refused))
-            return LegacyConversion(
-                status: response.status, body: [UInt8](response.body), children: effect.children,
-                setDigest: effect.setDigest)
-        }
-        let answer = try json(effect.preferences.map(DTOMapping.preference))
+        let answer = try LegacyPreferenceRoutes.answer(effect)
         return LegacyConversion(
-            status: answer.status, body: [UInt8](answer.body), children: effect.children, setDigest: effect.setDigest)
-    }
-
-    /// R1's refusal of a preference change, with R1's code, from a fixed template that names the change's position and
-    /// never the caller's key or value (§8.12.2 "Error bodies never echo caller input").
-    static func template(_ refused: LegacyPreferenceRoutes.Refused) -> APIErrorBody {
-        let change = "changes[\(refused.index)]"
-        switch refused.refusal {
-        case .unsupportedKey:
-            return APIErrorBody(
-                code: .invalidRequest, message: "\(change).key is not a supported preference", field: "\(change).key")
-        case .invalidValue(let reason):
-            // R1's reasons are its own text; only an unknown weekday's names the caller's token.
-            let shown = reason.hasPrefix("unknown weekday") ? "has an unknown weekday" : reason
-            return APIErrorBody(code: .invalidRequest, message: "\(change).value \(shown)", field: "\(change).value")
-        case .ownerOnly:
-            return APIErrorBody(code: .forbidden, message: "\(change) can be changed only by the owner on the host")
-        case .deletedByOwnerOnly:
-            return APIErrorBody(code: .forbidden, message: "\(change) can be deleted only by the owner on the host")
-        case .notPermitted:
-            return APIErrorBody(code: .forbidden, message: "\(change) can't be changed by this caller")
-        case .notFound:
-            return APIErrorBody(code: .notFound, message: "\(change) names a preference that does not exist")
-        case .changed(let currentRevision):
-            return APIErrorBody(
-                code: .conflict, message: "\(change) changed since it was read; reload it and try again",
-                currentRevision: currentRevision)
-        }
+            status: answer.status, body: answer.body, children: effect.children, setDigest: effect.setDigest)
     }
 
     /// The answer to a retry whose recorded body has expired (§8.12.2 "Live answers"), from current state, never from
