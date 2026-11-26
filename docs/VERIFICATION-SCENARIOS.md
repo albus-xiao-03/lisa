@@ -1425,3 +1425,37 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **A paired device** creates under `device:<id>`, and the task ID is derived from that scope.
 - **Regressions:** regression package v20 (`m2/make-regressions-v20.py`: v19 plus harness v36, with LisaAPI among the products; runner `m2/run-regressions-v21.sh`) passes all 26 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T015451Z/summary.txt`). 22.2 GB were free.
 - **Result: PASS** for `POST /v1/tasks`. Next, `PATCH /v1/tasks/{id}` (`R2-CHECKPOINT.md` §11).
+
+### M3-6a, R1's `PATCH /v1/tasks/{id}` through the legacy converter (plan §8.12.2; `docs/DECISIONS.md` D-72)
+
+- **Code:** `ae0c52d` → `6cc8073`:
+  - **Two protocol rules:** `task.reopen` may name no action, and `note.replaceObserved` may be empty.
+  - **The merge:** terminal actions keep commit positions; a reopen naming nothing reopens what its coverage covers; an empty replacement adds nothing.
+  - **The projection:** the deadline owner-corrected hint, and `LegacyTransaction.recordProjectionRevision` for revisions the conversion writes itself.
+  - **`LegacyTaskRoutes.update`:**
+    - field children observed at N, projected once with `forceRevision`;
+    - the status child (`task.complete`, `task.cancel`, or `task.reopen` naming nothing);
+    - R1's own transition for in progress, blocked and an active task's return to open;
+    - R1's refusals;
+    - R1's audit events.
+  - **The router:** the shared `taskCorrection(_:)`, and `convertUpdateTask` with PATCH's terminal replies.
+- **Full build and R1 suite:** `m3/suite-after-converted-patch-final-20261126T020726Z/`: 0 warnings, 0 errors, 376/66. Lint is clean on the nine files.
+- **Harness:** `m3/harness-v38/`, v36's 7 tests copied unchanged plus 8 PATCH tests, all against R1's path on a second host.
+  - **15/15** on the run after the fix (`m3/harness-v38-test-20261126T020708Z.log`).
+  - **Superseded before its first build:** v37. Three of its request IDs were under R1's 8-character minimum, and its audit order relied on timestamps that the fixed clock makes equal. It is kept, never built.
+  - **v38's first run** (`m3/harness-v38-test-20261126T020602Z.log`) found a fault in the converter. A PATCH that only sets in progress or blocked has no child, and `update` returned before R1's transition. The fix makes the transition run with or without children.
+  - **Found in review before that run:** the converter's R1-only writes didn't record their revision in the projection-revision map. The new test "an edit after an R1-only status" covers it.
+- **Cases:** each answer has R1's status, headers and body, but for the task's ID:
+  - **A correction of every field:** revision 2, and the `task.corrected` audit event.
+  - **Clearing, and same values:** clearing the notes (an empty replacement) and the deadline; a same-value title and deadline, which still take a revision and mark the deadline owner-corrected, as R1 does.
+  - **Refusals before any change:** a stale revision (409 with `currentRevision`), invalid minutes before the title (400), an empty title (400) and an unknown task (404). Each is recorded and replayed with `Lisa-Replayed: true`, the record isn't changed, and the converter takes in no child.
+  - **Every status R1 allows, in turn:** completed, open, in progress, blocked, open, cancelled. Revisions 2–7 and the audit actions match R1's.
+  - **A refused status after a correction:** cancelling a completed task (409, the status child `refused`, the title child applied) and setting a completed task in progress (409, no status child). The corrections are kept, as R1 keeps them.
+  - **The same status:** no revision and no audit event.
+  - **An edit after in progress:** it supersedes, so Core holds one title.
+  - **A replica pulling Core's pages two entries at a time:** its view equals Core's after a correction, a completion and a reopen that names nothing but covers the completion through its served horizon.
+- **Regressions:**
+  - **Package v21** (`m2/make-regressions-v21.py`, with harness v36 replaced by v38; run `m2/regressions-run-20261126T020805Z/`): every target passed except M2 harness v15's `payloadsAreDecodedStrictly`. That test still expected an empty `task.reopen` list to be refused, which D-72 changed on purpose.
+  - **M3 harness v39:** v15's tests with that expectation replaced, and an empty `note.replaceObserved` accepted. `note.add` with empty text is still refused. 7/7 (`m3/harness-v39-test-20261126T021157Z.log`).
+  - **Package v22** (`m2/make-regressions-v22.py`, with v15 replaced by v39; runner `m2/run-regressions-v23.sh`): all 26 targets pass, and v35 and v47 pass too (`m2/regressions-run-20261126T021223Z/summary.txt`). 21.6 GB were free.
+- **Result: PASS** for `PATCH /v1/tasks/{id}`, and with it M3-6a's v1 task routes. Next, M3-6b (`R2-CHECKPOINT.md` §11).
