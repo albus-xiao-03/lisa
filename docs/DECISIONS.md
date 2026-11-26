@@ -1142,3 +1142,58 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - every decoding rule;
   - the entity IDs against Python's hashlib;
   - the merge cases, and one state and one view over all 720 orders of a representative set.
+
+## D-74 — R1's `PATCH /v1/preferences` through the converter: R2-TRUST-05 at Core, what a converted child observes, and errors without caller text (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2, §8.17; R2-TRUST-05)
+
+- **The keys** (`PreferenceRules`, LisaOwnerData):
+  - **Supported:** the 24 keys R1's `PreferenceMapping` maps. R1 refuses any other as "not a supported preference".
+  - **Administrative** (R2-TRUST-05): R1's consequential keys. They are call escalation, the model endpoint and data sharing, the approved email addresses and phone number, email and call enablement, and time-sensitive notifications.
+  - **Permitted:** supported and not administrative. Only these replicate (§8.17's "permitted preferences").
+  - **Restricted:** the others and unsupported keys. A v1 request's change to one is a restricted sibling (§8.12.2). The plan's examples name the model settings and unsupported keys. The narrower reading of "permitted" restricts the approved recipients and the enablement keys too.
+- **Core refuses a device's own preference operation** (`docs/SYNC-PROTOCOL.md` §8):
+  - **The reasons:** `unsupported_key`; `administrative_key`, for a set, delete or confirm alike; `invalid_value`, from R1's own `validate`.
+  - **No caller text:** neither the reason nor the hint names the key or the value.
+  - **Legacy children** are Core-signed, so R1's checks in their conversion decide them instead.
+  - **The replica** doesn't check yet; Core is the authority.
+  - **The dependency:** LisaCoreLedger now depends on LisaOwnerData for R1's rules.
+- **What a converted child observes:** R1's record of the key as Core found it when it decided the child (`resolveFoundRecord`). That is the record R1's `set`, `confirm` and delete act on.
+  - **A record:** the horizon its revision reflects, from the projection map (D-69).
+    - The conversion fails (500, nothing kept) when the record's revision isn't in the map.
+    - Such a record was written outside Core: before migration, or by R1's inference, which isn't converted yet.
+  - **An absent key:** every commit before the child. What is left of the key then is deletes, replaced writes and model suggestions, which R1's write replaces too.
+  - **Why:** §8.12.2 gives a legacy child an observed set only for R1's `expectedRevision`.
+    - Every confirm and delete has none, and neither does a set without a revision. Such a change would observe nothing.
+    - Then a delete wouldn't remove the value, a confirm wouldn't confirm it, and 50 sets of one key wouldn't replace each other.
+    - Once R1's check passes, the found record is the one at the request's `expectedRevision`. So for revision-checked sets the rule agrees with D-69.
+    - A set's body still carries R1's revision when it is ≥ 1.
+  - **Served:** Core records the horizon with the decision and serves it in `ChangeEntry.observedHorizon`, now allowed on every legacy preference child. Replicas fold with it (D-69's machinery).
+  - **The consequence:** a concurrent value that R1's record didn't show, committed after the record's current revision, survives a v1 write as a conflict. Task edits behave the same under D-69.
+- **The conversion** (`LegacyPreferenceRoutes`, LisaLegacyRequests; `convertUpdatePreferences`, LisaAPI):
+  - **Inside the parent:** the body size, its decoding and the 1–50 changes, so their answers replay.
+  - **Children:** `change:<index>` in request order, chained per key, so a child depends only on its immediate same-key predecessor.
+    - **The set's IDs and digest** come from the discriminators alone (`LegacyChildPlan`).
+    - **Each envelope** is encoded only when its child is taken in. R1 refuses a value over the operation's budget before it would have to be encoded.
+  - **Each change in order,** against R1's records as the earlier changes left them:
+    - R1's checks, in R1's order (`PreferenceService.set` and `confirm`, `DeletionService.delete`);
+    - the child taken in;
+    - the projection, written once, with `force` for a set or confirm (one R1 revision step each);
+    - R1's audit event: `preference.set`, `preference.confirmed` or `data.deleted`.
+  - **The first refusal** stops the request:
+    - the earlier children stay applied;
+    - the refused child is `refused`, and the rest are `not_reached`;
+    - refused and unreached children are never taken in, so their bodies, a canary key among them, never reach the ledger.
+  - **The answer:** 200 with R1's full list, read from R1's records in the conversion's transaction, or the refusal, recorded.
+  - **Domain changes:** one `preferenceChanged(key)` per applied change, propagated after the commit.
+  - **The terminal reply** after the body expires: §8.12.2's 409, "This change was applied; its reply is no longer available. Reload to see current values." `lisaCode` comes with M3-6d.
+- **Errors without caller text** (§8.12.2): R1's status and code, and a template that names the position, counted from 0 as `legacyParent.index` is:
+  - `changes[i].key is not a supported preference`, with `field: "changes[i].key"`;
+  - `changes[i].value` followed by R1's reason, with `field: "changes[i].value"`. R1's one reason that names the caller's token becomes "has an unknown weekday";
+  - `changes[i] can be changed only by the owner on the host`, and `changes[i] can be deleted only by the owner on the host`;
+  - `changes[i] names a preference that does not exist`;
+  - `changes[i] changed since it was read; reload it and try again`, with R1's current revision.
+- **Left for the next part** (M3-6b step 3b):
+  - An owner-scope request that reaches an administrative key fails the conversion (500, nothing kept). Holds, decision tokens, `legacy review` and `resolve` lift this.
+  - A change R1 would apply to a restricted key, such as a device's confirm of an administrative key, fails it the same way. Restricted siblings and their redacted receipts lift this.
+  - R1's own checks run first, so an invalid value is still R1's 400 at once.
+  - `LisaHost` doesn't enable the converter.
+- **Shown by** M3 harness v45, 10/10 on its first build, against R1's own path on a second host, and regression package v26. v44 was corrected before its first build and is kept, never built (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step).
