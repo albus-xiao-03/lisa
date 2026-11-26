@@ -46,11 +46,15 @@ public struct TaskMergeState: Hashable, Sendable {
             set(value, id: id, authority: authority, observed: observed, commit: commit)
             edits.insert(id)
         case .taskComplete:
-            status.record(.completed, id: id)
+            status.record(.completed, id: id, commit: commit)
         case .taskCancel:
-            status.record(.cancelled, id: id)
+            status.record(.cancelled, id: id, commit: commit)
         case .taskReopen(let reopens):
-            status.reopen(naming: Set(reopens))
+            if reopens.isEmpty {
+                status.reopen(id: id, covering: observed)
+            } else {
+                status.reopen(naming: Set(reopens))
+            }
         case .noteAdd(let text):
             notes.add(id: id, text: text, commit: commit)
             edits.insert(id)
@@ -83,6 +87,7 @@ public struct TaskMergeState: Hashable, Sendable {
         splittable.markCommitted(id, at: commit)
         confirmation.markCommitted(id, at: commit)
         notes.markCommitted(id, at: commit)
+        status.markCommitted(id, at: commit)
         for tag in tags.keys { tags[tag]?.markCommitted(id, at: commit) }
     }
 
