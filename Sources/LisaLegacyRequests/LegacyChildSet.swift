@@ -53,6 +53,77 @@ public enum LegacyDerivation {
     }
 }
 
+/// A request's child set before its bodies are encoded (D-74). Every child's ID, the set digest and each child's
+/// same-chain predecessor follow from the discriminators and chains alone, so a change R1 refuses before its body
+/// could be encoded, a value over the operation's budget say, still has its place in the set. A conversion encodes a
+/// child only when it takes the child in.
+public struct LegacyChildPlan: Sendable {
+    public let datasetID: Identifier128
+    public let scope: String
+    public let requestID: String
+    /// In request order.
+    public let changes: [LegacyChange]
+    public let childIDs: [Identifier128]
+    public let setDigest: Digest256
+    let incarnation: Identifier128
+    /// Each child's immediate predecessor among the request's children of its chain.
+    let predecessors: [Identifier128?]
+
+    /// - Throws: `OperationEnvelopeError` for an empty request or a repeated discriminator.
+    public init(datasetID: Identifier128, scope: String, requestID: String, changes: [LegacyChange])
+        throws(OperationEnvelopeError)
+    {
+        guard !changes.isEmpty else { throw .invalidField("legacy.changes") }
+        guard Set(changes.map(\.discriminator)).count == changes.count else {
+            throw .invalidField("legacy.discriminator")
+        }
+        let ids = changes.map {
+            LegacyChildIdentity.childID(
+                dataset: datasetID, scope: scope, requestID: requestID, discriminator: $0.discriminator)
+        }
+        var lastInChain: [String: Identifier128] = [:]
+        var predecessors: [Identifier128?] = []
+        for (index, change) in changes.enumerated() {
+            predecessors.append(lastInChain[change.chain])
+            lastInChain[change.chain] = ids[index]
+        }
+        self.datasetID = datasetID
+        self.scope = scope
+        self.requestID = requestID
+        self.changes = changes
+        childIDs = ids
+        setDigest = LegacyChildIdentity.setDigest(orderedChildIDs: ids)
+        incarnation = LegacyChildIdentity.incarnationID(dataset: datasetID, scope: scope, requestID: requestID)
+        self.predecessors = predecessors
+    }
+
+    /// The envelope of the child at `index`.
+    /// - Throws: `OperationEnvelopeError` for a field outside its rules.
+    public func envelope(at index: Int) throws(OperationEnvelopeError) -> OperationEnvelope {
+        let change = changes[index]
+        return try OperationEnvelope(
+            schemaVersion: LegacyDerivation.schemaVersion, datasetID: datasetID,
+            origin: .coreLegacyTranslation(incarnationID: incarnation, sequence: Int64(index) + 1),
+            operationID: childIDs[index], entityType: change.entityType, entityID: change.entityID,
+            operationType: change.operationType, payload: change.payload,
+            dependencies: predecessors[index].map { [$0] } ?? [],
+            observed: try change.observedRevision.map { revision throws(OperationEnvelopeError) in
+                try ObservedSet(
+                    horizon: nil, pieces: [], reviewedSetDigest: nil, group: nil, projectionRevision: revision)
+            },
+            policyVersion: LegacyDerivation.policyVersion,
+            legacyParent: try LegacyParentReference(
+                scope: scope, requestID: requestID, discriminator: change.discriminator, index: Int64(index),
+                count: Int64(changes.count), setDigest: setDigest),
+            createdAt: nil)
+    }
+
+    /// The child at `index`, encoded and signed by Core's key.
+    public func signed(at index: Int, with core: some MessageSigning) throws -> SignedOperation {
+        try OperationSigning.sign(try envelope(at: index), with: core)
+    }
+}
+
 /// A request's complete child set, unsigned.
 public struct LegacyChildSet: Hashable, Sendable {
     public let datasetID: Identifier128
@@ -69,43 +140,14 @@ public struct LegacyChildSet: Hashable, Sendable {
     public init(datasetID: Identifier128, scope: String, requestID: String, changes: [LegacyChange])
         throws(OperationEnvelopeError)
     {
-        guard !changes.isEmpty else { throw .invalidField("legacy.changes") }
-        guard Set(changes.map(\.discriminator)).count == changes.count else {
-            throw .invalidField("legacy.discriminator")
-        }
-        let ids = changes.map {
-            LegacyChildIdentity.childID(
-                dataset: datasetID, scope: scope, requestID: requestID, discriminator: $0.discriminator)
-        }
-        let digest = LegacyChildIdentity.setDigest(orderedChildIDs: ids)
-        let incarnation = LegacyChildIdentity.incarnationID(dataset: datasetID, scope: scope, requestID: requestID)
-        var lastInChain: [String: Identifier128] = [:]
+        let plan = try LegacyChildPlan(datasetID: datasetID, scope: scope, requestID: requestID, changes: changes)
         var envelopes: [OperationEnvelope] = []
-        for (index, change) in changes.enumerated() {
-            let dependency = lastInChain[change.chain]
-            lastInChain[change.chain] = ids[index]
-            envelopes.append(
-                try OperationEnvelope(
-                    schemaVersion: LegacyDerivation.schemaVersion, datasetID: datasetID,
-                    origin: .coreLegacyTranslation(incarnationID: incarnation, sequence: Int64(index) + 1),
-                    operationID: ids[index], entityType: change.entityType, entityID: change.entityID,
-                    operationType: change.operationType, payload: change.payload,
-                    dependencies: dependency.map { [$0] } ?? [],
-                    observed: try change.observedRevision.map { revision throws(OperationEnvelopeError) in
-                        try ObservedSet(
-                            horizon: nil, pieces: [], reviewedSetDigest: nil, group: nil, projectionRevision: revision)
-                    },
-                    policyVersion: LegacyDerivation.policyVersion,
-                    legacyParent: try LegacyParentReference(
-                        scope: scope, requestID: requestID, discriminator: change.discriminator, index: Int64(index),
-                        count: Int64(changes.count), setDigest: digest),
-                    createdAt: nil))
-        }
+        for index in changes.indices { envelopes.append(try plan.envelope(at: index)) }
         self.datasetID = datasetID
         self.scope = scope
         self.requestID = requestID
         self.envelopes = envelopes
-        setDigest = digest
+        setDigest = plan.setDigest
     }
 
     /// The children signed by Core's key, in request order.

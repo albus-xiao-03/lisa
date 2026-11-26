@@ -29,11 +29,12 @@ public struct NotePieces: Hashable, Sendable {
         pieces[id] = Piece(id: id, text: text, commit: commit)
     }
 
-    /// Adds the replacement `text` and removes the pieces `observed` covers.
+    /// Adds the replacement `text`, when it has any, and removes the pieces `observed` covers. An empty replacement
+    /// clears what it observed and adds nothing, as R1's `notes: ""` does (D-72).
     public mutating func replaceObserved(
         id: Identifier128, text: String, observed: ObservedCoverage, commit: CommitPosition? = nil
     ) {
-        add(id: id, text: text, commit: commit)
+        if !text.isEmpty { add(id: id, text: text, commit: commit) }
         removals[id] = observed
     }
 

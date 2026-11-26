@@ -51,9 +51,7 @@ struct RosterView: View {
                 ForEach(model.peerCards, id: \.deviceID) { card in
                     Toggle(
                         "\(card.label) \(card.deviceID.hex.prefix(8))…",
-                        isOn: Binding(
-                            get: { !model.inactive.contains(card.deviceID.hex) },
-                            set: { model.setActive($0, card: card) }))
+                        isOn: $model[activeDeviceIDHex: card.deviceID.hex])
                 }
             }
         }

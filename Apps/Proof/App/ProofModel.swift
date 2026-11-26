@@ -99,9 +99,28 @@ final class ProofModel {
         }
     }
 
-    func setActive(_ active: Bool, card: ProofDeviceCard) {
-        rosterStore.setActive(active, deviceIDHex: card.deviceID.hex)
-        inactive = rosterStore.inactiveDeviceIDs()
+    // Key-path bindings for the views (`$model[fetchInput: key]`): they need no `Binding(get:set:)` closures, so they
+    // compile whether or not the SDK declares those closures @Sendable.
+
+    /// Whether the peer with this device ID (hex) is active in the proof roster.
+    subscript(activeDeviceIDHex hex: String) -> Bool {
+        get { !inactive.contains(hex) }
+        set {
+            rosterStore.setActive(newValue, deviceIDHex: hex)
+            inactive = rosterStore.inactiveDeviceIDs()
+        }
+    }
+
+    /// The owner's input for a fetch-probe subcase (`<case>/<subcase>`).
+    subscript(fetchInput key: String) -> String {
+        get { fetchInputs[key] ?? "" }
+        set { fetchInputs[key] = newValue }
+    }
+
+    /// The owner's observation for a fetch case, `not run` until one is chosen.
+    subscript(ownerObservation caseID: String) -> ProofStatus {
+        get { ownerObservations[caseID] ?? .notRunEnvironment }
+        set { ownerObservations[caseID] = newValue }
     }
 
     func provisionDesignB() {

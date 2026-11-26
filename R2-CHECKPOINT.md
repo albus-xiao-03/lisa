@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-25T12:25Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T18:44Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -17,9 +17,45 @@
   - M3-6a's legacy children and Core's conversion frame (harness v26);
   - one R1 revision step per R1 call with the projection-revision map (D-68; harnesses v28 and v30);
   - Core's resolution of legacy edits' "observed at projection revision N" (D-69, schema v11; harness v33, 15/15).
+  - The replica side (2026-11-26): Core serves the resolved horizon in its signed entries, and replicas fold with it (`53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19).
+  - R1's `POST /v1/tasks` through the legacy converter in R1's router (D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7, against R1's own path; regression v20). It isn't enabled in `LisaHost` yet.
+  - R1's `PATCH /v1/tasks/{id}` through the converter (D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15, against R1's own path). It adds two protocol rules: a reopen that names nothing, and an empty notes replacement. R1's in progress and blocked are R1-only states of an open task.
 
-  Serving the resolved horizon to replicas is next (§11).
-- **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset is at 2026-11-25T16:20:00Z.
+  M3-6a's task routes are done.
+- **M3-6b begun (2026-11-26):**
+  - the preference operations, the key's entity and its register merge (D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7);
+  - preferences at Core and on a replica (`f404e2c`–`44cb3ed`; harness v43, 5/5);
+  - step 3a: R1's `PATCH /v1/preferences` through the converter, and Core's refusal of a device's change to an administrative key (D-74; `aa0ec19`–`8313d30`; harness v45, 10/10);
+  - step 3b-i: administrative holds, with decision keys and tokens (D-75; `9b09007`–`1621ecb`; harnesses v47 and v48, 12/12);
+  - step 3b-ii's first part: `resolve`, the refusal with R1's 403, and the refusal guard (D-76; `3a10979`–`8580aae`; harness v49, 14/14).
+
+  Next: the Core-only partition for restricted keys with `apply` (§11).
+- **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
+- **Not resumed automatically (environment event, §5):**
+  - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
+  - The VM then stopped at about 17:26Z and booted again at 17:32Z. The guard didn't survive the restart.
+  - Nothing was lost.
+- **X1, recorded 2026-11-26** (the owner said this was not a resume): **`FAIL` at the first Xcode build of `LisaProof`.** Xcode reported "Failed to produce diagnostic for expression; please submit a bug report" at `Apps/Proof/Nearby/ProofNearbyController.swift:130` (§6). Recorded by session `d53fb9c3-…` under lease `interactive:312`, which didn't consume the pause.
+- **Handoff (2026-11-26T18:29Z): the owner is moving development to a new environment.**
+  - **The documents:** `Handoff.md`, for the next agent: the state, the rules, the quota and auto-resume policy, the environment setup and the resume steps. `Handoff-Report.md`, for the owner: the state, the runnable owner tests and the decisions waiting.
+  - **At the handoff,** the host lacked this sandbox's 106 commits and the handoff's own. The run directory `.tmp/r2/20261124-r2-5462/` exists only in `lisa.lab` (`Handoff-Report.md` §2).
+  - **The pause still held** when checked at 18:00Z: no writer, and no pending pause in the guard.
+  - **The owner's decisions after the first handoff (2026-11-26):**
+    - The run directory isn't copied, so `Handoff.md` was made self-contained. Its §7 rebuilds the frozen R1 artifacts, the Apple type-check, the quota tools and the regression harnesses.
+    - The new environment's permissions are the same as here, except the build-output removal override (§7).
+    - The owner commits the preferred owner test results before the next agent starts (`Handoff.md` §8).
+- **Paused (the seventh pause, quota), 2026-11-26T03:29Z,** at `54c4699` with a clean tree, after M3-6b's steps 2 to 3b-ii's first part (§9).
+  - **The reading:** 80% at 03:28:47Z (reading `866b0f5c68f4`), with the reset at 05:29:59Z.
+  - **Not resumed automatically:** this session runs as a background job outside the guard's bound lineage (§5), so the guard rejects its pause. **The owner resumes it manually after 05:30Z.**
+- **Resumed (the seventh resume, manual, 2026-11-26T01:04Z),** after the owner approved resuming:
+  - It runs in the interactive session `d53fb9c3-…`, pid 312, which holds the lease `interactive:312` and consumed `P-20261125T122450Z-9de75e`.
+  - The guard was restarted as pid 17963.
+  - First, X1 attempt 2:
+    - the failure reproduced on Linux;
+    - the fix (`f03cf24`) and a key-path binding hedge (`0528fc3`–`795b4f3`);
+    - the whole `LisaProof` target type-checked on Linux against framework stand-ins (D-70);
+    - X1 requested again (§6).
+  - Next: M3-6a's replica side (§11).
 - **The owner's decisions of 2026-11-25** are in force (§5, §7): regenerable build output may be removed, with an explicit record; the replica may release its ballast to open (D-61, `33b0322`).
 
 The environment and execution decisions in force are in `DEVELOPMENT-ENVIRONMENT-REPORT.md` §13, the dated amendment of 2026-11-24. `CONSTRICTION.md` overrides everything, including this record and `plans/R2.md` revision 13.
@@ -53,7 +89,20 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
 - **Commits since the 09:45Z pause:** the nearby frame header and hello form `c096983`–`c69586c`; D-54 `27769d1`; `Apps/Config` and `Apps/Proof` `bc11c09`–`559f4bb` (69 files, then `Apps/project.yml`); `docs/SYNC-PROTOCOL.md` `3079aa3`; the harness `8e58552`–`d0a9e53` (`LisaVerifyKit`, `LisaVerifyCases`, `LisaVerifyServers`, `lisa-verify`, `Harness/` documents and configuration example, `Apps/OwnerVerification`, test plan X1, the `LisaProof` scheme, each span ending in `Package.swift` or its last file); `docs/SETUP-APPLE.md` §9; `docs/REQUIREMENTS-MATRIX.md` `260a582`; then `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Commits since the M1 boundary:** D-55 `ce68f1a`; the WAL guard `c9fed41` (`LisaSQLite`, four files); `28ef7c8`; `LisaMerge` (eight files, then `Package.swift` `72797e1`); `CausalRelease` `386a738`; `6ccfa10`; `docs/CONFLICTS.md` `5b6e0e7`; `d31a943` (this file at the second pause).
 - **Commits since the resume at 20:33Z:** the observed set's canonical form `ef9f546`; `LisaReplicaStore`'s first span `5ddd7d2` → `3ee84a0` (28 files); D-56 `528f236`; `Package.swift` `818fe3c`; `docs/VERIFICATION-SCENARIOS.md` M2-3 `742675f`; `4bb6f35` (this file); the reader monitor and capture path `5d9a9c6` → `0aac9d1` (`LisaSQLite` six files, `LisaReplicaStore` three); M2-4 `3455908`; `40ea1b7` (this file); the item payload schemas `57c50b0` → `75326ea` (LisaSyncProtocol, five files), `TaskMergeState` `f093e69` → `8e0e73b` (LisaMerge, three), the store's payload checks `4e0c1e3`; `docs/SYNC-PROTOCOL.md` `43b5369`; `docs/CONFLICTS.md` `fae2ba7`; M2-5 `446c87e`; `6d9f637` (this file); the effective view and persisted causal release `83791b1` → `09cf01a`; M2-6 `76c54e4`; `6af003f` (this file); `LisaLocalSearch` `8b5cb7e` → `cd37d4f` (with D-57 `703e64f`); M2-7 `358406a`; `fb68439` (this file); resolution groups and the advisory note limit `9c88032` → `3fb9b7f`; `docs/SYNC-PROTOCOL.md` `c606ac5`; M2-8 `9b10d32`; `9bfd698` (this file); the monotonic clock `6279859` → `437ca91` (LisaTime, four files); M2-9 and `4fd1ab5` (this file); change pages and partition cursors `839e52e` → `8afac3b` (LisaSyncProtocol three files, LisaTrust two, LisaReplicaStore six); `docs/SYNC-PROTOCOL.md` §8a `e141742`; M2-10 `1f71f1b`; `e3b41ef` (this file); the staged snapshot installation `23a56b9` → `ab0f695`; `docs/SYNC-PROTOCOL.md` §8b `4678165`; M2-11 `f7e1d75`; `eaba8d5` (this file); the reserve checks on non-capture writes `e06c79f` → `177763a`; M2-12 `18c0517`; `c070e9e` (this file); calendar buckets `e1309be` → `e838a98` (LisaSyncProtocol four files, LisaReplicaStore six); `docs/SYNC-PROTOCOL.md` §8a `a84c29e`; M2-13 `f481535`; `0bbb15f` (this file); repairs by generation `07bd0b9` → `799a16f`; `docs/SYNC-PROTOCOL.md` `209059f`; M2-14 `7b3514f`; `391b042` (this file); the planning zone `38410d9` → `c5b5cb1`; `docs/SYNC-PROTOCOL.md` `a040b78`; M2-15 `eb77d92`; `9b9a74d` (this file); derived records in full snapshots `e563114`; M2-16 `409a083`; `642e955` (this file); the M2-17 record `7cf49b4`; revocations `4290ee5` → `9286c07` (LisaReplicaStore, seven files), `docs/SYNC-PROTOCOL.md` §8c `67e0720`, M2-18 `5c84013`; peer custody `7a5405a` → `79e44f1` (LisaSyncProtocol one file, LisaTrust two, LisaReplicaStore three), `docs/SYNC-PROTOCOL.md` `94358e8`, M2-19 `a19d7dc`; the duplicate rules against canonical state (LisaReplicaStore, five files, ending `cdced83`), `docs/SYNC-PROTOCOL.md` §8 and M2-20; then this file.
-- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`). None is committed; none is removed or overwritten.
+- **Commits on 2026-11-26:**
+  - the X1 record: `b86d272`, `ee98b23`, `8ba308e`;
+  - X1 attempt 2: the fix `f03cf24`, then the key-path bindings `0528fc3` → `795b4f3` (`ProofModel`, then the two views);
+  - then D-70, `docs/VERIFICATION-SCENARIOS.md` M1-8b, `Harness/docs/SETUP-APPLE.md`, `docs/REQUIREMENTS-MATRIX.md` and this file.
+  - M3-6a's observed horizons on replicas: `53e2a5a` → `89fcb1a` (LisaSyncProtocol one file, LisaCoreLedger three, LisaReplicaStore four), then `docs/SYNC-PROTOCOL.md`, `docs/DECISIONS.md` (D-69), `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6a's converted `POST /v1/tasks`: `f4879b6` → `12bd3fb` (LisaCoreLedger, LisaOwnerData, `Package.swift`, LisaLegacyRequests, LisaAPI four), then D-71, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6a's converted `PATCH /v1/tasks/{id}`: `ae0c52d` → `6cc8073` (LisaSyncProtocol one file, LisaMerge three, LisaCoreLedger two, LisaLegacyRequests one, LisaAPI two), then D-72, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's preference model: `95d3e55` → `fc1c17f` (LisaSyncProtocol, LisaTrust, LisaMerge, one file each), then D-73, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's preferences at Core and on a replica: `f404e2c` → `44cb3ed` (LisaMerge one file, LisaCoreLedger five, LisaReplicaStore two), then `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's converted `PATCH /v1/preferences` (step 3a): `aa0ec19` → `8313d30` (LisaOwnerData one file, `Package.swift`, LisaCoreLedger three, LisaSyncProtocol one, LisaLegacyRequests two, LisaAPI one), then D-74, `docs/SYNC-PROTOCOL.md`, `docs/REQUIREMENTS-MATRIX.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's administrative holds (step 3b-i): `9b09007` → `e920b58` (LisaTrust, LisaStore, LisaCoreLedger, LisaLegacyRequests and LisaAPI, one file each), then `40ec2d7` → `1621ecb` (`Package.swift`, LisaLegacyRequests one file, LisaAPI one), then D-75, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's `resolve` and the refusal guard (step 3b-ii, first part): `3a10979` → `8580aae` (LisaStore one file, LisaCoreLedger two, LisaLegacyRequests one), then D-76, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6b's review description of a hold: `54c4699` (LisaLegacyRequests one file), then `docs/VERIFICATION-SCENARIOS.md` and this file.
+- **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
 
@@ -104,12 +153,34 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 | Rootless engine evidence for G2: UID/GID mapping, secret access | `NOT_RUN_ENVIRONMENT` (Claude; this engine is rootful). Genuine rootless amd64 evidence is still required |
 | arm64 | `NOT_RUN_ENVIRONMENT` (Claude; no arm64 environment); R1's historical results only |
 | SELinux, VPN and off-VPN reachability over IPv4 and IPv6, D05 | The owner's, on the target host; pending M4 |
-| Apple builds and devices (X1–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
+| X1: `Apps/Proof`, N-1, E-1, E-2 | **`FAIL`** (owner, reported 2026-11-26T00:34Z). The first Xcode build of `LisaProof` stopped at `ProofNearbyController.swift:130` with "Failed to produce diagnostic for expression". **Attempt 2 requested** at `795b4f3` (§6). Every X1 case waits for the owner's results |
+| Apple builds and devices (X2–X7), live providers (LS-1–LS-3) | The owner's sessions; pending their milestones |
 | Proton Calendar | Provider capability blocker: no authenticated, private, read-only interface; G4 and G5 stay open (§8.19.6) |
 | KF-1, KF-2 | Open, deferred by the owner on 2026-11-23, no waiver |
 | Frozen fixtures not yet produced | The raw `sending` queue file and the pruning pair were produced at M3's start (`docs/VERIFICATION-SCENARIOS.md` M3-0). Still to produce: `acceptedByProvider` (R1 trusts only the system store for SMTP, so a controlled server needs another route), `confirmedDelivered` and paired-device flows through `lisa serve`, `inProgress`, model-budget consumption, the capture-title and shared-URL cases, richer revision histories and plan-block actions (due before S-02 and S-13 at M9) |
 | Reopening the replica at 0 bytes free | **Decided and done (D-61, `33b0322`).** The owner allowed it on 2026-11-25. At launch the replica empties its ballast and opens once more. That applies on `SQLITE_FULL`, or on the I/O error SQLite reports on a full tmpfs while less than a reserve is free. `releasedBallastAtOpen` and `storageIsAlmostFull` say so, and the ballast is restored when space returns. Tested on a real full tmpfs in the pinned container (M3-D61) |
 | SQLite WAL-reset fix | Settled by design (D-55, M2-0): the loaded library isn't shown to carry the fix, so every WAL database has one writer and checkpointer under an exclusive lock and read-only readers; the guard's checks pass. The production image's library is judged the same way at M4 |
+
+**Environment event (2026-11-25T16:23Z–17:33Z): the sixth pause wasn't resumed**
+- **What happened:**
+  - The guard held pause `P-20261125T122450Z-9de75e` for the 16:20Z reset.
+  - From 16:23:05Z every reading failed. The credentials of the usage reader's headless Claude Code had stopped working: its first fetch failed, and later readings fetched nothing.
+  - The guard refused eight readings, up to 17:23:11Z, as not fresh, and launched nothing.
+  - The VM stopped after the guard's last heartbeat at 17:25:42Z and booted again at 17:32:29Z. The guard doesn't survive a restart.
+  - The owner signed in again (`/login`) at about 17:33Z. A fresh reading at 17:39:32Z worked, bound to the same account (`0c503c8f4594e0fb`).
+- **Impact:**
+  - Nothing was lost. The last writer, `38d24e96-…`, paused cleanly at 12:26Z with everything committed (HEAD `dc86f0a`, clean tree), and no writer ran after it.
+  - The run has been idle since 16:23Z.
+- **The owner's instruction:** report the interruption (done in the session) and wait for approval before resuming. The guard stays stopped until then, since starting it would launch the pending resume.
+- **State at 2026-11-26T00:34Z:**
+  - The guard isn't running, the pause is pending and the writer lock is free.
+  - HEAD was `dc86f0a` before the X1 record.
+  - A fresh reading (`791f946832fc`) showed 0% used, next reset 05:30:00Z.
+  - The lease `interactive:312` was taken without `--consume-pauses` for the X1 record and released afterwards.
+  - The owner then approved resuming. The seventh resume started at 01:04Z (§9).
+- **Weakness found:** the guard tells no one while its readings keep failing. It disarms only after 48 failed readings, about 11 hours with its backoff. Proposed to the owner: a visible notice after three consecutive failed readings.
+
+**Process deviation, recorded (2026-11-26, about 00:35Z, Git):** while finding where X1 results are recorded, this session ran `git ls-files` once, piped into `grep`. It is read-only and changed nothing, but it is outside plan §3's allowed set. Searches use `grep -r` over the tree instead.
 
 **Writer lease lapse (2026-11-24T20:35:00Z–22:52:26Z), found and fixed:**
 - **What happened:** at 20:34:58Z Claude Code moved the interactive session into a background job. That forked it as session `d53fb9c3-…` (pid 4804) and ended the interactive process (pid 321). The lease helper saw its owner exit and released the lease at 20:35:00Z.
@@ -146,7 +217,9 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 **Process deviation, recorded (temporary files):** harness v47's test file was edited in place once, before its first build (a `World` value moved into each test). The rule asks for a new version. Every later fix went into a new version.
 
-**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact.
+**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact. Likewise, M3 harness v34's header and `m2/make-regressions-v19.py`'s docstring say "01:4xZ", but they were written at about 01:35Z and 01:37Z on 2026-11-26. M3 harness v35's header says "about 01:55Z" (written about 01:52Z), v37's "about 02:05Z" (about 02:04Z) and v38's "02:08Z" (02:06Z). The checkpoint's "design (2026-11-26T02:00Z)" was written at about 01:58Z and is corrected in place.
+
+**Record note (2026-11-26, M3-6b step 3a):** four temporary headers state times ahead of the clock. They are harness v45's "02:58Z" and v46's "03:00Z", and the docstrings of `m2/make-regressions-v25.py` ("03:01Z") and `make-regressions-v26.py` ("03:03Z"). They were written between about 02:53Z and 02:56Z: harness v45's build log is named `20261126T025359Z`, and the regression run `20261126T025545Z`. Temporary files aren't edited, so this note is the correction. The rule stays: read `date -u` before writing any time.
 
 **Found and fixed in M2-20:** the replica's duplicate rules looked only at its journal. A relayed copy of an operation known from canonical state became a pending overlay, and a changed body or a reused triple raised no security event. Canonical operations now keep their origin triple, and the rules consult canonical state too (`docs/VERIFICATION-SCENARIOS.md` M2-20).
 
@@ -158,9 +231,59 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 **Process deviation, recorded:** before 08:08Z this run used five read-only Git commands outside the plan's allowed set (§3): `git worktree list`, `git merge-base --is-ancestor`, `git ls-files`, `git rev-list --max-parents=0` and `git symbolic-ref`. None changed anything. Each was replaced (by `rev-parse`, `log` or a `git show` walk), and only `status`, `diff`, `log`, `show`, `rev-parse`, `add` and `commit` are used since.
 
+**Environment event (2026-11-26, from 01:09Z or later to 03:29Z): the session ran outside the guard's bound lineage.**
+- **What happened:**
+  - At 01:09:16Z or later, the seventh resume's interactive session (`d53fb9c3-…`, pid 312) moved to a background job. 01:09:16Z is the start time of the processes below, 20:09:16 EST; the exact moment of the move isn't recorded.
+  - Claude Code's daemon (`claude daemon run --origin transient --spawned-by {"label":"claude",…,"pid":312}`, pid 24166) started a spare process (`claude bg-spare`, pid 24204). That process continued the conversation as session `555b677a-9501-49f7-98a2-ac656bfeb1b2`.
+  - The lease `interactive:312` lapsed with pid 312, and `writer.lock` was free from then on.
+- **What I found:** at 03:26Z, before pausing. The session wasn't in `guardctl-v2 status`'s lineage, and pid 312 no longer existed.
+- **The check that failed:** guard v2's `extend-lineage` needs a process whose first argument contains `/claude/` and which shows `--session-id`, `--fork-session` and `--resume`. The spare process shows none of them. The attempt is recorded as `lineage_refused` at 03:27:06Z, "the process is not Claude Code".
+- **No other writer ran:** the guard's events show no launch and no lease after 01:04:21Z, and the guard, pid 17963, had no pending pause. Every commit since 01:04Z was made in this one conversation, first as `d53fb9c3-…` and then as `555b677a-…`.
+- **What I didn't do:** I didn't weaken the guard's check, and I didn't record the pause under the parent session's ID.
+- **Consequences:** this pause is recorded with the session's real ID, so the guard rejects it and won't launch. The owner resumes manually.
+- **For the owner to decide (proposal, not built):** a guard v3 whose `extend-lineage` also accepts a daemon-spawned spare, with evidence:
+  - the spare's parent chain reaching a `claude daemon run` whose `--spawned-by` pid held a lineage session's lease, per a `writer_acquired` event;
+  - the transcript `<session>.jsonl` under the project's transcript directory, continuing the parent's.
+
+
 ## 6. Pending owner sessions and experiments
 
 **X1 is requested (2026-11-24T13:50Z):** entry point `Apps/Proof` (scheme `LisaProof`, test plan `X1`) with `swift run lisa-verify quickstart`; the sheet is `Harness/docs/SETUP-APPLE.md` (prerequisites, build and signing, roster, the nine nearby cells for both designs, the nine fetch-probe cases on each device, the three E-2 builds, expected observations, and the redacted export to return). Cases: `OV-NEAR-{MI,MP,IP}-01..03` (paired), `OV-APPLE-X1-01..03`, `OV-APPLE-X1-FETCH-01..09`. Still to come: X2 (after M3), X3 (after M5, with the R1 Mac build for X7), X4 (after M6), X5 and LS-1/LS-2 (after M7), X6 and LS-3 (after M8), X7 (at M9), target-host checks (from M4). None is requested yet; each gets its entry point, prerequisites, case IDs, expected observations and the redacted results to return when its milestone delivers it.
+
+**X1, first attempt: `FAIL` at the build** (the owner, reported 2026-11-26T00:34Z)
+- **The owner's report:** "`Xcode` reported `Failed to produce diagnostic for expression; please submit a bug report` at `Apps/Proof/Nearby/ProofNearbyController.swift`, line `130`. The Xcode build failed."
+  - It came in the Claude session, with no harness export.
+  - Not stated: the Xcode version, the destinations, the commit and any other errors.
+  - The verbatim report, with the analysis below: `.tmp/r2/20261124-r2-5462/owner/x1-attempt1-20261126T0034Z-v2.md`. It supersedes the first version beside it and corrects it on three points.
+- **Line 130:** the file is unchanged since `b5b69b6`, so every commit the owner could have fetched has this line.
+  - Design A's listener builds its PSK selection probe as `configuration.probeSelectionBlock ? { [weak self] hintBytes in Task { @MainActor [weak self] in self?.log("… \(hintBytes.map(String.init) ?? "none")") } } : nil`, against the declared type `(@Sendable (Int?) -> Void)?`.
+  - The types agree with `DesignAParameters.make`. The type checker found no solution and couldn't name an error. That is a compiler defect on this shape of expression, and it may also hide a real error.
+  - No other Swift file under `Apps/` or `Harness/Sources` uses a closure as a branch of `? :`.
+- **Why M1 missed it:** M1-8 type-checked only the 38 files without an Apple-only import. This file imports `Network`, so it had syntax checks only. X1 was its first type-check.
+- **Status:**
+  - The `LisaProof` build: `FAIL` (owner).
+  - `OV-APPLE-X1-01`–`03` (E-2) can't pass until a fixed build passes.
+  - The nearby cells (N-1), the fetch probe (E-1) and test plan `X1` weren't reached.
+  - N-1, E-1 and E-2 stay open, so M6's nearby transport and M7's retrieval design keep waiting (plan §9). Other work doesn't wait.
+- **Next, once the owner approves resuming (not done now):**
+  1. Rewrite the expression with an explicitly typed closure and no `? :` (the proposed code is in the evidence note).
+  2. Type-check `Apps/Proof`'s Apple-importing files on Linux against stand-ins, as M1-8 did for the portable files, so the next attempt doesn't stop at the following error.
+  3. Commit, and request X1 again, naming the new commit.
+
+  The Xcode version and any other errors in the build log would help.
+
+**X1 attempt 2 is requested (2026-11-26T01:29Z)** at commit `795b4f3` or later.
+- **Unchanged:** the entry point, sheet and cases, as above.
+- **What changed:**
+  - The fix for line 130 (`f03cf24`).
+  - The proof views' three `Binding(get:set:)` closures became key-path bindings (`0528fc3`–`795b4f3`). They compile whichever way the SDK annotates those closures.
+- **What was checked:** the whole target type-checks on Linux (Swift 6.4.2 and 6.4.3) against framework stand-ins.
+  - The iOS-like and macOS-like passes: 0 errors, 0 warnings.
+  - The baseline with the old file: exactly attempt 1's error.
+  - Six negative controls: all caught.
+  - Details: `docs/VERIFICATION-SCENARIOS.md` M1-8b.
+- **Still unknown:** the real SDK may differ from a stand-in, and Xcode's Swift may be older than 6.4.
+- **If the build fails again,** send the output of `xcodebuild -version` and every error with its file and line (the sheet's §2 now says how), so one fix covers them all.
 
 ## 7. Permissions in force
 
@@ -170,10 +293,67 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 - **Build output (owner, 2026-11-25):** regenerable build output may be removed, inside the run directory too, now and later. Each report states the override, the deleted files and the recovery steps.
 - **The replica's ballast (owner, 2026-11-25):** it may be released to open the replica at launch (D-61), with the same reporting.
 - **Kept by the owner:** the host, accounts, image publication, production deployment, real-data cutover, the Apple Developer account, every live provider action and every device session.
+- **The new environment (owner, 2026-11-26):** "The new environment permission will be the same as the current permission, except the regenerable file removing overriding."
+  - **Everything above carries over,** except the build-output removal of 2026-11-25. With it gone, plan §10.2's no-removal rule holds again for build output.
+  - **The replica's ballast release (D-61)** is implemented behaviour, and it stays.
+  - The list is in `Handoff.md` §3.
 
 ## 8. Last buildable checkpoint
 
-**`6b3ec91`** (`Sources/LisaLegacyRequests/LegacyChildSet.swift`, M3-6a's observed horizons at Core, D-69):
+**`54c4699`** (`Sources/LisaLegacyRequests/LegacyPreferenceRoutes.swift`, the review description of a hold, D-76):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-review-20261126T032513Z/`).
+- **Harness:** M3 harness v50 passes 15/15.
+- **Regressions:** regression package v30 (`m2/run-regressions-v31.sh`, run `m2/regressions-run-20261126T032524Z/`) passes all 29 targets, and v35 and v47 pass too.
+
+Before it, **`8580aae`** (`Sources/LisaLegacyRequests/LegacyPreferenceRoutes.swift`, M3-6b step 3b-ii's `resolve` with the refusal, D-76):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-resolve-refuse-20261126T031944Z/`). Lint is clean on the four changed files.
+- **Harness:** M3 harness v49 passes 14/14.
+- **Regressions:** regression package v29 (`m2/run-regressions-v30.sh`, run `m2/regressions-run-20261126T031958Z/`) passes all 29 targets, and v35 and v47 pass too.
+- **The span:** `3a10979` to `8580aae`. The commits are ordered so that each one builds, but the build was checked only at the end.
+
+Before it, **`1621ecb`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6b step 3b-i's holds with the shared answers, D-75):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-answers-20261126T031143Z/`). Lint is clean on the changed files, apart from R1's own `Package.swift` line.
+- **Harness:** M3 harness v48 passes 12/12.
+- **Regressions:** regression package v28 (`m2/run-regressions-v29.sh`, run `m2/regressions-run-20261126T031158Z/`) passes all 29 targets, and v35 and v47 pass too.
+- **Before it, `e920b58`**, holds alone: the suite at `m3/suite-after-holds-20261126T030554Z/`, harness v47 12/12 and regression package v27, all passing.
+- **The spans:** `9b09007` to `e920b58`, then `40ec2d7` to `1621ecb`. The commits are ordered so that each one builds, but the build was checked only at each span's end.
+
+Before it, **`8313d30`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6b step 3a's converted `PATCH /v1/preferences`, D-74):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-conversion-20261126T025433Z/`). It was built from the working tree, which held the span's final content uncommitted. Lint is clean on the nine changed files, apart from R1's own `Package.swift` line.
+- **Harness:** M3 harness v45 passes 10/10.
+- **Regressions:** regression package v26 (`m2/run-regressions-v27.sh`, run `m2/regressions-run-20261126T025545Z/`) passes all 29 targets, and v35 and v47 pass too.
+- **The span:** `aa0ec19` to `8313d30`. The commits are ordered so that each one builds, but the build was checked only at the end.
+
+Before it, **`44cb3ed`** (`Sources/LisaReplicaStore/ReplicaPreferences.swift`, M3-6b's preferences at Core and on a replica, D-73):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-ledger-20261126T022947Z/`). Lint is clean on the eight changed files.
+- **Harness:** M3 harness v43 passes 5/5.
+- **Regressions:** regression package v24 (`m2/run-regressions-v25.sh`, run `m2/regressions-run-20261126T023013Z/`) passes all 31 targets, and v35 and v47 pass too.
+- **The span:** `f404e2c` to `44cb3ed`. The build was checked at its end, not at each commit.
+
+Before it, **`fc1c17f`** (`Sources/LisaMerge/PreferenceMergeState.swift`, M3-6b's preference model, D-73):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-preference-model-20261126T022139Z/`).
+- **Harness:** M3 harness v41 passes 7/7.
+- **Regressions:** regression package v23 (`m2/run-regressions-v24.sh`, run `m2/regressions-run-20261126T022204Z/`) passes all 27 targets, and v35 and v47 pass too.
+
+Before it, **`6cc8073`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6a's converted `PATCH /v1/tasks/{id}`, D-72):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-patch-final-20261126T020726Z/`). Lint is clean on the nine changed files.
+- **Harnesses:** M3 harness v38 passes 15/15, and M3 harness v39 passes 7/7. v39 is M2 harness v15's tests with an expectation that D-72 superseded.
+- **Regressions:** regression package v22 (`m2/run-regressions-v23.sh`, run `m2/regressions-run-20261126T021223Z/`) passes all 26 targets, and v35 and v47 pass too. Package v21's run found the superseded expectation (`m2/regressions-run-20261126T020805Z/`).
+- **The span:** `ae0c52d` to `6cc8073`. Each commit builds.
+
+Before it, **`12bd3fb`** (`Sources/LisaAPI/APIRouter.swift`, M3-6a's converted `POST /v1/tasks`, D-71):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-create-committed-20261126T015435Z/`). Lint is clean on the changed files, apart from R1's own `Package.swift` line.
+- **Harness:** M3 harness v36 passes 7/7.
+- **Regressions:** regression package v20 (`m2/run-regressions-v21.sh`, run `m2/regressions-run-20261126T015451Z/`) passes all 26 targets, and v35 and v47 pass too.
+- **The span:** `f4879b6` to `12bd3fb`. Each commit builds.
+
+Before it, **`89fcb1a`** (`Sources/LisaReplicaStore/ReplicaStore.swift`, M3-6a's observed horizons on replicas, D-69):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors. The R1 suite passes 376/66 (`m3/suite-after-replica-horizon-20261126T013338Z/`). Lint is clean on the eight changed files.
+- **Harness:** M3 harness v34 passes 20/20.
+- **Regressions:** regression package v19 (`m2/run-regressions-v20.sh`, run `m2/regressions-run-20261126T013734Z/`) passes all 25 targets, and v35 and v47 pass too.
+- **The span:** `53e2a5a` (`ChangeEntry`) to `89fcb1a`. Each commit builds. Until `a59ce54`, a snapshot swap drops the new columns, but nothing reads them before `89fcb1a`.
+
+Before it, **`6b3ec91`** (`Sources/LisaLegacyRequests/LegacyChildSet.swift`, M3-6a's observed horizons at Core, D-69):
 - **Build and suite:** a full debug build with tests has 0 warnings, and the R1 suite passes 376/66 with schema v11 (`m3/suite-after-observed-horizon-20261125T121653Z/`). Lint is clean on the six changed files.
 - **Harness and migration check:** M3 harness v33 passes 15/15. `m3/check-migration-v11-v1.py` passes v11's copy path on a v10-shaped database.
 - **Regressions:** regression package v18 (`m2/run-regressions-v19.sh`, run `m2/regressions-run-20261125T122040Z/`) passes all 25 targets, and v35 and v47 pass too.
@@ -249,13 +429,30 @@ Before it, **`33b0322`** (`ReplicaStore.swift`, D-61). A full debug build with t
   - **Work:** M3-5d's signing-key and device key rotation, then M3-6a up to Core's observed horizons, from 10% to about 85%. The context was compacted once, at about 12:10Z.
   - **The cost:** 61 points in 45 minutes with the long context before the compaction (11:24Z–12:09Z), and about 8 points for the whole observed-horizon step after it (12:12Z–12:22Z: code, build, suite, two harness versions, regression v18 and the records).
   - **The pause:** at about 12:26Z for quota, with the exact next action in §11. It is recorded with `guardctl-v2 pause`; the pause note and the final reading are named in the guard's `pause_recorded` event. The launch wrapper releases writer.lock when this session exits.
+- **The seventh resume (2026-11-26T01:04Z, manual):**
+  - **Why manual:** the sixth pause wasn't resumed by the guard (§5: failed readings from 16:23Z, then the VM restart). The owner asked for a report, then approved resuming.
+  - **The steps:**
+    - a fresh reading at 01:04:19Z: `12ad2fa98961`, 4% used, next reset 05:30:00Z;
+    - the lease `interactive:312` (holder pid 17960) with `--consume-pauses`, which consumed `P-20261125T122450Z-9de75e`;
+    - the guard restarted (pid 17963) with no pending pause;
+    - the watchdog at 85% (`watchdog_v1.py --threshold 85 --max-hours 5`, a background task).
+  - **Why this session:** the resume runs here, in the owner's interactive session, not as a forked resume of `38d24e96-…`. Its first work, X1 attempt 2, had been analyzed in this session.
+- **The seventh resume's work and the seventh pause (2026-11-26):**
+  - **Work, 01:04Z to 03:29Z:** X1 attempt 2's request, M3-6a's replica side and task routes, and M3-6b from the preference model to `resolve`'s refusal, from 4% to 80%.
+  - **Costs** stayed at about 0.3–0.9 points a minute. A build-and-regression round cost about 2–3 points.
+  - **The pause:** at 03:29Z for quota (reading `866b0f5c68f4`, 80%, reset 05:29:59Z). It stopped there because the next slice, the Core-only partition with `apply`, can't finish before about 88%.
+  - **The guard's record:** the pause is recorded with `guardctl-v2 pause` under this session's ID, which the guard rejects (§5). The watchdog is stopped.
 - **Resume.** Only a recorded quota pause or a verified interruption is resumed, once a fresh reading confirms usable capacity and the previous writer released the lock. Resuming first inspects files and processes. A manual resume takes the lease with `--consume-pauses`, so the guard never launches a second writer.
 
 ## 10. Owner action ledger
 
-No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only; it involves no account, provider or real action, so the action ledger records none.
+No live action or external submission has been requested or performed in this run. **Owner check requested:** X1 (§6), on the owner's devices only. It involves no account, provider or real action, so the action ledger records none. Its first attempt failed at the build (reported 2026-11-26), before any device ran. Attempt 2 is requested at `795b4f3`.
 
 ## 11. Next steps
+
+**At the handoff (2026-11-26T18:29Z):** resume only on the owner's explicit go-ahead, in the new environment, following `Handoff.md` §7. The exact next action is unchanged: step 3c-i with 3b-iii, below.
+
+**Done first on resuming (2026-11-26T01:04Z–01:29Z):** the X1 build fix, the whole-target Linux type-check (D-70) and X1 attempt 2's request (§6). **Now:** M3-6a's replica side, below.
 
 1. **M3 — Core, v1 and the direct HTTPS path (in progress).** M3-0, the frozen fixtures due before S-01, is done (2026-11-25T01:28Z). The spans, in order, each with its harness, regressions and records:
    1. **M3-1, done** (`docs/VERIFICATION-SCENARIOS.md` M3-1; the receipt's vector and the replica's verifying receipt path followed in M3-3). **Schema v5 and the Core ledger's intake (§8.4.1, §8.2.1–§8.2.2 at Core):**
@@ -294,7 +491,7 @@ No live action or external submission has been requested or performed in this ru
             - A child is decided only when R1's `expectedRevision` equals the current projection revision N, so the edit saw exactly the state up to P(N), the position revision N reflects.
             - **The body** carries N in its `ObservedSet` (`projectionRevision`, **done**: `b6abecb`, `47f32cf`; harness v31, 9/9), so it stays a pure function of the request.
             - **At decision, done** (D-69; `1a8436e` to `6b3ec91`; harness v33, 15/15): Core resolves N through `core_projection_revisions` (schema v11 adds each revision's epoch) to the horizon `(epoch, "tasks", P(N))`, keeps it with the operation (`core_operations.observed_epoch` and `observed_position`), and folds with it in `CoreTaskFold.view`. `LegacyChange.observedRevision` puts N in the child. An unmapped N observes nothing.
-            - **For replicas, the exact next action:** Core serves the resolved horizon in Core-signed data, and replicas keep it with the canonical operation and fold with it, since they don't hold the map. "Decisions are made per epoch" (§8.12.2): another epoch may resolve the same bytes differently. The steps:
+            - **For replicas, done (2026-11-26; `53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19; `docs/VERIFICATION-SCENARIOS.md`, "observed horizons on replicas"):** Core serves the resolved horizon in Core-signed data, and replicas keep it with the canonical operation and fold with it, since they don't hold the map. "Decisions are made per epoch" (§8.12.2). The steps were: another epoch may resolve the same bytes differently. The steps:
               1. **surveyed (12:23Z):**
                  - `ChangeEntry` (`Sources/LisaSyncProtocol/ChangeEntry.swift:7`) has `position`, `partitions` and `change`, which is `.operation(SignedOperation, Decision)` or `.record(DerivedRecord)`.
                  - Change pages and full-snapshot chunks both carry it (`ChangePage.swift:74`, `SnapshotChunk.swift:52`), so one field covers both paths.
@@ -303,7 +500,28 @@ No live action or external submission has been requested or performed in this ru
               2. add an optional `observedHorizon` to `ChangeEntry`'s operation change, encoded only when present, so other entries' bytes don't change. The page's signature covers it;
               3. add a replica column, and use it in the replica's fold exactly as `CoreTaskFold.view` does;
               4. test it end to end: a legacy edit at Core, a replica pulling the page, and the same `TaskView` on both. Repeat it with a snapshot install.
-          - **Then:** R1's router hook and `POST /v1/tasks` and `PATCH /v1/tasks/{id}` under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`.
+          - **The router hook and `POST /v1/tasks`, done (2026-11-26; D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7; regression v20).**
+          - **`PATCH /v1/tasks/{id}`, done (2026-11-26; D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15; `docs/VERIFICATION-SCENARIOS.md`).** It was built from the design below, with two corrections found by its harness: R1-only writes record their revision, and a status-only PATCH with no child still runs R1's transition.
+            - **The design** (written 2026-11-26 at about 01:58Z, for D-72):
+              - **The conversion:** inside the parent, in R1's order: the body size; the decode (400); the record (404 "the task"); the revision check (409 "the task changed since it was read", `currentRevision`); the correction, its deadline parsed (400); `TaskService`'s checks (403, 400). Nothing is committed before them.
+              - **Field children:** one per field the request carries, with discriminators named after R1's fields: `field:title`, `field:notes`, `field:priority`, `field:deadline` (also for `clearDeadline`), `field:estimatedMinutes`, `field:confirmation`. Each is observed at N. They are taken in without projecting and projected once with `forceRevision` (R1's `correct` always writes), with a hint that marks `deadline` owner-corrected whenever the request sets or clears it, as R1 does.
+              - **Then:** the `task.corrected` audit and `.taskChanged(material:)`.
+              - **The status child, decided by the target alone, so the set stays a pure function of the request:**
+                - `completed` → `task.complete`; `cancelled` → `task.cancel`;
+                - `open` → `task.reopen` with no named actions, observed at N;
+                - `inProgress` and `blocked`: no child. They are R1-only substates of an open task, which the projection already keeps, and the converter writes them to R1's record with R1's transition.
+                - R1's transition rules decide the child against the record after the correction. A refusal (409 "the task cannot move from …") records `refused` and the answer, with the field children committed.
+                - A status equal to the current one writes no audit, as R1 does.
+              - **Protocol and merge changes:**
+                - `note.replaceObserved` may have empty text, which removes the observed notes and adds none (R1's `notes: ""`).
+                - `task.reopen` may name no action, and then reopens the terminal actions its observed coverage covers. `TerminalActions` keeps commit positions, so a horizon can cover them.
+              - **The terminal replies for PATCH:** 200 with the current `TaskDTO` and `Lisa-Reply: current`; 404 "This change was applied; the task was deleted afterwards."
+              - **The harness:** v37, differential against R1's path, as v36.
+            - **Plan §8.12.2's route table** (re-read 2026-11-26, about 01:39Z):
+            - **`POST /v1/tasks`:** one create-task child, the task ID derived from the parent; 201 `TaskDTO`, recorded atomically.
+            - **`PATCH /v1/tasks/{id}`:** the revision check (409 "the task changed since it was read"), then every correction field validated together (400, nothing committed), then the field children, then the status child. A refused status (409 "the task cannot move from …") leaves the field children committed, with the error recorded.
+            - **Replays:** the same key and fingerprint get the recorded response with `Lisa-Replayed: true`; a different fingerprint gets 422 `requestIDReused`.
+            - **Later slices:** terminal replies and the reply dependency index (M3-6d).
         - **Surveyed facts for step 3 (2026-11-25T12:00Z):**
           - **R1's idempotency:** `APIRouter.idempotent` (`Sources/LisaAPI/APIRouter.swift:108-150`) keys `caller.scope:requestID`, with the fingerprint SHA-256 over `METHOD path\n`, the sorted `key=value\n` query lines and the body.
           - **The seam:** the plan links LisaLegacyRequests from LisaAPI (§7.2.1), so the router calls the converter there for converted routes. `DTOMapping` is internal to LisaAPI, so the router passes renderers (a `LisaTask` to its JSON, an error to R1's body) into the conversion, which runs them inside the transaction.
@@ -318,7 +536,100 @@ No live action or external submission has been requested or performed in this ru
             - **The cause:** `TaskProjection.project` runs once per child (`CoreLedger.swift:279`), and R1's `records.update` raises the revision each time. R1 also raises it for a correction that changes no value, because `correct` always updates when any field is given, while the projection skips an update that changes nothing.
             - **The plan for it:** let `LegacyTransaction.intake` defer the projection, then add an explicit `project(entity:forceRevision:)` step. The converter takes the field children in, projects once (forcing the step when R1 would), then takes the status child in, which projects itself.
           - **Mapping:** R2's `TaskFieldValue` has title, priority, deadline, estimate, splittable and confirmation; notes are their own operation family.
-      - **M3-6b:** preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review`/`resolve` (S-03).
+      - **Gap noted (2026-11-26):** `PATCH /v1/ideas/{id}` shares the task PATCH's shape in §8.12.2, but R2 has no idea payloads, merge or projection yet. `OperationCatalog` names only `idea.create`, `idea.edit` and `idea.lifecycle`. It belongs with captures (M3-6c), which create ideas.
+      - **M3-6b, the next slice. The design for its first step** (2026-11-26T02:17Z, for D-73):
+        - **The entity:** a preference is a register per key, not an owner item.
+          - Its ID is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)`, so every device, Core and epoch agree, and R1's random record IDs don't matter.
+          - Partition `preferences`.
+        - **Payloads:**
+          - `preference.set {key, value}`. The value is `{"kind":"text","text"}`, `{"kind":"number","number":"<decimal>"}`, `{"kind":"flag","flag"}` or `{"kind":"list","list":[…]}`. A number is a decimal string, because canonical JSON is integer-only; it is finite and in its shortest round-trip form.
+          - `preference.delete {key}` and `preference.confirm {key}`.
+          - A key is a token of 1–128 bytes. Whether a key and value are supported is checked at Core, with R1's rules.
+        - **The merge:** `MultiValueRegister<value?>`, where a delete writes no value and replaces what it observed.
+          - So a later set re-creates the key, as R1's delete-then-set does. §8.3.1's dominating tombstone is for owner items, which a key isn't.
+          - A confirmation marks the model-authority candidates it observed as confirmed.
+          - The key is absent only when every survivor is a delete. Otherwise the projection shows the first surviving value in display order.
+        - **Step 1 done** (2026-11-26; D-73; `95d3e55`–`fc1c17f`; harness v41, 7/7): the payloads, the entity and the merge as designed.
+        - **Step 2 done** (2026-11-26; `f404e2c`–`44cb3ed`; harness v43, 5/5). The questions about restricted keys move to step 3.
+        - **Step 3a done** (2026-11-26; D-74; `aa0ec19`–`8313d30`; harness v45, 10/10; regression v26). What changed from the design below:
+          - **Restricted keys** take the narrower reading of §8.17's "permitted": every administrative key, not only the model settings, plus unsupported keys.
+          - **A blind change also observes something:** every converted preference child observes R1's record as Core found it.
+          - **Core refuses a device's operation** on an administrative or unsupported key, or with an invalid value (R2-TRUST-05). Step 2 had accepted them.
+        - **Step 3b-i done** (2026-11-26; D-75; `9b09007`–`e920b58`, then `40ec2d7`–`1621ecb`):
+          - Holds in owner scope: the waiting parent, schema v12, decision keys and `LR-` tokens, `legacyHolds()`, and the unrecorded 503 with `Retry-After`.
+          - R1's request and answer bytes now live in `LegacyPreferenceAnswers`, for the router and `resolve` alike.
+          - Evidence: harness v47 12/12, then v48; the suite; regressions v27 and v28.
+        - **Step 3b-ii's first part done** (2026-11-26; D-76; `3a10979`–`8580aae`; harness v49, 14/14; regression v29):
+          - the frame and its token rules;
+          - replays of decided holds;
+          - the refusal with R1's 403;
+          - the refusal guard.
+
+          The design below was followed, except `apply`. Applying an administrative key takes its value into the ledger, which D-74 restricts to Core, so `apply` waits for the Core-only partition.
+        - **Now, the exact next action, step 3c-i with 3b-iii, in one slice.** They are testable only together, since an administrative record projected by Core can only come from `apply`:
+          - **The Core-only partition:**
+            - `CorePreferenceFold.partition(forKey:)` gives `preferences` for permitted keys and `core-restricted` for the rest. The fold and the change log use it per key.
+            - The rule: a partition named `core-…` is Core's own, and `/v2/changes` refuses it with 404 (LisaCoreAPI). The v2 router has no snapshot route yet; one must keep the same rule.
+          - **`apply`:**
+            - Factor `update`'s loop into one that can start at the held index with the decision's authority: R1's checks run again, the change doesn't hold again, and it is taken in, projected and audited. Then the suffix runs up to the next administrative key, a new hold at generation + 1, or to the end, the answer through `LegacyPreferenceAnswers.answer`.
+            - The outcome text names what moved, for example "Applied change 3 of 7; change 4 applied; change 5 held as LR-…".
+            - R1's domain changes are returned for the caller to propagate.
+          - **A device's confirm of an administrative key** is then converted too, into `core-restricted`, in place of the `restrictedSibling` failure.
+          - **Tests:** S-03's apply runs (changes 3 and 5 of 7 administrative): `LR-a apply`, then the same command again after the store is reopened, which replays; `LR-b apply` to the end, with the recorded full list; and `/v2/changes?partition=core-restricted` refused with 404.
+        - **Then:** step 3c-ii, the redacted receipts below; then the CLI, `lisa core legacy review` and `resolve`, once the host opens Core's ledger. Read first how M3-5d keeps Core's signing key.
+        - **The design of step 3b-ii** (2026-11-26, about 03:12Z), for the record:
+          - **The frame,** `CoreLedger.legacyResolve(token:action:actor:decide:)` in one write transaction:
+            1. **Parse:** `LegacyDecisionToken.typedPrefix`. Anything else is refused as not a decision token.
+            2. **Match** every hold whose `token` starts with the prefix, waiting or decided. None: "LR-… doesn't name a waiting change." Two or more: refused, naming each match's scope, request ID and a longer token.
+            3. **A decided match replays:** the same action returns the recorded outcome. Another action gets "Already decided: <action> by LR-… at <time>; nothing changed."
+            4. **A waiting match** must be its parent's latest generation, with the parent `awaiting_administrative_review`. Otherwise it is refused, naming the waiting change and its token.
+            5. **Decide:** the route's closure gets a `LegacyTransaction` and the hold's context: scope, request ID, fingerprint, the kept body, the held index and the generation.
+            6. **What the frame writes:** the dispositions it returns (`UPDATE core_legacy_children`); the decision record on the hold row (a random decision ID, action, actor, time, outcome text); a new hold at generation + 1 if it reaches one; and on completion the parent `complete`, with status, body, expiry and `completed_at`, and `request_body` cleared.
+          - **The route's side,** `LegacyPreferenceRoutes.resolve`:
+            - It re-reads the kept body through `requested`. The children are a pure function of the request, so the plan is rebuilt with the same IDs.
+            - **apply:** R1's state-dependent checks run again for the held change: the revision for a set, the record for a confirm or delete. A refusal now is R1's 409 or 404 template. Then the change is taken in, projected and audited, and the suffix is decided by the same loop as `update`, factored out of it, up to the next administrative key or the end.
+            - **refuse:** the held child is `refused`, the rest `not_reached`. The answer is R1's 403 shape, `forbidden`: "This setting can be changed only on the administrative terminal."
+          - **The refusal guard** (§8.14.8), schema v13: `core_legacy_refusal_guards(scope, request_id, fingerprint, status, body, created_at)`. It is content-free and never expires. The lookup consults it before a parent's body expiry, so the 403 replays for the dataset's life.
+          - **"With the authority of that decision":** record the decision ID with the applied child, on Core's legacy child row or the hold's record. A receipt field would change the receipt format, so it is open until decided (D-76).
+          - **Then the CLI:** `lisa core legacy review` and `resolve`. First read how a CLI process opens Core's ledger with its signing key: `LisaHost` doesn't open one yet, and M3-5d's key custody isn't wired to the host.
+          - **Tests (S-03):** changes 3 and 5 of 7 administrative; resolve `LR-a` apply, with its reply lost and the command run again after a reopen of the store; `LR-a refuse` answering "Already decided"; a mistyped token; `LR-b apply` to the end, with the recorded full list; then the refuse run, with R1's 403 recorded, 6 and 7 `not_reached`, and the guard replaying after the body's expiry.
+        - **Then, step 3c:** restricted siblings.
+          - Children on restricted keys are taken in at Core but never served.
+          - Only a Core-signed redacted receipt `{childID, index, disposition, commitPosition, opaqueCommitment}` replicates, with the 32-byte salt kept at Core. Its partition or record kind needs a decision.
+          - The test: `model.endpoint` with a canary URL between two permitted keys, and the relayed bytes searched for the canary.
+        - **Step 3 as designed** (2026-11-26, about 02:31Z), for the record:
+          - **R1's semantics** (read 2026-11-26, about 02:31Z):
+            - `SettingsHandlers.updatePreferences`: 1–50 changes, or 400 "send between 1 and 50 changes". Each change in order is a `set` (a value), a `confirm` (`confirm: true`) or a delete (neither). The first error stops the request, and the success body is the full preference list.
+            - `PreferenceService.set`: model and runtime principals are refused; a paired device gets 403 for a consequential key; then `validate`. A record is found by key. `expectedRevision` is checked only when it exists, else inserted. It writes value, `explicit`, confirmed and `updatedAt`, always as one revision step, then the `preference.set` audit (detail `consequential` or `ordinary`).
+            - `confirm`: only the owner or a paired device; 404 for an absent key; then `confirmed`, `updatedAt` and one revision step, with the `preference.confirmed` audit.
+            - Delete (`DeletionService`): 404 for an absent key; 403 for a consequential key unless the owner. The plan adds that a device gets 403 for any delete.
+          - **The design, recorded as D-74:**
+            - **Administrative keys:** R2-TRUST-05's administrative keys are R1's consequential keys (`PreferenceKey.consequential`).
+            - **Children:** `change:<index>` (set, confirm or delete), each observed at the change's `expectedRevision` if it has one.
+            - **Projection:** `LegacyTransaction` gets a per-entity preference projection with `force`, as R1's set and confirm always write, plus R1's audits.
+            - **Errors** come from templates that name positions (§8.12.2), e.g. "changes[3].key is not a supported preference".
+            - **Owner scope:** an administrative key holds the request (hold generations, decision tokens, `legacy review` and `resolve`, the 503).
+            - **Device scope:** an administrative key is refused at once (403), and the later children are `not_reached`.
+            - **Restricted siblings:** `model.endpoint`, `model.dataSharing` and unsupported keys are never replicated; only redacted receipts replicate.
+          - **The split:** 3a covers device scope and owner scope without administrative keys, with a differential harness against R1. 3b covers holds, tokens, the CLI and restricted siblings (S-03).
+          - **Supported operations:** `CoreLedger.isSupported` and `checkPayload` accept `preference.*` on entity type `preference`. `checkPayload` decodes `PreferenceOperationPayload` and requires `entityID == PreferenceEntity.id(forKey:)`.
+          - **`apply`:** it branches by entity type into a `CorePreferenceFold`, modeled on `CoreTaskFold` with resolved horizons. `PreferenceView.isConflict` gives `accepted_with_conflict`. The change log uses partition `preferences`.
+          - **The projection** (`PreferenceProjection`) writes R1's `Preference` record: insert, update or delete by key, with origin `explicit` for owner authority and `confirmed` from the view.
+            - It takes a `force` for R1's always-writing `set` and `confirm`.
+            - It records the revision with `TaskProjection.recordRevision`, which works for any entity.
+            - The value maps as text, number via `Double` and back, flag and list.
+          - **The replica's fold** for preferences comes the same way, so Core's and a replica's view match.
+          - **Restricted keys** (`model.endpoint`, `model.dataSharing`, "Core's model settings", §8.17): never served in change pages. Decide whether to keep them out of the `preferences` partition or refuse their device operations, before or with step 3.
+        - **Step 3:** the conversion (`change:<index>` children, R1's stop at the first refusal, holds, `review` and `resolve`, restricted siblings).
+      - **M3-6b's whole scope:**
+        - **The scope:** the preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review` and `resolve` (S-03).
+        - **The model it needs first:** preference operations (set, confirm and delete per key) with a per-key merge and the projection into R1's preference records; restricted siblings with redacted receipts (§8.12.2); error templates without caller text.
+        - **R1's semantics to keep** (`PreferenceService`, `SettingsHandlers.updatePreferences`):
+          - 1–50 changes, in order, stopping at the first refusal;
+          - `set` checks `expectedRevision` only when the key exists, so it inserts an absent key;
+          - `confirm` on an absent key is a 404;
+          - consequential keys are owner-only, and devices get 403 for them and for any delete;
+          - the success body lists every preference.
       - **M3-6c:** captures with R1's permanent deduplication, notification receipts with R1's durable prefix, reminder, notification, proposal and plan-block actions.
       - **M3-6d:** terminal replies (the four cases), the reply dependency index, error templates without caller text, outcome-only migrated parents, and `upgrade_required` on v1.
       - **M3-6e:** S-01 against the frozen R1 client, queue and CLI from `491c90a` (M3-0's fixtures and `m0/frozen-client/harness4`).

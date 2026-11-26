@@ -128,7 +128,7 @@ let package = Package(
         .target(name: "LisaLocalSearch", dependencies: ["LisaSQLite", "LisaReplicaStore", "LisaSyncProtocol"]),
         // R2 Core ledger (plan §7.2.1, §8.4): intake, receipts, causal release, the change log and the projection into R1's
         // records, over LisaStore. It also uses LisaSQLite, LisaCrypto, LisaDomain and LisaTime directly
-        // (docs/DECISIONS.md D-59).
+        // (docs/DECISIONS.md D-59), and LisaOwnerData for R1's preference rules (D-74).
         // R2 v2 router (plan §7.2.1, §8.12.1): the sync routes over the Core ledger. It uses LisaCrypto for the roster's
         // keys; LisaApplication, LisaDevices and LisaPorts join with enrollment and the other v2 routes
         // (docs/DECISIONS.md D-60).
@@ -139,8 +139,14 @@ let package = Package(
             name: "LisaSyncEngine", dependencies: ["LisaSyncProtocol", "LisaTrust", "LisaReplicaStore", "LisaCrypto"]),
         // R2 legacy requests (plan §7.2.1, §8.12.2): the one conversion of an R1 request into its parent and its complete
         // set of Core-signed children. It starts with the children's derivation; Core's parent records, R1's route
-        // semantics and the router's hook follow in M3-6.
-        .target(name: "LisaLegacyRequests", dependencies: ["LisaSyncProtocol", "LisaTrust"]),
+        // semantics and the router's hook follow in M3-6. LisaAPIContract gives it R1's request and answer bytes for
+        // routes decided after a hold (D-75).
+        .target(
+            name: "LisaLegacyRequests",
+            dependencies: [
+                "LisaSyncProtocol", "LisaTrust", "LisaCoreLedger", "LisaDomain", "LisaOwnerData", "LisaPorts",
+                "LisaTime", "LisaAPIContract",
+            ]),
         // R2 production CoreTransport (plan §7.2.1, §8.6.5): the v2 messages over LisaClient's transport.
         .target(
             name: "LisaSyncHTTP", dependencies: ["LisaSyncEngine", "LisaClient", "LisaAPIContract", "LisaSyncProtocol"]),
@@ -148,7 +154,7 @@ let package = Package(
             name: "LisaCoreLedger",
             dependencies: [
                 "LisaStore", "LisaPorts", "LisaMerge", "LisaTrust", "LisaSyncProtocol", "LisaSQLite", "LisaCrypto",
-                "LisaDomain", "LisaTime",
+                "LisaDomain", "LisaTime", "LisaOwnerData",
             ]),
         .target(
             name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
@@ -275,7 +281,7 @@ let package = Package(
             dependencies: [
                 "LisaTime", "LisaDomain", "LisaLogging", "LisaCrypto", "LisaPorts", "LisaAPIContract",
                 "LisaApplication",
-                "LisaAgenda", "LisaDevices", "LisaOwnerData",
+                "LisaAgenda", "LisaDevices", "LisaOwnerData", "LisaCoreLedger", "LisaLegacyRequests",
             ]),
         .target(
             name: "LisaAPIServer",

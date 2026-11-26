@@ -1004,4 +1004,269 @@ This file records significant architectural choices and assumptions, as R1 §1 r
   - **Beside it:** a piece committed after P(N) without changing the record, for example a device's same-value edit, stays beside the child, as §8.3.2 keeps "a later arrival".
   - **The harness** (M3 harness v33) shows it with a stale revision: the newer title stays.
 - **A revision the map doesn't hold** resolves to nothing. The child observes nothing and conflicts rather than superseding pieces it may not have seen. Records whose revisions predate Core, such as R1 data at cutover, need their mapping recorded when they are imported (M3-6d and M5, open).
-- **Open, next:** replicas don't hold the map. Core serves the resolved horizon in Core-signed data (the change-page entry and the full snapshot's operation records), and replicas fold with it. Until then a replica folds a legacy edit as observing nothing. Core's own projection, which is what R1's clients read, is already right.
+- **Replicas (done 2026-11-26, M3-6a):**
+  - **Why Core serves it:** replicas don't hold the map.
+  - **What Core sends:** the resolved horizon, in its signed data. `ChangeEntry.observedHorizon` appears on a committed legacy child's entry only, in change pages and snapshot chunks (`53e2a5a`–`ccce9e1`).
+  - **What a replica does:** it keeps the horizon with the canonical operation (`canonical_operations.observed_*`, staged through installations) and folds with it as Core does (`6e84d1b`–`89fcb1a`).
+  - **Evidence:** M3 harness v34 shows the same views at Core and on a replica, by pages, by a snapshot, and by pages after a snapshot.
+
+## D-70 — Apple app code is type-checked on Linux against framework stand-ins before each owner build (R2, run 20261124-r2-5462; after X1 attempt 1; plan §10.6, §17 "Scale")
+
+- **Why:**
+  - X1's first Xcode build failed at `Apps/Proof/Nearby/ProofNearbyController.swift:130`: "failed to produce diagnostic for expression".
+  - M1-8 had type-checked only the 38 proof files without an Apple-only import. The other 31 had syntax checks only.
+  - The failure isn't Apple-specific. Swift 6.4.2 and 6.4.3 on Linux reproduce it exactly, from a minimal copy and in the whole target.
+- **The practice:** before an owner session builds Apple code, the whole target is type-checked on Linux as one module.
+  - **Setup:** Swift 6 mode, with the real portable modules built from HEAD and the real Observation module.
+  - **Stand-ins:** for the Apple frameworks it imports, carrying the SDK's Swift signatures and the Sendable and isolation annotations as known.
+  - **Passes:** one per platform condition (`canImport(UIKit)`, `os(macOS)`).
+  - **A baseline:** a pass with the last failing source, to show the check catches what the owner saw.
+  - **Negative controls:** to show it reaches view-builder bodies, handlers and Swift 6 isolation checks.
+
+  The stand-ins and runs stay in the run directory. `docs/VERIFICATION-SCENARIOS.md` records each run.
+- **Its limit:** a stand-in is only as right as its signatures. An Apple build stays the owner's evidence (C5). Where an SDK annotation is uncertain, the app code is written so that it compiles either way.
+- **First use, X1 attempt 2:**
+  - **Line 130:** an untyped closure as a branch of `? :` isn't inferred `@Sendable` from the declared type. With `[weak self]`, the compiler fails to report the conversion error. The fix writes the closure explicitly `@Sendable` and assigns it in an `if` (`f03cf24`).
+  - **Uncertain annotation:** whether `Binding(get:set:)`'s closures are `@Sendable` in the iOS 18 SDK. The proof views now bind through key-path subscripts on `ProofModel` (`0528fc3`–`795b4f3`).
+- **Next uses:** X2's probe app (after M3) and the production apps before X3 (M5), the same way.
+
+## D-71 — R1's task routes through the one legacy converter: the router hook, the module wiring, and notes at creation (R2 M3, run 20261124-r2-5462; plan §8.12.2, §7.2.1)
+
+- **Where the semantics live:** `LisaLegacyRequests.LegacyTaskRoutes`.
+  - **What it holds:** each converted route's R1 semantics: R1's checks in R1's order with R1's errors, the children, one projection, and R1's audit event. Queue imports (§8.14.4) can later use the same converter. LisaCoreLedger keeps the frame (`legacyConvert`).
+  - **Module wiring:**
+    - LisaLegacyRequests now depends on LisaCoreLedger, LisaDomain, LisaOwnerData, LisaPorts and LisaTime.
+    - R1's `TaskService` rules are public and unchanged.
+    - LisaAPI depends on LisaCoreLedger and LisaLegacyRequests.
+    - All of these are Core-only.
+- **The router hook:** `RouterConfiguration.legacyConverter` is nil by default, and `APIRouter.converting(with:)` returns the same router with a converter. With one, a converted route (so far `POST /v1/tasks`) goes through `converted`:
+  1. **R1's own ledger first:** a key that a not-yet-converted route recorded keeps R1's answer.
+  2. **Then `legacyConvert`:** its closure runs R1's body checks inside the parent, so 400 and 413 answers replay (D-35), then R1's checks, then the children. R1's DTO rendering stays in LisaAPI and runs inside the transaction.
+  3. **The other routes check the parents too,** so each caller keeps one key space across both stores (R1's 422).
+- **Not yet enabled in LisaHost:** R1's host composes R1's router unchanged until every v1 mutation route is converted (M3-6b–e). Mixed mode is safe, but it is a transition state.
+- **Notes at creation:** R2's `task.create` payload has no notes, and §8.12.2's table lists only `create:task`.
+  - A v1 create with notes therefore adds a `field:notes` child (`note.add`) after `create:task`, chained to it.
+  - Both are taken in without projecting, then projected once, so R1's record is created at revision 1 with its notes, as R1 creates it.
+- **After the commit:** R1's domain changes (planning, reminders) are propagated after the conversion commits.
+  - A failure there is logged, and the answer stands. The host's cycle replans and syncs reminders.
+  - A durable follow-up record is later work.
+- **Terminal replies for `POST /v1/tasks`,** built from current state when the body has expired:
+  - 409 "This task was created earlier; its reply is no longer available.";
+  - or 404 "The task this request created was deleted afterwards.".
+
+  The `lisaCode` field comes with M3-6d.
+- **A concurrent duplicate** waits for the first conversion's transaction and then replays it, where R1 answers 503 "the same request is still being processed". The parent lookup inside the write transaction prevents a second conversion.
+- **Shown by M3 harness v36** (v35 failed to compile and is kept). The same requests on R1's router and on the converting router give:
+  - the same 201 `TaskDTO` but for the derived ID;
+  - the same audit event;
+  - the same replays, 422 and recorded 400s.
+
+  The children are Core-signed and replicate. Keys are shared with unconverted routes, and a device creates under its own scope.
+
+## D-72 — R1's `PATCH /v1/tasks/{id}` through the converter: field children, the status, R1-only states, and two protocol rules (R2 M3, run 20261124-r2-5462; plan §8.12.2, §8.2.3, §8.3.1–§8.3.2)
+
+- **The conversion** (`LegacyTaskRoutes.update`, `convertUpdateTask`) runs inside the parent, in R1's order:
+  1. the body size (413);
+  2. its decoding (400);
+  3. the record (404 "the task");
+  4. the revision check (409 "the task changed since it was read", with `currentRevision`);
+  5. the correction, its deadline parsed (400);
+  6. `TaskService.correct`'s checks: the principal (403), the minutes (400), the title (400).
+
+  Nothing is committed before these checks, so each answer is recorded and replayed.
+- **The field children:** one per field the request carries, not per changed value, so the set is a pure function of the request.
+  - **The children, in this order:** `field:title`, `field:notes`, `field:priority`, `field:deadline` (also for `clearDeadline`), `field:estimatedMinutes`, `field:confirmation`. Each is observed at the request's `expectedRevision` N.
+  - **One projection:** they are taken in without projecting, then projected once with `forceRevision`. R1's `correct` always writes, so this is one R1 revision step even when no value changes.
+  - **The deadline** is marked owner-corrected whenever the request sets or clears it, as R1 marks it.
+  - **Then** R1's `task.corrected` audit event and `.taskChanged(material:)`.
+- **The status:**
+  - **Children by target:** `completed` gets a `status` child `task.complete`, `cancelled` gets `task.cancel`, and `open` gets `task.reopen` naming nothing, observed at N. The child depends on the target alone.
+  - **In progress and blocked** have no R2 operation. They are R1's own states of an open task: R2's merge doesn't hold them, and the projection keeps them (`TaskProjection.status`).
+    - **Who writes them:** the converter, with R1's `LisaTask.transition` on R1's record in the same transaction. It also writes an active task's return to open, after its reopen child.
+    - **The revision map:** each such write records its revision there (`recordProjectionRevision`), so a later edit observed at it supersedes as R1's does. Harness v38 found this.
+  - **R1's rules decide:** `TaskService.transition`'s principal check and `LisaTask.transition` decide against the corrected record.
+    - A refusal answers R1's 409 with the correction committed and the status child `refused`, as R1 keeps its correction.
+    - A target equal to the record's status makes no R1 call: no audit, no revision. Its child, if any, is taken in and changes nothing.
+  - **After a transition:** R1's `task.<status>` audit event and its domain change.
+- **Two protocol rules** (`docs/SYNC-PROTOCOL.md` §8):
+  - **Empty notes:** `note.replaceObserved` may carry empty text. It then removes the notes it observes and adds none (R1's `notes: ""`).
+  - **A reopen naming nothing:** `task.reopen` may name no action. It then reopens the terminal actions its observed coverage covers.
+    - One committed after the horizon, or still pending, stays in effect. `TerminalActions` keeps commit positions, and `markCommitted` covers them.
+    - A device's reopen that names actions is unchanged.
+    - The v1 reopen names nothing because a child's body may not depend on current state. Core resolves its revision to a horizon at decision (D-69), and replicas fold with the served horizon.
+- **Terminal replies for PATCH:** an expired body answers 200 with the current `TaskDTO` (`Lisa-Replayed: true`, `Lisa-Reply: current`), or 404 "This change was applied; the task was deleted afterwards.". `lisaCode` comes with M3-6d.
+- **Known limits:**
+  - A task the ledger doesn't hold, such as an R1 record from before the conversion, can't be corrected through the converter until migration records its origin (M9).
+  - Notes longer than a note piece's budget need blobs (§8.3.3).
+  - The ID mapping (`R1Identity`) needs UUID record IDs, which R1 generates.
+- **Shown by M3 harness v38** (v37 was corrected before its first build and never built). Each PATCH, against R1's own path on a second host, gives R1's status, headers and body, but for the task's ID, at every step:
+  - a correction of every field;
+  - clearing the notes and the deadline;
+  - a same-value correction, which takes a revision and marks the deadline;
+  - a stale revision, an unknown task and invalid values, each recorded and replayed;
+  - every status R1 allows, in turn;
+  - a refused status after a correction, with the correction kept and the status child refused;
+  - the same status, which changes nothing;
+  - an edit after in-progress.
+
+  A replica pulling Core's pages folds the reopen through its served horizon, with the same view as Core's.
+
+## D-73 — Preferences as one register per key: the entity, the payloads and the merge (R2 M3-6b, run 20261124-r2-5462; plan §8.2.3, §8.3.1, §8.12.2)
+
+- **The entity:** a preference is a register per key, not an owner item.
+  - **Its entity ID** is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)` (`PreferenceEntity`, LisaTrust). So every device, Core and every epoch name a key the same way.
+  - **R1's record IDs play no part.** They are random, and a delete followed by a set changes them.
+  - **Placement:** entity type `preference`, partition `preferences`.
+- **The payloads** (`PreferenceOperationPayload`, `docs/SYNC-PROTOCOL.md` §8):
+  - **The three types:** `preference.set {key, value}`, `preference.delete {key}` and `preference.confirm {key}`.
+  - **Values:** typed `text`, `number`, `flag` or `list`.
+    - A number travels as its shortest decimal text that reads back as the same finite value, and that text is its only accepted form, because canonical JSON carries integers only.
+    - A list holds at most 256 strings, and the payload fits the type's value budget.
+  - **A key** is 1–256 UTF-8 bytes without control characters. R1 accepts any key text and refuses unsupported keys itself (400). So a request's unsupported key is still a well-formed child, which Core refuses under R1's rule.
+- **The merge** (`PreferenceMergeState`): one multi-value register of `value?`.
+  - **Sets and deletes:** a set writes its value and a delete writes none, each replacing exactly the versions it observed. A delete therefore clears what it saw, and a later set re-creates the key, as R1's delete then set does. §8.3.1's dominating tombstone is for owner items, which a key isn't.
+  - **Authority:** a model value never replaces an owner value and is kept as a suggestion.
+  - **Confirmations:** a confirmation confirms the model-authority candidates it observed.
+  - **The view:** the key is absent only when every survivor is a delete. Otherwise the shown value is the first surviving value in display order. Two or more survivors, a delete among them or not, are a conflict.
+- **Step 2, done** (`f404e2c`–`44cb3ed`; harness v43):
+  - Core's intake and fold, with the check that the entity ID matches the key;
+  - the projection into R1's `Preference` record (`PreferenceProjection`);
+  - the replica's fold;
+  - partition `preferences`.
+
+  R1's audit events come with the conversion.
+- **Next (M3-6b):**
+  - the conversion of `PATCH /v1/preferences`: `change:<index>` children, R1's stop at the first refusal, administrative holds, `legacy review` and `resolve`, and restricted siblings.
+- **Shown by** M3 harness v41 (v40 was corrected before its first build and is kept, never built):
+  - the canonical forms and round trips;
+  - every decoding rule;
+  - the entity IDs against Python's hashlib;
+  - the merge cases, and one state and one view over all 720 orders of a representative set.
+
+## D-74 — R1's `PATCH /v1/preferences` through the converter: R2-TRUST-05 at Core, what a converted child observes, and errors without caller text (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2, §8.17; R2-TRUST-05)
+
+- **The keys** (`PreferenceRules`, LisaOwnerData):
+  - **Supported:** the 24 keys R1's `PreferenceMapping` maps. R1 refuses any other as "not a supported preference".
+  - **Administrative** (R2-TRUST-05): R1's consequential keys. They are call escalation, the model endpoint and data sharing, the approved email addresses and phone number, email and call enablement, and time-sensitive notifications.
+  - **Permitted:** supported and not administrative. Only these replicate (§8.17's "permitted preferences").
+  - **Restricted:** the others and unsupported keys. A v1 request's change to one is a restricted sibling (§8.12.2). The plan's examples name the model settings and unsupported keys. The narrower reading of "permitted" restricts the approved recipients and the enablement keys too.
+- **Core refuses a device's own preference operation** (`docs/SYNC-PROTOCOL.md` §8):
+  - **The reasons:** `unsupported_key`; `administrative_key`, for a set, delete or confirm alike; `invalid_value`, from R1's own `validate`.
+  - **No caller text:** neither the reason nor the hint names the key or the value.
+  - **Legacy children** are Core-signed, so R1's checks in their conversion decide them instead.
+  - **The replica** doesn't check yet; Core is the authority.
+  - **The dependency:** LisaCoreLedger now depends on LisaOwnerData for R1's rules.
+- **What a converted child observes:** R1's record of the key as Core found it when it decided the child (`resolveFoundRecord`). That is the record R1's `set`, `confirm` and delete act on.
+  - **A record:** the horizon its revision reflects, from the projection map (D-69).
+    - The conversion fails (500, nothing kept) when the record's revision isn't in the map.
+    - Such a record was written outside Core: before migration, or by R1's inference, which isn't converted yet.
+  - **An absent key:** every commit before the child. What is left of the key then is deletes, replaced writes and model suggestions, which R1's write replaces too.
+  - **Why:** §8.12.2 gives a legacy child an observed set only for R1's `expectedRevision`.
+    - Every confirm and delete has none, and neither does a set without a revision. Such a change would observe nothing.
+    - Then a delete wouldn't remove the value, a confirm wouldn't confirm it, and 50 sets of one key wouldn't replace each other.
+    - Once R1's check passes, the found record is the one at the request's `expectedRevision`. So for revision-checked sets the rule agrees with D-69.
+    - A set's body still carries R1's revision when it is ≥ 1.
+  - **Served:** Core records the horizon with the decision and serves it in `ChangeEntry.observedHorizon`, now allowed on every legacy preference child. Replicas fold with it (D-69's machinery).
+  - **The consequence:** a concurrent value that R1's record didn't show, committed after the record's current revision, survives a v1 write as a conflict. Task edits behave the same under D-69.
+- **The conversion** (`LegacyPreferenceRoutes`, LisaLegacyRequests; `convertUpdatePreferences`, LisaAPI):
+  - **Inside the parent:** the body size, its decoding and the 1–50 changes, so their answers replay.
+  - **Children:** `change:<index>` in request order, chained per key, so a child depends only on its immediate same-key predecessor.
+    - **The set's IDs and digest** come from the discriminators alone (`LegacyChildPlan`).
+    - **Each envelope** is encoded only when its child is taken in. R1 refuses a value over the operation's budget before it would have to be encoded.
+  - **Each change in order,** against R1's records as the earlier changes left them:
+    - R1's checks, in R1's order (`PreferenceService.set` and `confirm`, `DeletionService.delete`);
+    - the child taken in;
+    - the projection, written once, with `force` for a set or confirm (one R1 revision step each);
+    - R1's audit event: `preference.set`, `preference.confirmed` or `data.deleted`.
+  - **The first refusal** stops the request:
+    - the earlier children stay applied;
+    - the refused child is `refused`, and the rest are `not_reached`;
+    - refused and unreached children are never taken in, so their bodies, a canary key among them, never reach the ledger.
+  - **The answer:** 200 with R1's full list, read from R1's records in the conversion's transaction, or the refusal, recorded.
+  - **Domain changes:** one `preferenceChanged(key)` per applied change, propagated after the commit.
+  - **The terminal reply** after the body expires: §8.12.2's 409, "This change was applied; its reply is no longer available. Reload to see current values." `lisaCode` comes with M3-6d.
+- **Errors without caller text** (§8.12.2): R1's status and code, and a template that names the position, counted from 0 as `legacyParent.index` is:
+  - `changes[i].key is not a supported preference`, with `field: "changes[i].key"`;
+  - `changes[i].value` followed by R1's reason, with `field: "changes[i].value"`. R1's one reason that names the caller's token becomes "has an unknown weekday";
+  - `changes[i] can be changed only by the owner on the host`, and `changes[i] can be deleted only by the owner on the host`;
+  - `changes[i] names a preference that does not exist`;
+  - `changes[i] changed since it was read; reload it and try again`, with R1's current revision.
+- **Left for the next part** (M3-6b step 3b):
+  - An owner-scope request that reaches an administrative key fails the conversion (500, nothing kept). Holds, decision tokens, `legacy review` and `resolve` lift this.
+  - A change R1 would apply to a restricted key, such as a device's confirm of an administrative key, fails it the same way. Restricted siblings and their redacted receipts lift this.
+  - R1's own checks run first, so an invalid value is still R1's 400 at once.
+  - `LisaHost` doesn't enable the converter.
+- **Shown by** M3 harness v45, 10/10 on its first build, against R1's own path on a second host, and regression package v26. v44 was corrected before its first build and is kept, never built (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step).
+
+## D-75 — Administrative holds of v1 requests: when a request waits, what the waiting parent keeps, and the decision key and token (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2; R2-TRUST-05)
+
+- **When a request holds:** in owner scope, the loopback v1 owner listener, a preferences change to an administrative key holds the request once it passes R1's own checks (D-74).
+  - **R1's checks come first,** so an invalid value is still R1's 400 at once, and nothing holds.
+  - **The state-dependent checks,** the revision and whether the record exists, run again when the hold is applied (M3-6b step 3b-ii).
+  - **The held child** is `held_for_administrative_review`, and every later one `pending_behind_review`, a second administrative key among them.
+  - **Neither is taken in:** no receipt, and nothing served.
+  - **Earlier children** are decided and committed as usual.
+  - **Device scope** is unchanged: R1 refuses the key (403).
+- **The parent waits** in state `awaiting_administrative_review`, with no status or body.
+  - **The original request bytes** are kept until it completes (`core_legacy_parents.request_body`, schema v12).
+  - **The frame** (`legacyConvert`) keeps such a conversion although its answer isn't one R1 records.
+- **The answer:** R1's 503 `unavailable`, `retryAfterSeconds: 300`, "This change is waiting for review on the administrative terminal."
+  - It is rendered as R1 renders a 503, with `Retry-After: 300`. The first answer and every retry's are alike.
+  - It is never recorded.
+  - A retry with the same bytes gets it again from the parent, and other bytes under the request ID get 422.
+  - `lisaCode: "awaiting_administrative_review"` comes with M3-6d.
+  - The earlier children's domain changes are propagated after the commit.
+- **The hold** (`core_legacy_holds`, schema v12): one row for every hold Core ever issues.
+  - **It holds** the generation (1 for a request's first hold; `resolve` issues the next), the child, its index and the time.
+  - **The decision key** and its base32 text are each unique.
+  - **The decision record's columns** fill when `resolve` decides the hold: the decision ID, action, actor, time and outcome.
+- **The decision key and token** (`LegacyDecisionToken`, LisaTrust): §8.12.2's formula. The plan leaves the encodings open; they are:
+  - the dataset and the child ID as their 16 raw bytes;
+  - the scope and the request ID as UTF-8;
+  - the generation as decimal digits in ASCII.
+
+  Fixed lengths and text without NUL keep the parts apart.
+  - **The token** is `LR-` and the key in base32: RFC 4648's alphabet, upper case, no padding, 52 characters in full.
+  - **Shown** at 8 characters (40 bits), or longer in steps of 4 (20 bits) until it is unique among every hold (`legacyHolds()`).
+  - **A typed token** is `LR-` and 8–52 base32 characters. Lower case is accepted; nothing else is mapped.
+  - **Vectors** (dataset `00…0f`, scope `owner`, request ID `prefs-0801`, child `e7b59fbce39fe1aa9ff9a26d3531afc0`; Python's hashlib and `base64.b32encode`):
+    - generation 1 → `a05b9242ac3e567ccfec899dbee869ba1e86e029e3eaf168c33989cb2a77be4d`, `LR-UBNZEQVM`;
+    - generation 2 → `6ce9fd5ec24757300c1bfa2be27afe52eaa6065ff7f84dbeb09533d198957f7f`, `LR-NTU72XWC`.
+- **One reading of R1's bytes** (`LegacyPreferenceAnswers`, LisaLegacyRequests, which now depends on LisaAPIContract):
+  - **Shared:** the request's parsing, with R1's three refusals of a body, and R1's answers: the full list, the refusal templates, and the 503 while held.
+  - **Used by** the router now. The administrative terminal's `resolve` will continue a held request from its kept bytes with the same code, so a request decided after a hold gets the bytes it would have got at once.
+- **Next** (M3-6b step 3b-ii): `resolve` with its replay, stale-token and decision rules; the content-free refusal guard (§8.14.8); `lisa core legacy review` and `resolve`. Restricted siblings are step 3c.
+- **Shown by** M3 harness v47, 12/12 on its first build. It holds v45's tests, with v45's case of an administrative key failing the conversion replaced by the hold. Harness v48 adds the two 503s compared, `Retry-After` included, 12/12. Regression packages v27 and v28 pass (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step, second part).
+
+## D-76 — Administrative decisions: `resolve`'s lookup and replay rules, the refusal with R1's 403 and its guard, and why `apply` waits for restricted siblings (R2 M3-6b, run 20261124-r2-5462; plan §8.12.2, §8.14.8)
+
+- **The frame,** `CoreLedger.legacyResolve(token:action:actor:retentionDays:_:)`, runs in one write transaction:
+  1. **The typed token** is `LR-` and 8–52 base32 characters (D-75). Anything else: "<token> isn't a decision token."
+  2. **Matching** is by prefix over every hold Core issued, waiting or decided.
+     - No match: "LR-… doesn't name a waiting change."
+     - Two or more: refused, naming each match's scope, request ID and its token 4 characters longer.
+  3. **A decided hold replays:**
+     - the same action returns its recorded outcome;
+     - the other action gets "Already decided: applied|refused by LR-… at <ISO 8601 time>; nothing changed."
+  4. **A waiting hold** must be its parent's latest generation, with the parent waiting. Otherwise: "LR-… doesn't name a waiting change." Naming the change that does wait, as §8.12.2's message does, comes with the CLI's review listing.
+  5. **The route decides,** and the frame writes:
+     - the children it moved;
+     - the decision record on the hold: a random 128-bit decision ID, the action, the actor, the time and the outcome text;
+     - a hold at generation + 1 for a child the decision leaves held;
+     - on completion, the parent's answer: the state `complete`, the status, body and expiry, and the request bytes cleared.
+- **Refuse** (`LegacyPreferenceRoutes.decide`):
+  - **Dispositions:** the held child is `refused`, and every later one `not_reached`.
+  - **The answer:** R1's 403 shape, `forbidden`, "This setting can be changed only on the administrative terminal.", recorded as the request's answer.
+  - **The outcome text:** "Refused change i of n of request R; k later changes not applied."
+- **The refusal guard** (§8.14.8; `core_legacy_refusal_guards`, schema v13):
+  - **Holds** the scope, the request ID, the original fingerprint, the 403's status and bytes, and the time.
+  - **Content-free,** and kept for the dataset's life.
+  - **The lookup** consults it once the parent's body has expired. So the same request is answered with the 403 and never run again.
+- **`apply` waits for restricted siblings** (M3-6b step 3c).
+  - Applying an administrative key takes its value into the ledger, and D-74 restricts administrative keys to Core.
+  - Until step 3c keeps such children off replicas, with a Core-only partition and redacted receipts, `apply` fails with the restricted-sibling error and moves nothing.
+- **Not yet:**
+  - "with the authority of that decision" recorded with the applied child;
+  - R1's domain changes after an apply;
+  - `lisa core legacy review` and `resolve` in the CLI.
+- **Shown by** M3 harness v49, 14/14 on its first build: v48's tests unchanged, plus a refusal with its replays and guard, and tokens that move nothing. Regression package v29 passes (`docs/VERIFICATION-SCENARIOS.md`, M3-6b's third step, third part).

@@ -166,7 +166,9 @@ enum ReplicaSchema {
         """,
         // Canonical state from Core (§8.4.2): every operation a change page or snapshot delivered as committed, at its
         // epoch and position. It is kept apart from the journal, so an installation can replace it without touching
-        // local work (§8.6.3); the effective view merges it with the journal's pending operations.
+        // local work (§8.6.3); the effective view merges it with the journal's pending operations. A committed legacy
+        // child keeps the horizon Core resolved its projection revision to and served with it (`observed_*`, all or
+        // none; `ChangeEntry.observedHorizon`, D-69).
         """
         CREATE TABLE canonical_operations (
           operation_id BLOB PRIMARY KEY CHECK (length(operation_id) = 16),
@@ -179,7 +181,12 @@ enum ReplicaSchema {
           decision TEXT NOT NULL CHECK (decision IN ('accepted', 'accepted_with_conflict')),
           origin_device BLOB CHECK (origin_device IS NULL OR length(origin_device) = 16),
           origin_incarnation BLOB CHECK (origin_incarnation IS NULL OR length(origin_incarnation) = 16),
-          origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1)
+          origin_sequence INTEGER CHECK (origin_sequence IS NULL OR origin_sequence >= 1),
+          observed_epoch BLOB CHECK (observed_epoch IS NULL OR length(observed_epoch) = 16),
+          observed_partition TEXT,
+          observed_position INTEGER CHECK (observed_position IS NULL OR observed_position >= 0),
+          CHECK ((observed_epoch IS NULL) = (observed_position IS NULL)
+            AND (observed_epoch IS NULL) = (observed_partition IS NULL))
         ) STRICT
         """,
         "CREATE INDEX canonical_operations_by_item ON canonical_operations (entity_type, entity_id)",

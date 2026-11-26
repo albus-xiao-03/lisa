@@ -82,14 +82,14 @@ enum CanonicalTables {
 
     static func insertCanonical(
         _ operation: SignedOperation, envelope: OperationEnvelope, epoch: Identifier128, position: Int64,
-        decision: ChangeEntry.Decision, in session: SQLiteSession
+        decision: ChangeEntry.Decision, observedHorizon: ObservedHorizon? = nil, in session: SQLiteSession
     ) throws {
         try session.query(
             """
             INSERT OR IGNORE INTO canonical_operations
               (operation_id, entity_type, entity_id, body, signature, epoch_id, position, decision, origin_device,
-               origin_incarnation, origin_sequence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               origin_incarnation, origin_sequence, observed_epoch, observed_partition, observed_position)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 ReplicaColumns.id(envelope.operationID), .text(envelope.entityType),
@@ -99,7 +99,21 @@ enum CanonicalTables {
                 ReplicaColumns.optionalID(envelope.origin.deviceTriple?.device),
                 ReplicaColumns.optionalID(envelope.origin.deviceTriple?.incarnation),
                 ReplicaColumns.optionalInteger(envelope.origin.deviceTriple?.sequence),
-            ])
+            ] + horizonColumns(observedHorizon))
+    }
+
+    /// The three horizon columns of a canonical operation, all `NULL` when it carries none.
+    static func horizonColumns(_ horizon: ObservedHorizon?) -> [SQLiteValue] {
+        guard let horizon else { return [.null, .null, .null] }
+        return [ReplicaColumns.id(horizon.epochID), .text(horizon.partition), .integer(horizon.position)]
+    }
+
+    /// A canonical row's horizon from its three columns, or `nil`.
+    static func horizon(epoch: SQLiteValue, partition: SQLiteValue, position: SQLiteValue) throws -> ObservedHorizon? {
+        guard let epoch = try ReplicaColumns.optionalIdentifier(epoch), let partition = partition.text,
+            let position = ReplicaColumns.optionalInteger(position)
+        else { return nil }
+        return try ObservedHorizon(epochID: epoch, partition: partition, position: position)
     }
 
     /// Core's decision on a canonical operation, as a journal state; `nil` when canonical state doesn't hold it.

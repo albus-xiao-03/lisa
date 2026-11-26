@@ -126,7 +126,7 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `type` | The operation type, `<entity>.<action>` from the catalog (§8.2.3) |
 | `payload` | The type's payload. The schemas implemented so far are below ("Item payloads"); other types' payloads stay opaque to the envelope codec until theirs are |
 | `dependencies` | At most 32 operation IDs, strictly ascending, never the operation's own ID |
-| `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}` |
+| `observed` | Optional: `{"pieces": [≤ 256 IDs, strictly ascending], "horizon"?: {"epochID", "partition", "position"}, "reviewedSetDigest"?, "group"?: {"groupID", "index", "count", "listDigest"}}`. On a legacy child only: `{"pieces": [], "projectionRevision": N}`, R1's `expectedRevision` ("observed at projection revision N", ≥ 1), alone (§8j) |
 | `legacyParent` | Only on Core legacy children: `{"scope", "requestID" (R1's 8–128-character alphabet), "discriminator", "index" (in 0..<count), "count", "setDigest"}` |
 | `createdAt` | Unix milliseconds, display and audit only; required on device operations, absent on legacy children |
 
@@ -148,8 +148,8 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
 | `task.create` | `{"confirmation","deadline","estimate","priority","splittable","title"}`, all six present | As `task.edit` per field; R1's defaults are the caller's (normal priority, not splittable) |
 | `task.edit` | `{"field": <field>, "value": <value>}` | `title` 1–200 characters; `priority` `low`, `normal`, `high` or `urgent`; `deadline` a deadline or `null` to clear; `estimate` minutes ≥ 1 or `null`; `splittable` a boolean; `confirmation` `confirmed`, `possible` or `informational` |
 | `task.complete`, `task.cancel`, `item.delete` | `{}` | The operation ID is the terminal action's or the deletion's identity |
-| `task.reopen` | `{"reopens": [IDs]}` | 1–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect |
-| `note.add`, `note.replaceObserved` | `{"text": <text>}` | Non-empty, within the text budget below; a replacement removes exactly the note pieces its observed set covers |
+| `task.reopen` | `{"reopens": [IDs]}` | 0–32 terminal-action operation IDs, strictly ascending; an unnamed one stays in effect. An empty list reopens the terminal actions its observed set covers, by ID or by commit position under its horizon; a v1 reopen observed at a projection revision is one (D-72) |
+| `note.add`, `note.replaceObserved` | `{"text": <text>}` | Within the text budget below; an addition is non-empty. A replacement removes exactly the note pieces its observed set covers; an empty one adds nothing, so it clears them (R1's `notes: ""`, D-72) |
 | `tags.change` | `{"change": "add" \| "remove", "tag": <tag>}` | One tag of 1–64 characters; a removal covers only additions of its own tag that its observed set covers |
 | `conflict.resolve` | `{"field": <task field>, "value"?: <its value>}` | The value is read under the declared field. A single resolution carries its value; in a paged group (`observed.group`, pages numbered 1…count, each depending on the previous one) only the last page does. The candidates it resolves are its observed set |
 
@@ -176,6 +176,25 @@ An operation's signed body is one canonical JSON object (`OperationEnvelope`) of
   - `task.complete`, `task.cancel`, `item.delete`: `{}`
 - **Merged state** (`LisaMerge.TaskMergeState`, `docs/CONFLICTS.md`): one register per field, note pieces, one observed-remove set per tag, terminal actions and the tombstone.
 
+### Preference payloads (plan §8.2.3; `docs/DECISIONS.md` D-73)
+
+A preference is a register per key: entity type `preference`, partition `preferences`. The entity ID is the first 16 bytes of `SHA-256("lisa-preference-key-v1" ‖ 0x00 ‖ key)`. Vectors from Python's hashlib:
+- `brief.time` → `9a1618a9b65b1a60368ae340a3ed4727`;
+- `model.endpoint` → `2a70184edc7d5c8486c4b5d12a20daf8`;
+- `planning.windows` → `3c042116161cfd01f1c7cbcf443132c5`.
+
+| Type | Payload | Rules |
+|---|---|---|
+| `preference.set` | `{"key": <key>, "value": <value>}` | `<value>` is `{"kind":"text","text"}`, `{"kind":"number","number"}`, `{"kind":"flag","flag"}` or `{"kind":"list","list":[strings]}`. A number is the shortest decimal text that reads back as the same finite value, in that one form (`0.8` → `"0.8"`, `15` → `"15.0"`). A list holds at most 256 strings |
+| `preference.delete`, `preference.confirm` | `{"key": <key>}` | — |
+
+- **A key** is 1–256 UTF-8 bytes without control characters. Whether a key and its value are supported is R1's rule, checked at Core (D-74):
+  - **A device's own operation** is rejected as `unsupported_key` for a key R1 doesn't map, `administrative_key` for one of R2-TRUST-05's administrative keys (R1's consequential keys), whether it sets, deletes or confirms, and `invalid_value` for a value R1's check refuses. Neither the reason nor the hint names the key or the value.
+  - **The permitted keys,** supported and not administrative, are the only ones that replicate.
+  - **A Core-signed legacy child** follows R1's own checks in its conversion instead (§8j).
+- **The size:** the payload fits the type's value budget (§8.3.3).
+- **The merge:** a set and a delete each replace the versions they observed, a delete writing no value. So a delete clears what it saw, and a later set re-creates the key. A confirmation confirms the model-authority values it observed.
+
 ## 8a. Change pages (plan §8.4.2)
 
 A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "entries", "epochID", "fromPosition", "partitions", "toPosition"}` (`ChangePage`). Core signs it raw, over `lisa-r2-change-page-v1\n` ‖ body (`ChangePageSigning`), and relays forward the exact bytes (`SignedChangePage`).
@@ -189,6 +208,7 @@ A change page is one canonical JSON object of at most 512 KiB: `{"datasetID", "e
   - the operation's exact signed bytes are base64url;
   - `partitions` is the 1–256 partitions it touches, strictly ascending;
   - `position` is ≥ 1.
+  - `observedHorizon`, optional: `{"epochID", "partition", "position"}`, only on an `accepted` or `accepted_with_conflict` entry whose operation is a legacy child carrying a projection revision, or any legacy preference child (D-74). It is the horizon Core resolved when it decided the child (§8j). An entry without one has exactly the bytes it had before the field existed.
   - The unwindowed collections' partitions are `tasks`, `ideas`, `captures`, `preferences`, `proposals`, `reminders` and `suggestions` (`CollectionPartition`).
 - **A derived-record entry** is `{"partitions", "position", "record": {"id", "row": <row> | null, "type": "occurrence"}}`: a row Core computed, or its deletion (`DerivedRecord`, plan §8.3.5). It has no signature of its own; the Core-signed page or snapshot vouches for it.
   - **An occurrence row** (`OccurrenceRow`) is `{"civil"?, "expandedZone"?, "sourceID", "timing", "title"}`. The timing is either:
@@ -282,7 +302,7 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 - **Receipt** (`CoreReceipt`): Core signs it under `lisa-r2-receipt-v1\n` over the canonical body, at most 16 KiB.
   - **Fields:** `{"datasetID", "digest", "epochID", "operationID", "outcome"}`, plus as the outcome requires: `position` on final receipts; `missing`, ascending and never empty, on the provisional `waiting_for_dependencies`; `reason` (lowercase letters and `_`, at most 64 bytes) and an optional `recoveryHint` (at most 1 KiB) on `rejected`.
   - **Outcomes:** `accepted`, `accepted_with_conflict`, `rejected`, `waiting_for_dependencies`.
-  - **Rejection reasons so far:** `malformed`, `unknown_item`, `dependency_rejected`, `dependency_cycle`, `unsupported_operation`.
+  - **Rejection reasons so far:** `malformed`, `unknown_item`, `dependency_rejected`, `dependency_cycle`, `unsupported_operation`; for a device's preference operation, `unsupported_key`, `administrative_key` and `invalid_value` (D-74).
   - **On a replica:** a receipt counts as Core commitment only when it verifies by Core's key from the verified key history. `recordReceipt(_:coreKey:)` verifies it (`ReceiptSigning.verify`), refuses a forged, foreign or other-digest receipt without change, and keeps the body and signature as the receipt's bytes.
   - **Vector:** dataset `0123456789abcdef0123456789abcdef`, epoch `fedcba9876543210fedcba9876543210`, operation `1111…` (32 hex digits), digest `2222…` (64), `accepted` at position 7 encode as `{"datasetID":"0123456789abcdef0123456789abcdef","digest":"2222…","epochID":"fedcba9876543210fedcba9876543210","operationID":"1111…","outcome":"accepted","position":7}`. A provisional receipt lists `missing` between `epochID` and `operationID`, and has no `position`.
 - **Intake at Core** (`CoreLedger.intake`):
@@ -440,7 +460,8 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
 - **Children are a pure function of the request** (`LisaLegacyRequests.LegacyChildSet`):
   - **ID:** the first 16 bytes of `SHA-256("lisa-v1-child-v1" ‖ 0x00 ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID ‖ len32(discriminator) ‖ discriminator)`.
   - **Origin:** `coreLegacyTranslation` with incarnation `SHA-256("lisa-v1-incarnation-v1" ‖ len32(dataset) ‖ dataset ‖ len32(scope) ‖ scope ‖ len32(requestID) ‖ requestID)` (first 16 bytes; no 0x00 after this label) and sequence index + 1.
-  - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`; no observed set.
+  - **Versions:** schema and policy versions 1, the derivation scheme's; no `createdAt`.
+  - **Observed set:** none, except on a PATCH child made against R1's `expectedRevision` N, a field edit, a notes replacement or a reopen, or a preference set whose `expectedRevision` is ≥ 1: `{"pieces": [], "projectionRevision": N}` (`LegacyChange.observedRevision`, D-69, D-72, D-74). It stays a pure function of the request.
   - **`legacyParent`:** `{scope, requestID, discriminator, index, count, setDigest}`, the set digest being SHA-256 of the ordered child IDs.
   - **Dependencies:** at most one, the immediate predecessor among the request's children in the same chain (the same entity, or for preferences the same key).
   - **Created entities:** an entity the request creates gets the child-ID derivation of `entity:<discriminator>`.
@@ -450,6 +471,25 @@ A receiver acknowledges that it durably holds an operation's exact bytes ("Also 
   - `field:title` → `e7b59fbce39fe1aa9ff9a26d3531afc0`, `field:notes` → `5e634746fd0cb2e0dbcc9ca31e3e937d`, `status` → `6fa66a242b90a415efe5442d24e6676c`;
   - their set digest `e5bbe52476f4abf64d2d262b1954e690ea65fc94d9449448c1cf94fa06b5d7ee`;
   - `entity:create:task` → `1ac3159244ac03e49f884a399bf4707f`.
+- **"Observed at projection revision N"** (D-69; schema v10 and v11):
+  - **At decision:** when Core accepts such a child, it resolves N through its projection-revision map to the horizon `(epoch, "tasks", P(N))`, the state R1's revision N of the entity reflected. It keeps the horizon with the operation (`core_operations.observed_epoch`, `observed_position`).
+  - **Folding:** Core's fold uses that horizon in place of the observed set. A revision the map doesn't hold resolves to nothing, so the child observes nothing and conflicts.
+  - **On replicas:** they don't hold the map. Core serves the horizon in its signed change entries and snapshot chunks (`observedHorizon`, §8a). A replica keeps it with the canonical operation and folds with it the same way, so its view equals Core's.
+- **What a legacy preference child observes** (D-74): R1's record of the key as Core found it when it decided the child, the record R1's `set`, `confirm` and delete act on, whatever the body says.
+  - **A record:** the horizon `(epoch, "preferences", P(R))` of its current revision R, from the same map; none when the map doesn't hold R.
+  - **An absent key:** `(epoch, "preferences", p − 1)`, every commit before the child at position p.
+  - **Kept and served** as above, so a replica folds the child as Core does.
+- **`PATCH /v1/preferences`** (D-74): children `change:<index>` in request order, chained per key. The set's IDs and digest follow from the discriminators alone, and a child is encoded only when its conversion takes it in. Refused and unreached children are never taken in.
+- **Administrative holds** (D-75; schema v12): in owner scope, a preferences change to an administrative key holds the request once it passes R1's checks.
+  - **Dispositions:** the held child is `held_for_administrative_review` and every later one `pending_behind_review`. Neither is taken in.
+  - **The parent** waits (`awaiting_administrative_review`) with the original request bytes, and the caller gets R1's unrecorded 503.
+  - **Each hold** keeps its generation and its decision key, `SHA-256("lisa-legacy-decision-v1" ‖ 0x00 ‖ dataset ‖ 0x00 ‖ scope ‖ 0x00 ‖ requestID ‖ 0x00 ‖ childID ‖ 0x00 ‖ holdGeneration)`. The dataset and child are raw 16 bytes, the scope and request ID UTF-8, and the generation decimal ASCII.
+  - **The token** is `LR-` and the key's base32 (RFC 4648, upper case, unpadded), shown at 8 characters, or longer in steps of 4 until unique among all holds.
+- **Administrative decisions** (D-76; schema v13): `legacyResolve` matches a typed token by prefix over every hold.
+  - **Replay:** a decided hold replays its outcome, and moves nothing.
+  - **Refusal:** a token that isn't a waiting hold's latest generation moves nothing.
+  - **The decision record:** each decision is recorded on its hold.
+  - **Refuse:** the held child is `refused` and the rest `not_reached`. R1's 403 is the request's answer, and it is kept as a content-free refusal guard for the dataset's life. The lookup answers from the guard after the body expires.
 - **Parents** (`CoreLedger.legacyConvert`, schema v9): one per `(scope, requestID)`, Core-only.
   - **The transaction:** the lookup again (`replay`, `bodyExpired`, `mismatch`, `awaitingReview`, or `unknown`), the route's conversion with the children taken in through the ledger, and, for an answer R1 records (2xx, 400, 403, 404, 409, 413), the parent with its children's dispositions and the answer, the body kept for 30 days by default.
   - **Nothing is kept** of a conversion that throws or answers otherwise.

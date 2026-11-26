@@ -305,8 +305,8 @@ public final class ReplicaStore: Sendable {
                 createdAt: .max)
             _ = try envelope.canonicalBody()
             try checkPayload(
-                operationType: command.operationType, entityType: command.item.entityType, payload: command.payload,
-                observed: command.observed)
+                operationType: command.operationType, entityType: command.item.entityType,
+                entityID: command.item.entityID, payload: command.payload, observed: command.observed)
         } catch let error as OperationEnvelopeError {
             throw .invalidCommand(error)
         } catch {
@@ -318,8 +318,16 @@ public final class ReplicaStore: Sendable {
     /// (plan §8.3.3), and a task operation must name a task.
     /// A resolution carries its value exactly when it is a single resolution or a group's last page.
     static func checkPayload(
-        operationType: String, entityType: String, payload: CanonicalValue, observed: ObservedSet?
+        operationType: String, entityType: String, entityID: Identifier128, payload: CanonicalValue,
+        observed: ObservedSet?
     ) throws(OperationEnvelopeError) {
+        // A preference operation names a preference, and the entity its key derives (D-73).
+        if PreferenceOperationPayload.operationTypes.contains(operationType) {
+            let decoded = try PreferenceOperationPayload(operationType: operationType, payload: payload)
+            guard entityType == PreferenceEntity.entityType else { throw .invalidField("entity.type") }
+            guard entityID == PreferenceEntity.id(forKey: decoded.key) else { throw .invalidField("entity.id") }
+            return
+        }
         guard ItemOperationPayload.operationTypes.contains(operationType) else { return }
         let decoded = try ItemOperationPayload(operationType: operationType, payload: payload)
         if operationType.hasPrefix("task."), entityType != "task" { throw .invalidField("entity.type") }
@@ -352,8 +360,8 @@ public final class ReplicaStore: Sendable {
         }
         do {
             try Self.checkPayload(
-                operationType: envelope.operationType, entityType: envelope.entityType, payload: envelope.payload,
-                observed: envelope.observed)
+                operationType: envelope.operationType, entityType: envelope.entityType, entityID: envelope.entityID,
+                payload: envelope.payload, observed: envelope.observed)
         } catch {
             throw .unverified(.malformed(error))
         }
@@ -813,7 +821,7 @@ public final class ReplicaStore: Sendable {
         case .accepted, .acceptedWithConflict:
             try CanonicalTables.insertCanonical(
                 operation, envelope: envelope, epoch: epoch, position: entry.position, decision: decision,
-                in: session)
+                observedHorizon: entry.observedHorizon, in: session)
             try session.query(
                 """
                 UPDATE operations SET state = ?, commit_epoch = ?, commit_position = ?, overlay = 0
@@ -899,11 +907,13 @@ public final class ReplicaStore: Sendable {
         let partition = CollectionPartition.name(forEntityType: "task") ?? "tasks"
         // Canonical operations first, then the journal's applied, unrejected ones not already canonical: each once.
         let canonical = try session.query(
-            "SELECT body, epoch_id, position FROM \(canonicalTable) WHERE entity_type = ? AND entity_id = ?",
-            [.text(item.entityType), ReplicaColumns.id(entityID)])
+            """
+            SELECT body, epoch_id, position, observed_epoch, observed_partition, observed_position FROM \(canonicalTable)
+            WHERE entity_type = ? AND entity_id = ?
+            """, [.text(item.entityType), ReplicaColumns.id(entityID)])
         let journal = try session.query(
             """
-            SELECT o.body, o.commit_epoch, o.commit_position FROM operations o
+            SELECT o.body, o.commit_epoch, o.commit_position, NULL, NULL, NULL FROM operations o
             JOIN causal_decisions d ON d.operation_id = o.operation_id AND d.decision = 'applied'
             WHERE o.entity_type = ? AND o.entity_id = ? AND o.state NOT IN ('rejected', 'revoked')
               AND NOT EXISTS (SELECT 1 FROM \(canonicalTable) c WHERE c.operation_id = o.operation_id)
@@ -929,9 +939,13 @@ public final class ReplicaStore: Sendable {
                 groups[group.groupID, default: []].append((envelope, payload, commit))
                 continue
             }
-            state.apply(
-                payload, id: envelope.operationID, observed: envelope.observed.map(ObservedCoverage.init) ?? .nothing,
-                commit: commit)
+            // A committed legacy child observes the horizon Core resolved its projection revision to and served
+            // with it (`ChangeEntry.observedHorizon`), in place of its observed set, as Core's own fold does (D-69).
+            var observed = envelope.observed.map(ObservedCoverage.init) ?? .nothing
+            if let horizon = try CanonicalTables.horizon(epoch: row[3], partition: row[4], position: row[5]) {
+                observed = ObservedCoverage(horizon: horizon, pieces: [])
+            }
+            state.apply(payload, id: envelope.operationID, observed: observed, commit: commit)
         }
         // A paged resolution group applies atomically, as its last page observing every page's candidates, once all
         // its pages are present and their sorted IDs match the list digest; until then it changes nothing (§8.3.2).
