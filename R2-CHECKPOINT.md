@@ -1,7 +1,7 @@
 <!-- Resumable R2 implementation record (R2-DEV-03; plan §14, O-7): branch and baseline, milestone, completed requirements, files, commands and results with evidence, blockers, pending owner sessions, permissions, the last buildable checkpoint, the quota guard and the next steps. -->
 # Lisa R2 — Checkpoint
 
-**Updated:** 2026-11-26T01:58Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
+**Updated:** 2026-11-26T02:15Z by Claude, run `20261124-r2-5462`. **Milestone:** M0 complete; **M1 complete at its boundary** (X1 handed to the owner; **X1's first attempt failed at the Xcode build; attempt 2 requested at `795b4f3`**, §6); **M2 — Replication engine, complete at its boundary** (the clean reconstruction of `815bbbc`; `docs/VERIFICATION-SCENARIOS.md`, "M2 boundary"; `docs/REQUIREMENTS-MATRIX.md`). **M3 in progress:**
 - **Done:** M3-0 (frozen fixtures), M3-1 (schema v5 and the Core ledger's intake), M3-2 (full snapshots from Core), M3-3 (receipts verified on a replica), M3-4's first slice (the direct path over loopback HTTP), and M3-D61.
 - **Also done:**
   - M3-5a, enrollment and the roster end to end over loopback HTTP (harness v10, 8/8);
@@ -19,8 +19,9 @@
   - Core's resolution of legacy edits' "observed at projection revision N" (D-69, schema v11; harness v33, 15/15).
   - The replica side (2026-11-26): Core serves the resolved horizon in its signed entries, and replicas fold with it (`53e2a5a`–`89fcb1a`; harness v34, 20/20; regression v19).
   - R1's `POST /v1/tasks` through the legacy converter in R1's router (D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7, against R1's own path; regression v20). It isn't enabled in `LisaHost` yet.
+  - R1's `PATCH /v1/tasks/{id}` through the converter (D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15, against R1's own path). It adds two protocol rules: a reopen that names nothing, and an empty notes replacement. R1's in progress and blocked are R1-only states of an open task.
 
-  `PATCH /v1/tasks/{id}` is next (§11).
+  M3-6a's task routes are done. Next: the M3-6 slices in §11.
 - **Paused (the sixth pause, quota):** at about 12:26Z, after the records below (§9). The writer was guard launch `L-fc7f9168cc` (session `38d24e96-7ad7-4d63-ba8d-887352afac4e`), resumed at 11:23Z after the fifth pause with 10% used. The reset was at 2026-11-25T16:20:00Z.
 - **Not resumed automatically (environment event, §5):**
   - The guard couldn't confirm the reset, because the usage reader's credentials stopped working at 16:23Z.
@@ -75,6 +76,7 @@ None is closed yet. M0 owes R2-L01 (first run) and R2-L02 (baseline):
   - then D-70, `docs/VERIFICATION-SCENARIOS.md` M1-8b, `Harness/docs/SETUP-APPLE.md`, `docs/REQUIREMENTS-MATRIX.md` and this file.
   - M3-6a's observed horizons on replicas: `53e2a5a` → `89fcb1a` (LisaSyncProtocol one file, LisaCoreLedger three, LisaReplicaStore four), then `docs/SYNC-PROTOCOL.md`, `docs/DECISIONS.md` (D-69), `docs/VERIFICATION-SCENARIOS.md` and this file.
   - M3-6a's converted `POST /v1/tasks`: `f4879b6` → `12bd3fb` (LisaCoreLedger, LisaOwnerData, `Package.swift`, LisaLegacyRequests, LisaAPI four), then D-71, `docs/VERIFICATION-SCENARIOS.md` and this file.
+  - M3-6a's converted `PATCH /v1/tasks/{id}`: `ae0c52d` → `6cc8073` (LisaSyncProtocol one file, LisaMerge three, LisaCoreLedger two, LisaLegacyRequests one, LisaAPI two), then D-72, `docs/SYNC-PROTOCOL.md`, `docs/VERIFICATION-SCENARIOS.md` and this file.
 - **Temporary files:** only under `.tmp/r2/20261124-r2-5462/`: the M0 scripts and logs (`m0/`), the frozen R1 tree and its builds (`m0/r1-src/`), the usage monitor (`usage/`), the guard and its rehearsals (`guard/`), the recipe tests (`notes/`), the M1 harnesses v1–v5, the proof proposal and its checks, the S-24 runs and the clean-checkout matrix (`m1/`); the owner's X1 report (`owner/`); and X1 attempt 2's repro, stand-ins, module build and type-check runs (`x1/`). None is committed; none is removed or overwritten.
 
 ## 4. Commands and results (M0)
@@ -190,7 +192,7 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 **Process deviation, recorded (temporary files):** harness v47's test file was edited in place once, before its first build (a `World` value moved into each test). The rule asks for a new version. Every later fix went into a new version.
 
-**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact. Likewise, M3 harness v34's header and `m2/make-regressions-v19.py`'s docstring say "01:4xZ", but they were written at about 01:35Z and 01:37Z on 2026-11-26.
+**Record note:** the times written in the headers of harnesses v26–v51 are estimates, up to 80 minutes late (v46). The log file names come from the clock and are exact. Likewise, M3 harness v34's header and `m2/make-regressions-v19.py`'s docstring say "01:4xZ", but they were written at about 01:35Z and 01:37Z on 2026-11-26. M3 harness v35's header says "about 01:55Z" (written about 01:52Z), v37's "about 02:05Z" (about 02:04Z) and v38's "02:08Z" (02:06Z). The checkpoint's "design (2026-11-26T02:00Z)" was written at about 01:58Z and is corrected in place.
 
 **Found and fixed in M2-20:** the replica's duplicate rules looked only at its journal. A relayed copy of an operation known from canonical state became a pending overlay, and a changed body or a reused triple raised no security event. Canonical operations now keep their origin triple, and the rules consult canonical state too (`docs/VERIFICATION-SCENARIOS.md` M2-20).
 
@@ -252,7 +254,13 @@ The first outcomes passed, so M0 needed no production fix. Every run directory a
 
 ## 8. Last buildable checkpoint
 
-**`12bd3fb`** (`Sources/LisaAPI/APIRouter.swift`, M3-6a's converted `POST /v1/tasks`, D-71):
+**`6cc8073`** (`Sources/LisaAPI/LegacyRouting.swift`, M3-6a's converted `PATCH /v1/tasks/{id}`, D-72):
+- **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-patch-final-20261126T020726Z/`). Lint is clean on the nine changed files.
+- **Harnesses:** M3 harness v38 passes 15/15, and M3 harness v39 passes 7/7. v39 is M2 harness v15's tests with an expectation that D-72 superseded.
+- **Regressions:** regression package v22 (`m2/run-regressions-v23.sh`, run `m2/regressions-run-20261126T021223Z/`) passes all 26 targets, and v35 and v47 pass too. Package v21's run found the superseded expectation (`m2/regressions-run-20261126T020805Z/`).
+- **The span:** `ae0c52d` to `6cc8073`. Each commit builds.
+
+Before it, **`12bd3fb`** (`Sources/LisaAPI/APIRouter.swift`, M3-6a's converted `POST /v1/tasks`, D-71):
 - **Build and suite:** the debug build with tests has 0 warnings and 0 errors, and the R1 suite passes 376/66 (`m3/suite-after-converted-create-committed-20261126T015435Z/`). Lint is clean on the changed files, apart from R1's own `Package.swift` line.
 - **Harness:** M3 harness v36 passes 7/7.
 - **Regressions:** regression package v20 (`m2/run-regressions-v21.sh`, run `m2/regressions-run-20261126T015451Z/`) passes all 26 targets, and v35 and v47 pass too.
@@ -405,8 +413,8 @@ No live action or external submission has been requested or performed in this ru
               3. add a replica column, and use it in the replica's fold exactly as `CoreTaskFold.view` does;
               4. test it end to end: a legacy edit at Core, a replica pulling the page, and the same `TaskView` on both. Repeat it with a snapshot install.
           - **The router hook and `POST /v1/tasks`, done (2026-11-26; D-71; `f4879b6`–`12bd3fb`; harness v36, 7/7; regression v20).**
-          - **Now, the exact next action: `PATCH /v1/tasks/{id}`** under R1's semantics, through `legacyConvert`, with the children's `observedRevision` set from `expectedRevision`.
-            - **The design** (2026-11-26T02:00Z, for D-72):
+          - **`PATCH /v1/tasks/{id}`, done (2026-11-26; D-72; `ae0c52d`–`6cc8073`; harness v38, 15/15; `docs/VERIFICATION-SCENARIOS.md`).** It was built from the design below, with two corrections found by its harness: R1-only writes record their revision, and a status-only PATCH with no child still runs R1's transition.
+            - **The design** (written 2026-11-26 at about 01:58Z, for D-72):
               - **The conversion:** inside the parent, in R1's order: the body size; the decode (400); the record (404 "the task"); the revision check (409 "the task changed since it was read", `currentRevision`); the correction, its deadline parsed (400); `TaskService`'s checks (403, 400). Nothing is committed before them.
               - **Field children:** one per field the request carries, with discriminators named after R1's fields: `field:title`, `field:notes`, `field:priority`, `field:deadline` (also for `clearDeadline`), `field:estimatedMinutes`, `field:confirmation`. Each is observed at N. They are taken in without projecting and projected once with `forceRevision` (R1's `correct` always writes), with a hint that marks `deadline` owner-corrected whenever the request sets or clears it, as R1 does.
               - **Then:** the `task.corrected` audit and `.taskChanged(material:)`.
@@ -440,7 +448,16 @@ No live action or external submission has been requested or performed in this ru
             - **The cause:** `TaskProjection.project` runs once per child (`CoreLedger.swift:279`), and R1's `records.update` raises the revision each time. R1 also raises it for a correction that changes no value, because `correct` always updates when any field is given, while the projection skips an update that changes nothing.
             - **The plan for it:** let `LegacyTransaction.intake` defer the projection, then add an explicit `project(entity:forceRevision:)` step. The converter takes the field children in, projects once (forcing the step when R1 would), then takes the status child in, which projects itself.
           - **Mapping:** R2's `TaskFieldValue` has title, priority, deadline, estimate, splittable and confirmation; notes are their own operation family.
-      - **M3-6b:** preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review`/`resolve` (S-03).
+      - **Gap noted (2026-11-26):** `PATCH /v1/ideas/{id}` shares the task PATCH's shape in §8.12.2, but R2 has no idea payloads, merge or projection yet. `OperationCatalog` names only `idea.create`, `idea.edit` and `idea.lifecycle`. It belongs with captures (M3-6c), which create ideas.
+      - **M3-6b, the next slice:**
+        - **The scope:** the preferences PATCH, its same-key chains, administrative holds with hold generations and collision-safe decision tokens, `legacy review` and `resolve` (S-03).
+        - **The model it needs first:** preference operations (set, confirm and delete per key) with a per-key merge and the projection into R1's preference records; restricted siblings with redacted receipts (§8.12.2); error templates without caller text.
+        - **R1's semantics to keep** (`PreferenceService`, `SettingsHandlers.updatePreferences`):
+          - 1–50 changes, in order, stopping at the first refusal;
+          - `set` checks `expectedRevision` only when the key exists, so it inserts an absent key;
+          - `confirm` on an absent key is a 404;
+          - consequential keys are owner-only, and devices get 403 for them and for any delete;
+          - the success body lists every preference.
       - **M3-6c:** captures with R1's permanent deduplication, notification receipts with R1's durable prefix, reminder, notification, proposal and plan-block actions.
       - **M3-6d:** terminal replies (the four cases), the reply dependency index, error templates without caller text, outcome-only migrated parents, and `upgrade_required` on v1.
       - **M3-6e:** S-01 against the frozen R1 client, queue and CLI from `491c90a` (M3-0's fixtures and `m0/frozen-client/harness4`).
