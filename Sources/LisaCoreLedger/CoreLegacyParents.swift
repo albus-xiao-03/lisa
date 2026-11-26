@@ -69,6 +69,25 @@ public struct LegacyConversion: Hashable, Sendable {
 
     /// R1 records definite answers and nothing else (`APIRouter.isRecordable`).
     public var isRecordable: Bool { (200..<300).contains(status) || [400, 403, 404, 409, 413].contains(status) }
+
+    /// Whether a child waits for an administrative decision: the parent then waits too, and its answer, the 503, isn't
+    /// recorded (D-75).
+    public var awaitsReview: Bool { children.contains { $0.disposition == .heldForAdministrativeReview } }
+}
+
+/// One administrative hold Core issued, waiting or decided (plan §8.12.2; D-75).
+public struct LegacyHold: Hashable, Sendable {
+    public let scope: String
+    public let requestID: String
+    public let childIndex: Int
+    public let childID: Identifier128
+    public let generation: Int64
+    public let decisionKey: Digest256
+    /// The token at the shortest length, 8 base32 characters or more in steps of 4, unique among every hold.
+    public let token: String
+    /// Not decided yet.
+    public let isWaiting: Bool
+    public let heldAt: Int64
 }
 
 /// A conversion's view of the ledger, inside its one write transaction.
@@ -184,11 +203,12 @@ extension CoreLedger {
 
     /// Converts a request in one write transaction: a parent found again answers without converting; otherwise
     /// `convert` decides and takes in the children, and a recordable answer is recorded with the parent and every
-    /// child's disposition, its body kept for `retentionDays`. An answer R1 wouldn't record (a 503, say) commits
-    /// nothing, as a thrown error does.
+    /// child's disposition, its body kept for `retentionDays`. A conversion that reached an administrative hold is kept
+    /// too: the parent waits with `requestBody`, the original bytes, and the hold's first generation, and its 503 isn't
+    /// recorded (D-75). Any other answer R1 wouldn't record commits nothing, as a thrown error does.
     public func legacyConvert(
         scope: String, requestID: String, fingerprint: String, route: String, retentionDays: Int = 30,
-        _ convert: (LegacyTransaction) throws -> LegacyConversion
+        requestBody: [UInt8]? = nil, _ convert: (LegacyTransaction) throws -> LegacyConversion
     ) throws(CoreLedgerError) -> (lookup: LegacyParentLookup, conversion: LegacyConversion?) {
         let time = now()
         do {
@@ -208,18 +228,18 @@ extension CoreLedger {
                     try? session.execute("RELEASE legacy_conversion")
                     throw error
                 }
-                guard conversion.isRecordable else {
+                let waiting = conversion.awaitsReview
+                guard conversion.isRecordable || waiting else {
                     try session.execute("ROLLBACK TO legacy_conversion")
                     try session.execute("RELEASE legacy_conversion")
                     return (.unknown, conversion)
                 }
                 try session.execute("RELEASE legacy_conversion")
-                let waiting = conversion.children.contains { $0.disposition == .heldForAdministrativeReview }
                 try session.query(
                     """
                     INSERT INTO core_legacy_parents (scope, request_id, fingerprint, route, origin_path, state,
-                      child_count, set_digest, status, body, body_expires_at, created_at, completed_at)
-                    VALUES (?, ?, ?, ?, 'v1', ?, ?, ?, ?, ?, ?, ?, ?)
+                      child_count, set_digest, status, body, body_expires_at, created_at, completed_at, request_body)
+                    VALUES (?, ?, ?, ?, 'v1', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
                         .text(scope), .text(requestID), .text(fingerprint), .text(route),
@@ -230,7 +250,13 @@ extension CoreLedger {
                         waiting ? .null : CoreColumns.bytes(conversion.body),
                         waiting ? .null : .integer(time + Int64(retentionDays) * 86_400_000), .integer(time),
                         waiting ? .null : .integer(time),
+                        waiting ? requestBody.map { CoreColumns.bytes($0) } ?? .null : .null,
                     ])
+                if let held = conversion.children.first(where: { $0.disposition == .heldForAdministrativeReview }) {
+                    try Self.insertHold(
+                        dataset: datasetID, scope: scope, requestID: requestID, child: held, generation: 1, time: time,
+                        session: session)
+                }
                 for child in conversion.children {
                     try session.query(
                         """
@@ -247,6 +273,67 @@ extension CoreLedger {
             }
         } catch {
             throw CoreLedgerError.classify(error)
+        }
+    }
+
+    /// Records hold generation `generation` of `child`, with its decision key and the key's base32 text (D-75).
+    static func insertHold(
+        dataset: Identifier128, scope: String, requestID: String, child: LegacyChildDisposition, generation: Int64,
+        time: Int64, session: SQLiteSession
+    ) throws {
+        let key = LegacyDecisionToken.decisionKey(
+            dataset: dataset, scope: scope, requestID: requestID, childID: child.childID, holdGeneration: generation)
+        try session.query(
+            """
+            INSERT INTO core_legacy_holds (decision_key, token, scope, request_id, child_index, child_id,
+              hold_generation, held_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                CoreColumns.digest(key), .text(LegacyDecisionToken.encoded(key)), .text(scope), .text(requestID),
+                .integer(Int64(child.index)), CoreColumns.id(child.childID), .integer(generation), .integer(time),
+            ])
+    }
+
+    /// Every administrative hold Core issued, waiting or decided, in the order they were issued, each token at the
+    /// length unique among them all (D-75).
+    public func legacyHolds() throws(CoreLedgerError) -> [LegacyHold] {
+        try read { session, _ in
+            let rows = try session.query(
+                """
+                SELECT scope, request_id, child_index, child_id, hold_generation, decision_key, token, action, held_at
+                FROM core_legacy_holds ORDER BY held_at, scope, request_id, hold_generation
+                """)
+            let tokens = try rows.map { try CoreColumns.text($0[6]) }
+            return try rows.enumerated().map { offset, row in
+                let full = tokens[offset]
+                var length = LegacyDecisionToken.minimumCharacters
+                func shared(_ length: Int) -> Bool {
+                    tokens.indices.contains { $0 != offset && tokens[$0].hasPrefix(full.prefix(length)) }
+                }
+                while length < full.count, shared(length) {
+                    length = min(full.count, length + LegacyDecisionToken.stepCharacters)
+                }
+                return LegacyHold(
+                    scope: try CoreColumns.text(row[0]), requestID: try CoreColumns.text(row[1]),
+                    childIndex: Int(try CoreColumns.integer(row[2])), childID: try CoreColumns.identifier(row[3]),
+                    generation: try CoreColumns.integer(row[4]), decisionKey: try CoreColumns.digest(row[5]),
+                    token: LegacyDecisionToken.prefix + String(full.prefix(length)), isWaiting: row[7] == .null,
+                    heldAt: try CoreColumns.integer(row[8]))
+            }
+        }
+    }
+
+    /// The original request bytes a waiting parent keeps until it completes.
+    public func legacyRequestBody(scope: String, requestID: String) throws(CoreLedgerError) -> [UInt8]? {
+        try read { session, _ in
+            guard
+                let row = try session.query(
+                    "SELECT request_body FROM core_legacy_parents WHERE scope = ? AND request_id = ?",
+                    [.text(scope), .text(requestID)]
+                ).first, case .blob(let body) = row[0]
+            else { return nil }
+            return [UInt8](body)
         }
     }
 
