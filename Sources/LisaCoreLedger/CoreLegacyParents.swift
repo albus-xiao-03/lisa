@@ -6,6 +6,7 @@
 
 import Foundation
 import LisaCrypto
+import LisaDomain
 import LisaPorts
 import LisaSQLite
 import LisaStore
@@ -132,6 +133,31 @@ public struct LegacyTransaction {
                 .integer
         else { throw CoreLedgerError.corrupt("the dataset row") }
         try TaskProjection.recordRevision(revision, of: entity, at: position, in: session)
+    }
+
+    /// Projects a preference key's merged state into R1's record once, as one R1 service call (D-74): with `force`, the
+    /// record is written and its revision raised even when nothing changed, as R1's `set` and `confirm` write it. The
+    /// revision written is recorded, so a later child that finds the record observes what it reflects.
+    public func projectPreference(_ entity: Identifier128, force: Bool) throws {
+        guard let folded = try CorePreferenceFold.view(entity, in: session) else { return }
+        if let revision = try PreferenceProjection.project(
+            folded.view, key: folded.key, commitTime: now, into: records, force: force)
+        {
+            try recordProjectionRevision(revision, of: entity)
+        }
+    }
+
+    /// Whether R1's record of the preference `key`, when there is one, is Core's projection: its revision is in the
+    /// projection map, so a child that finds it observes what it reflects (D-74). A record R1 wrote outside Core, before
+    /// migration or by R1's own writers, isn't.
+    public func preferenceRecordIsProjected(_ key: String, entity: Identifier128) throws -> Bool {
+        guard let record = try records.find(Preference.self, RecordQuery.all.filter("key", equals: key)).first else {
+            return true
+        }
+        return try !session.query(
+            "SELECT 1 FROM core_projection_revisions WHERE entity_id = ? AND revision = ?",
+            [CoreColumns.id(entity), .integer(record.revision.value)]
+        ).isEmpty
     }
 
     /// Records that R1's revision `revision` of `entity`, written by the conversion itself rather than the projection
