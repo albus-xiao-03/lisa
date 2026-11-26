@@ -1569,3 +1569,23 @@ Run directories exist only in this sandbox. Tracked records like this file reach
   - **Package v27** (`m2/make-regressions-v27.py`, v26 with harness v45 replaced by v47; runner `m2/run-regressions-v28.sh`) passes all 29 targets, v35 and v47 too (`m2/regressions-run-20261126T030608Z/summary.txt`).
   - **Package v28** (v27 with v47 replaced by v48; runner `m2/run-regressions-v29.sh`) passes all 29 targets, v35 and v47 too (`m2/regressions-run-20261126T031158Z/summary.txt`). 20.0 GB were free.
 - **Result: PASS** for holds. Next, `resolve` (`R2-CHECKPOINT.md` §11).
+
+### M3-6b, third step, third part: `resolve`, the refusal and its guard (plan §8.12.2, §8.14.8; `docs/DECISIONS.md` D-76)
+
+- **Code** (`3a10979` → `8580aae`):
+  - **Schema v13:** `core_legacy_refusal_guards`.
+  - **The lookup** answers a guard's 403 after the parent's body expires.
+  - **`legacyResolve`:** a typed token matched over every hold; decided holds replayed; refusals that move nothing; the decision recorded with the hold, the next hold and the parent's answer.
+  - **The preference route's `decide`:** the administrator's refusal with R1's 403. `apply` fails and moves nothing until step 3c.
+- **Full build and R1 suite:** `m3/suite-after-resolve-refuse-20261126T031944Z/`, 0 warnings, 0 errors, 376/66. Lint is clean on the four changed files.
+- **Harness:** `m3/harness-v49/`, 14/14 on its first build (`m3/harness-v49-test-20261126T031911Z.log`). It holds v48's tests unchanged, plus two cases:
+  - **Refusing a held request** of four changes, with the second and fourth administrative:
+    - the decision's outcome, "Refused change 2 of 4 of request prefs-0901; 2 later changes not applied.";
+    - dispositions `applied`, `refused`, `not_reached`, `not_reached`;
+    - the hold decided, and the request bytes cleared;
+    - the v1 retry gets R1's 403 (`forbidden`, "This setting can be changed only on the administrative terminal.") with `Lisa-Replayed: true`, and only the first change is in R1's records;
+    - the same `refuse` again replays the outcome, and `apply` answers "Already decided: refused by LR-… at …; nothing changed.", moving nothing;
+    - after 40 days, beyond the body's expiry, the guard still answers the same 403 bytes.
+  - **Tokens that move nothing:** one with a character changed ("doesn't name a waiting change"), one too short and one without `LR-` ("isn't a decision token"). `apply` throws and leaves the hold waiting and the 503 in place. The lower-case form of the token then decides it.
+- **Regressions:** regression package v29 (`m2/make-regressions-v29.py`, v28 with harness v48 replaced by v49; runner `m2/run-regressions-v30.sh`) passes all 29 targets, and v35 and v47 pass too (`m2/regressions-run-20261126T031958Z/summary.txt`). 19.6 GB were free.
+- **Result: PASS** for the refusal. Next, the Core-only partition with `apply` (`R2-CHECKPOINT.md` §11).
