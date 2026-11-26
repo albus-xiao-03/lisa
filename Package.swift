@@ -128,7 +128,7 @@ let package = Package(
         .target(name: "LisaLocalSearch", dependencies: ["LisaSQLite", "LisaReplicaStore", "LisaSyncProtocol"]),
         // R2 Core ledger (plan §7.2.1, §8.4): intake, receipts, causal release, the change log and the projection into R1's
         // records, over LisaStore. It also uses LisaSQLite, LisaCrypto, LisaDomain and LisaTime directly
-        // (docs/DECISIONS.md D-59).
+        // (docs/DECISIONS.md D-59), and LisaOwnerData for R1's preference rules (D-74).
         // R2 v2 router (plan §7.2.1, §8.12.1): the sync routes over the Core ledger. It uses LisaCrypto for the roster's
         // keys; LisaApplication, LisaDevices and LisaPorts join with enrollment and the other v2 routes
         // (docs/DECISIONS.md D-60).
@@ -153,7 +153,7 @@ let package = Package(
             name: "LisaCoreLedger",
             dependencies: [
                 "LisaStore", "LisaPorts", "LisaMerge", "LisaTrust", "LisaSyncProtocol", "LisaSQLite", "LisaCrypto",
-                "LisaDomain", "LisaTime",
+                "LisaDomain", "LisaTime", "LisaOwnerData",
             ]),
         .target(
             name: "LisaDelivery", dependencies: ["LisaTime", "LisaDomain", "LisaLogging", "LisaPolicy", "LisaPorts"]),
